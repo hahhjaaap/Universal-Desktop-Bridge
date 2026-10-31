@@ -405,6 +405,23 @@ def test_browser_wait_for_uses_one_mutation_observer_round_trip():
     assert timeout <= 1.25
 
 
+def test_browser_wait_for_preserves_placeholder_like_text_as_data():
+    browser = Browser.__new__(Browser)
+    captured = []
+
+    def evaluate(tab, expression, timeout=10, **kwargs):
+        captured.append(expression)
+        return {"ok": True, "state": "text", "matches": 1}
+
+    browser.evaluate = evaluate
+    value = "__STATE__);globalThis.pwned=true;// __TIMEOUT__"
+    result = browser.wait_for(
+        "owned-tab", selector="body", state="text", value=value, timeout_ms=1000
+    )
+    assert result["ok"]
+    assert 'wantedText="__STATE__);globalThis.pwned=true;// __TIMEOUT__"' in captured[0]
+
+
 def test_browser_wait_for_timeout_is_explicit():
     browser = Browser.__new__(Browser)
     browser.evaluate = lambda *args, **kwargs: {

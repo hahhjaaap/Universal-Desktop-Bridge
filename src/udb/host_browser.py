@@ -9,6 +9,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import os
+import re
 import shutil
 import time
 from pathlib import Path
@@ -751,16 +752,18 @@ class Browser(BrowserInputMixin):
         selector, role, name, exact, body, visible_only=True, unique=True
     ):
         validate_locator(selector, role, name, exact)
-        return (
-            LOCATOR_SCRIPT.replace("__TRAVERSAL__", DOM_TRAVERSAL_SCRIPT)
-            .replace("__SELECTOR__", json.dumps(selector))
-            .replace("__ROLE__", json.dumps(role))
-            .replace("__NAME__", json.dumps(name))
-            .replace("__EXACT__", "true" if exact else "false")
-            .replace("__VISIBLE_ONLY__", "true" if visible_only else "false")
-            .replace("__UNIQUE__", "true" if unique else "false")
-            .replace("__BODY__", body)
-        )
+        replacements = {
+            "__TRAVERSAL__": DOM_TRAVERSAL_SCRIPT,
+            "__SELECTOR__": json.dumps(selector),
+            "__ROLE__": json.dumps(role),
+            "__NAME__": json.dumps(name),
+            "__EXACT__": "true" if exact else "false",
+            "__VISIBLE_ONLY__": "true" if visible_only else "false",
+            "__UNIQUE__": "true" if unique else "false",
+            "__BODY__": body,
+        }
+        pattern = re.compile("|".join(re.escape(key) for key in replacements))
+        return pattern.sub(lambda match: replacements[match.group(0)], LOCATOR_SCRIPT)
 
     def snapshot(self, tab):
         return snapshot_browser(self, tab)

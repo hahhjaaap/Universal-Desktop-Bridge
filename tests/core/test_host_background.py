@@ -370,6 +370,18 @@ def test_browser_snapshot_is_bounded_and_redacts_secret_controls():
     assert "aria-labelledby" in captured["expression"]
 
 
+def test_browser_locator_template_does_not_expand_user_placeholder_text():
+    expression = Browser._locator_expression(
+        "__BODY__",
+        "",
+        "",
+        True,
+        'return {marker:"__SELECTOR__"};',
+    )
+    assert 'const selector = "__BODY__"' in expression
+    assert 'return {marker:"__SELECTOR__"};' in expression
+
+
 def test_browser_wait_for_uses_one_mutation_observer_round_trip():
     browser = Browser.__new__(Browser)
     captured = []

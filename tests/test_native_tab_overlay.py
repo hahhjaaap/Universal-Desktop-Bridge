@@ -9,7 +9,10 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.skipif(os.name != "nt", reason="Native Windows overlay")
+pytestmark = pytest.mark.skipif(
+    os.name != "nt" or os.environ.get("UDB_RUN_INTERACTIVE_WINDOWS_TESTS") != "1",
+    reason="Native Windows overlay requires an isolated, explicitly opted-in desktop",
+)
 
 
 def test_native_overlay_follows_registered_tab_without_input(tmp_path, monkeypatch):
@@ -50,7 +53,14 @@ def test_native_overlay_follows_registered_tab_without_input(tmp_path, monkeypat
         hwnd = json.loads(ready.read_text())["hwnd"]
         pid = win32process.GetWindowThreadProcessId(hwnd)[1]
         assert process.owns_pid(pid)
-        win32gui.SetForegroundWindow(hwnd)
+        try:
+            win32gui.SetForegroundWindow(hwnd)
+        except Exception:
+            pytest.skip(
+                "Windows foreground policy refused the synthetic fixture window"
+            )
+        if win32gui.GetForegroundWindow() != hwnd:
+            pytest.skip("Windows did not activate the synthetic fixture window")
         before = tabs.observe_tabs(hwnd)
         assert before and len(before) == 2
         selected = [row for row in before if row["selected"]]

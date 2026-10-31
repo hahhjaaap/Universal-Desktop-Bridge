@@ -477,13 +477,27 @@ class Browser(BrowserInputMixin):
             event_deadline = min(deadline, time.monotonic() + 0.15)
             while time.monotonic() < event_deadline:
                 event = self._wait_for_cdp_event(
-                    ("Page.frameNavigated", "Page.navigatedWithinDocument"),
+                    (
+                        "Page.frameNavigated",
+                        "Page.navigatedWithinDocument",
+                        "Network.requestWillBeSent",
+                    ),
                     session=self.sid(tab),
                     timeout=max(0.01, event_deadline - time.monotonic()),
                     match={"frameId": previous_frame_id},
                 )
                 if event is None:
                     break
+                if event.get("method") == "Network.requestWillBeSent":
+                    if (
+                        event.get("type") == "Document"
+                        and event.get("loaderId")
+                        and event.get("loaderId") != previous_loader_id
+                    ):
+                        next_loader_id = event["loaderId"]
+                        transitioned = True
+                        break
+                    continue
                 if event.get("method") == "Page.navigatedWithinDocument":
                     try:
                         current_url = self.evaluate(tab, "location.href", timeout=1)
@@ -939,6 +953,7 @@ class Browser(BrowserInputMixin):
                         "Page.frameNavigated",
                         "Page.navigatedWithinDocument",
                         "Page.lifecycleEvent",
+                        "Network.requestWillBeSent",
                     ),
                     session=self.sid(tab),
                     match={"frameId": previous_frame_id},

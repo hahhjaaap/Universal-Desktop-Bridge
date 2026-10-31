@@ -150,6 +150,35 @@ class CDPChannel:
                 # A response left behind by an expired command is deliberately
                 # ignored; this waiter never owns or replays that command.
 
+    def discard_events(self, methods, session=None, match=None):
+        """Drop stale lifecycle events before observing a new user action."""
+        wanted = (methods,) if isinstance(methods, str) else tuple(methods)
+        if not wanted or any(
+            not isinstance(name, str) or len(name) > 96 for name in wanted
+        ):
+            raise PolicyError("Invalid browser event name")
+        if match is None:
+            match = {}
+        if not isinstance(match, dict) or any(
+            not isinstance(key, str) or not isinstance(value, (str, int, bool))
+            for key, value in match.items()
+        ):
+            raise PolicyError("Invalid browser event filter")
+        with self._lock:
+            retained = deque(maxlen=MAX_EVENT_QUEUE)
+            discarded = 0
+            for event in self._events:
+                if (
+                    event.get("method") in wanted
+                    and (session is None or event.get("sessionId") == session)
+                    and all(event.get(key) == value for key, value in match.items())
+                ):
+                    discarded += 1
+                else:
+                    retained.append(event)
+            self._events = retained
+            return discarded
+
     def call(self, method, params=None, session=None, timeout=10):
         from websocket import (
             WebSocketConnectionClosedException,

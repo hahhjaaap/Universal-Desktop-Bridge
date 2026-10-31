@@ -87,7 +87,9 @@ Keep this separate from file permissions and owner approvals.
 - `udb.host_browser` owns its private Chrome/Edge process, profile, tabs and
   browser-policy boundaries; public Browser methods remain stable.
   `udb.browser_cdp` owns serialized, bounded WebSocket request handling with
-  redacted event-name markers and no automatic replay after uncertain timeouts.
+  redacted event markers and bounded ID-only main-frame/document lifecycle events;
+  URLs, cookies, headers and request bodies are never retained. Uncertain commands
+  are never automatically replayed.
   Browser startup keeps Chromium's normal GPU/rendering defaults; a Windows Job
   Object supplies memory/process limits and a conservative CPU hard cap.
   `udb.browser_input` implements CDP-only virtual mouse, keyboard and viewport-aware
@@ -95,7 +97,8 @@ Keep this separate from file permissions and owner approvals.
   fixed, bounded, redacting DOM read/snapshot programs. `udb.browser_dom` shares
   bounded traversal across open Shadow DOM roots and locator programs; closed
   shadow roots and iframe documents are not traversed. `wait_for` uses a page-local
-  MutationObserver with a bounded polling fallback, not repeated CDP round trips.
+  MutationObserver, coalesces mutation bursts and performs bounded 500 ms discovery
+  checks for shadow roots, avoiding repeated CDP round trips.
   Page identity artwork lives in `udb.browser_identity`. Callers pass validated
   locators and data, not code.
 - `udb.owned_process` owns Windows Job Object containment independently of browser

@@ -50,7 +50,7 @@ class CDPChannel:
             return
         event = {"method": method}
         session = message.get("sessionId")
-        if isinstance(session, str):
+        if isinstance(session, str) and len(session) <= 128:
             event["sessionId"] = session
         if method == "Page.frameNavigated":
             frame = params.get("frame")

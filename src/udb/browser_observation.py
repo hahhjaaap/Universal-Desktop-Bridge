@@ -10,7 +10,8 @@ _READ_SCRIPT = """(() => {
   const all=queryAll('a[href],button,input:not([type="hidden"]),textarea,select,[role]');
   if(all===null)return {error:'observation_failed'};
   const roots=openShadowRoots;
-  const shadowText=roots.slice(1).map(root=>String(root.textContent||'')).join(' ');
+  const shadowText=roots.slice(1).map(root=>Array.from(root.children||[])
+    .filter(visible).map(element=>String(element.innerText||'')).join(' ')).join(' ');
   const elements=all.filter(visible).slice(0,120).map(e=>{
     const type=(e.getAttribute('type')||'').toLowerCase();
     const secret=type==='password'||type==='file'||/password|secret|token|otp|one-time-code/i.test([e.autocomplete,e.name,e.id].join(' '));

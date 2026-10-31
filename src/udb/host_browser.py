@@ -1085,10 +1085,10 @@ class Browser(BrowserInputMixin):
               waitState==='hidden'?(matches.length===0||visibleMatches.length===0):
               waitState==='enabled'?enabledMatches.length>0:
               waitState==='text'?textMatches.length>0||shadowTextMatch:false;
-            if(ok){finish({ok:true,state:waitState,matches:matches.length,visible:visibleMatches.length,enabled:enabledMatches.length});return;}
-            if(traversalTruncated&&(matches.length===0||waitState==='hidden')){
+            if(traversalTruncated&&(matches.length===0||(waitState==='hidden'&&visibleMatches.length===0))){
               finish({ok:false,error:'locator_search_truncated',state:waitState});return;
             }
+            if(ok){finish({ok:true,state:waitState,matches:matches.length,visible:visibleMatches.length,enabled:enabledMatches.length});return;}
           };
           const scheduleCheck=()=>{
             if(finished||scheduled!==null)return;

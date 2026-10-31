@@ -97,6 +97,38 @@ def test_cdp_channel_waits_for_sanitized_main_frame_event():
     assert "secret" not in repr(event) and "private" not in repr(event)
 
 
+def test_cdp_channel_keeps_only_safe_document_request_metadata():
+    channel = CDPChannel(Socket([]), Process())
+    channel._record_event(
+        {
+            "method": "Network.requestWillBeSent",
+            "sessionId": "owned-session",
+            "params": {
+                "requestId": "request-1",
+                "loaderId": "loader-2",
+                "frameId": "main-frame",
+                "type": "Document",
+                "documentURL": "https://example.test/path?token=private",
+                "request": {"url": "https://example.test/path?token=private"},
+            },
+        }
+    )
+    event = channel.wait_for_event(
+        "Network.requestWillBeSent",
+        session="owned-session",
+        match={"frameId": "main-frame", "type": "Document"},
+    )
+    assert event == {
+        "method": "Network.requestWillBeSent",
+        "sessionId": "owned-session",
+        "requestId": "request-1",
+        "loaderId": "loader-2",
+        "frameId": "main-frame",
+        "type": "Document",
+    }
+    assert "token" not in repr(event) and "private" not in repr(event)
+
+
 def test_cdp_channel_discards_only_matching_stale_navigation_events():
     channel = CDPChannel(Socket([]), Process())
     channel._record_event(

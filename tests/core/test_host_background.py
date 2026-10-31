@@ -842,6 +842,47 @@ def test_click_without_navigation_does_not_wait_for_document_ready():
     assert result == {"navigation_completed": False}
 
 
+def test_browser_click_navigation_detects_same_url_document_request():
+    browser = Browser.__new__(Browser)
+    browser.tabs = {"owned-tab": "owned-session"}
+
+    class EventChannel:
+        def wait_for_event(self, methods, session=None, timeout=1, match=None):
+            if isinstance(methods, tuple):
+                return {
+                    "method": "Network.requestWillBeSent",
+                    "sessionId": session,
+                    "requestId": "request-1",
+                    "frameId": "main-frame",
+                    "loaderId": "new-loader",
+                    "type": "Document",
+                }
+            return {
+                "method": "Page.lifecycleEvent",
+                "sessionId": session,
+                "frameId": "main-frame",
+                "loaderId": "new-loader",
+                "name": "load",
+            }
+
+    browser._cdp = EventChannel()
+    browser.call = lambda *args, **kwargs: pytest.fail(
+        "Document and lifecycle events should avoid frame-tree polling"
+    )
+    browser.evaluate = lambda tab, expression, timeout=10, **kwargs: {
+        "readyState": "complete",
+        "href": "https://same.example/forms",
+    }
+    result = browser._wait_for_click_navigation(
+        "owned-tab",
+        "https://same.example/forms",
+        previous_loader_id="old-loader",
+        previous_frame_id="main-frame",
+    )
+    assert result["navigation_completed"]
+    assert result["url"] == "https://same.example/forms"
+
+
 def test_browser_click_navigation_falls_back_when_frame_events_are_missing():
     browser = Browser.__new__(Browser)
     browser.tabs = {"owned-tab": "owned-session"}

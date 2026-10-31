@@ -385,6 +385,8 @@ def test_browser_wait_for_uses_one_mutation_observer_round_trip():
     assert result["ok"] and len(captured) == 1
     expression, timeout, kwargs = captured[0]
     assert "MutationObserver" in expression
+    assert "scheduleCheck" in expression
+    assert "setInterval(scheduleCheck,500)" in expression
     assert "wantedName" in expression
     assert kwargs["await_promise"] is True
     assert timeout <= 1.25

@@ -992,7 +992,7 @@ def test_browser_click_navigation_uses_main_frame_events():
 
     class EventChannel:
         def wait_for_event(self, methods, session=None, timeout=1, match=None):
-            if methods == ("Page.frameNavigated", "Page.navigatedWithinDocument"):
+            if isinstance(methods, tuple) and "Page.frameNavigated" in methods:
                 return {
                     "method": "Page.frameNavigated",
                     "sessionId": session,

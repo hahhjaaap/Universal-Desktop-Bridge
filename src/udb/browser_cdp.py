@@ -72,6 +72,16 @@ class CDPChannel:
                 value = params.get(key)
                 if isinstance(value, str) and len(value) <= 128:
                     event[key] = value
+        elif method == "Network.requestWillBeSent":
+            if params.get("type") != "Document":
+                return
+            for key in ("requestId", "loaderId", "frameId"):
+                value = params.get(key)
+                if isinstance(value, str) and len(value) <= 128:
+                    event[key] = value
+            if not event.get("frameId") or not event.get("loaderId"):
+                return
+            event["type"] = "Document"
         elif method == "Target.targetDestroyed":
             target_id = params.get("targetId")
             if isinstance(target_id, str) and len(target_id) <= 128:

@@ -134,16 +134,22 @@ def test_cdp_channel_discards_only_matching_stale_navigation_events():
         match={"frameId": "main-frame"},
     )
     assert discarded == 1
-    assert channel.wait_for_event(
-        "Page.lifecycleEvent",
-        session="other-session",
-        match={"loaderId": "other-loader"},
-    )["loaderId"] == "other-loader"
-    assert channel.wait_for_event(
-        "Page.navigatedWithinDocument",
-        session="owned-session",
-        match={"frameId": "sub-frame"},
-    )["frameId"] == "sub-frame"
+    assert (
+        channel.wait_for_event(
+            "Page.lifecycleEvent",
+            session="other-session",
+            match={"loaderId": "other-loader"},
+        )["loaderId"]
+        == "other-loader"
+    )
+    assert (
+        channel.wait_for_event(
+            "Page.navigatedWithinDocument",
+            session="owned-session",
+            match={"frameId": "sub-frame"},
+        )["frameId"]
+        == "sub-frame"
+    )
 
 
 def test_cdp_channel_queues_events_seen_while_waiting_for_a_reply():

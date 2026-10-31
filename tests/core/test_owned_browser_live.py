@@ -93,7 +93,7 @@ def live_browser(tmp_path, monkeypatch):
                 body = b"""<title>Shadow</title><div id="shadow-host"></div>
                 <script>
                 const root=document.querySelector('#shadow-host').attachShadow({mode:'open'});
-                root.innerHTML='<span style="display:none">HIDDEN_SHADOW_SECRET</span><label for="shadow-name">Name</label><input id="shadow-name"><input type="file" id="shadow-upload"><button id="shadow-run">Run shadow</button>';
+                root.innerHTML='<span style="display:none">HIDDEN_SHADOW_SECRET</span><button style="display:none">Hidden control</button><label for="shadow-name">Name</label><input id="shadow-name"><input type="file" id="shadow-upload"><button id="shadow-run">Run shadow</button>';
                 root.querySelector('#shadow-run').addEventListener('click',()=>document.title='ShadowClicked');
                 </script>"""
             else:
@@ -211,6 +211,7 @@ def test_real_browser_open_shadow_dom_locators_and_actions(live_browser):
     elements = {item["id"]: item for item in snapshot["elements"]}
     assert snapshot["shadow_roots"] >= 1
     assert "HIDDEN_SHADOW_SECRET" not in browser.read(tab)["text"]
+    assert snapshot["count"] == len(snapshot["elements"])
     assert elements["shadow-run"]["name"] == "Run shadow"
     assert elements["shadow-name"]["role"] == "textbox"
 

@@ -932,6 +932,17 @@ class Browser(BrowserInputMixin):
                 previous_frame_id = frame.get("id")
             except PolicyError:
                 pass  # URL observation is still available if a frame is transitioning.
+            channel = getattr(self, "_cdp", None)
+            if previous_frame_id and hasattr(channel, "discard_events"):
+                channel.discard_events(
+                    (
+                        "Page.frameNavigated",
+                        "Page.navigatedWithinDocument",
+                        "Page.lifecycleEvent",
+                    ),
+                    session=self.sid(tab),
+                    match={"frameId": previous_frame_id},
+                )
             self._mouse_click(tab, result["x"], result["y"])
             navigation = self._wait_for_click_navigation(
                 tab,

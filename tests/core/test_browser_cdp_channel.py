@@ -97,6 +97,55 @@ def test_cdp_channel_waits_for_sanitized_main_frame_event():
     assert "secret" not in repr(event) and "private" not in repr(event)
 
 
+def test_cdp_channel_discards_only_matching_stale_navigation_events():
+    channel = CDPChannel(Socket([]), Process())
+    channel._record_event(
+        {
+            "method": "Page.frameNavigated",
+            "sessionId": "owned-session",
+            "params": {"frame": {"id": "main-frame", "loaderId": "old-loader"}},
+        }
+    )
+    channel._record_event(
+        {
+            "method": "Page.lifecycleEvent",
+            "sessionId": "other-session",
+            "params": {
+                "frameId": "main-frame",
+                "loaderId": "other-loader",
+                "name": "load",
+            },
+        }
+    )
+    channel._record_event(
+        {
+            "method": "Page.navigatedWithinDocument",
+            "sessionId": "owned-session",
+            "params": {"frameId": "sub-frame", "navigationType": "fragment"},
+        }
+    )
+    discarded = channel.discard_events(
+        (
+            "Page.frameNavigated",
+            "Page.navigatedWithinDocument",
+            "Page.lifecycleEvent",
+        ),
+        session="owned-session",
+        match={"frameId": "main-frame"},
+    )
+    assert discarded == 1
+    assert channel.wait_for_event(
+        "Page.lifecycleEvent",
+        session="other-session",
+        match={"loaderId": "other-loader"},
+    )["loaderId"] == "other-loader"
+    assert channel.wait_for_event(
+        "Page.navigatedWithinDocument",
+        session="owned-session",
+        match={"frameId": "sub-frame"},
+    )["frameId"] == "sub-frame"
+
+
 def test_cdp_channel_queues_events_seen_while_waiting_for_a_reply():
     socket = Socket(
         [

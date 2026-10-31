@@ -1102,11 +1102,13 @@ class Browser(BrowserInputMixin):
           interval=setInterval(scheduleCheck,500);
           check();
         });"""
-        body = (
-            body.replace("__VALUE__", json.dumps(value))
-            .replace("__STATE__", json.dumps(state))
-            .replace("__TIMEOUT__", str(timeout_ms))
-        )
+        replacements = {
+            "__VALUE__": json.dumps(value),
+            "__STATE__": json.dumps(state),
+            "__TIMEOUT__": str(timeout_ms),
+        }
+        pattern = re.compile("|".join(re.escape(key) for key in replacements))
+        body = pattern.sub(lambda match: replacements[match.group(0)], body)
         expression = self._locator_expression(
             selector, role, name, exact, body, visible_only=False, unique=False
         )

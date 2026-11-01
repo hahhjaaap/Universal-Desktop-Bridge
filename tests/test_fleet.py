@@ -45,15 +45,18 @@ def test_fleet_configuration_and_explicit_target(tmp_path):
         fleet.invoke("pc-office", "fleet_call", {})
 
 
-@pytest.mark.parametrize("url", [
-    "http://pc-office.example.ts.net",
-    "https://pc-office.example.ts.net.evil.com",
-    "https://user:pass@pc-office.example.ts.net",
-    "https://pc-office.example.ts.net:8443",
-    "https://pc-office.example.ts.net/other",
-    "https://127.0.0.1",
-    "https://pc-office.example.ts.net?redirect=http://evil",
-])
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://pc-office.example.ts.net",
+        "https://pc-office.example.ts.net.evil.com",
+        "https://user:pass@pc-office.example.ts.net",
+        "https://pc-office.example.ts.net:8443",
+        "https://pc-office.example.ts.net/other",
+        "https://127.0.0.1",
+        "https://pc-office.example.ts.net?redirect=http://evil",
+    ],
+)
 def test_reject_unsafe_origins(url):
     with pytest.raises(ValueError):
         validate_url(url)
@@ -119,16 +122,26 @@ def test_agent_loopback_only_and_owner_control_denied():
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
+
             def post(tool, auth):
-                c = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+                c = http.client.HTTPConnection(
+                    "127.0.0.1", server.server_port, timeout=3
+                )
                 payload = json.dumps({"tool": tool, "arguments": {}}).encode()
-                c.request("POST", "/v1/call", payload, {
-                    "Authorization": auth, "Content-Length": str(len(payload)),
-                })
+                c.request(
+                    "POST",
+                    "/v1/call",
+                    payload,
+                    {
+                        "Authorization": auth,
+                        "Content-Length": str(len(payload)),
+                    },
+                )
                 r = c.getresponse()
                 status, body = r.status, json.loads(r.read())
                 c.close()
                 return status, body
+
             assert post("bridge_status", "Bearer wrong")[0] == 403
             assert post("computer_desktop", "Bearer " + "a" * 64)[0] == 403
             code, payload = post("bridge_status", "Bearer " + "a" * 64)

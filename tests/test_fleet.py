@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from udb.fleet import FleetRouter, load_secret, validate_url
-from udb.fleet_agent import FleetHTTPServer, FleetHandler
+from udb.fleet_agent import FleetHandler, FleetHTTPServer
 
 
 def make_home(tmp_path):

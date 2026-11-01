@@ -184,8 +184,8 @@ indicator is not end-to-end proof that ChatGPT has discovered UDB's tools.
 
 The 200 px/72 px navigation preference is per window and not persisted.
 The theme preference is persisted to bounded local `gui.json`, applying
-the Qt/Windows system color scheme at launch or when reselected.
-The code does not continuously listen for every Windows color-scheme event;
+the Qt/Windows system color scheme at launch and when supported Qt system
+color-scheme change events arrive. Unavailable signal backends use startup detection;
 the remaining system-theme and accessibility QA is documented in
 [Desktop GUI guide](docs/gui-user-guide.md).
 

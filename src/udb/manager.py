@@ -139,9 +139,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             nav.addWidget(btn)
             self.nav_buttons.append(btn)
         nav.addStretch()
-        self.protected_caption = label(
-            "Bạn quyết định\nAI được làm gì", "Muted", True
-        )
+        self.protected_caption = label("Bạn quyết định\nAI được làm gì", "Muted", True)
         nav.addWidget(self.protected_caption)
         nav.addSpacing(12)
         self.sidebar_footer = label("DESKTOP BRIDGE", "Eyebrow")
@@ -536,13 +534,17 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         for button in self.nav_buttons:
             button.setMaximumWidth(56 if compact else 10000)
         self.sidebar_nav.setContentsMargins(
-            8 if compact else 16, 20 if compact else 26,
-            8 if compact else 16, 18 if compact else 20
+            8 if compact else 16,
+            20 if compact else 26,
+            8 if compact else 16,
+            18 if compact else 20,
         )
         self.brand_label.setText("U" if compact else "UDB")
         for item in (
-            self.brand_caption, self.protected_caption,
-            self.sidebar_footer, self.sidebar_version
+            self.brand_caption,
+            self.protected_caption,
+            self.sidebar_footer,
+            self.sidebar_version,
         ):
             item.setVisible(not compact)
         self.sidebar_toggle.setText("" if compact else "Thu gọn menu")

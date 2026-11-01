@@ -124,6 +124,7 @@ QWidget { color:$text; font-family:"Segoe UI"; font-size:14px; }
 QMainWindow, QDialog { background:$bg; }
 QWidget#Root, QWidget#Page, QWidget#PageHeader, QStackedWidget { background:$bg; }
 QFrame#Sidebar { background:$panel; border-right:1px solid $line; }
+QFrame#AppHeader { background:$panel; border-bottom:1px solid $line; }
 QFrame#Panel { background:$panel; border:1px solid $line; border-radius:14px; }
 QFrame#Hero { background:$hero; border:1px solid $hero_line; border-radius:14px; }
 QFrame#Footer { background:$bg; border-top:1px solid $line; }

@@ -402,9 +402,13 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.job_group_filter.setAccessibleName("Lọc trạng thái công việc")
         for value in ("Tất cả", "Đang chạy", "Cần chú ý", "Đã xong"):
             self.job_group_filter.addItem(value)
-        self.job_search.textChanged.connect(self._refresh_jobs)
-        self.job_group_filter.currentIndexChanged.connect(self._refresh_jobs)
+        self.job_search.textChanged.connect(lambda *_: self._refresh_jobs())
+        self.job_group_filter.currentIndexChanged.connect(
+            lambda *_: self._refresh_jobs()
+        )
         lay.addLayout(row(self.job_search, self.job_group_filter))
+        self.job_filter_feedback = label("Danh sách công việc UDB", "Fine")
+        lay.addWidget(self.job_filter_feedback)
         self.jobs = self.tree(["Dự án", "Ngôn ngữ", "Trạng thái", "Job ID"])
         self.jobs.setColumnWidth(0, 190)
         self.jobs.setColumnWidth(1, 100)

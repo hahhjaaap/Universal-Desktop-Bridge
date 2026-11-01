@@ -235,6 +235,12 @@ For native Windows pointer preview use
 Passing CI and screenshots does not replace real Windows accessibility or
 security assessment. The published v0.10.0 installer is still the old release.
 
+The full manager also includes a persistent themed page header with an
+explicit **Tunnel** (not ChatGPT) indicator. The **Hoạt động MCP** tab
+displays a bounded, sanitized tool activity timeline. Owner-triggered audit
+export writes only timestamps, tool labels and statuses to a new JSON file,
+after confirmation, and never overwrites an existing file.
+
 The **Tiến trình** page now supports metadata-only search and group filters
 (Đang chạy/Cần chú ý/Đã xong), shows matching counts and clears stale
 details when no result matches. Ctrl+1..6 changes full-manager pages;

@@ -260,6 +260,13 @@ signals do **not** represent ChatGPT authorization, a completed security
 assessment or the state of every background process. Failed reads show
 **Chưa xác minh** instead of retaining stale positive states.
 
+The **Kết nối** page now has a native three-step onboarding panel showing
+separately whether (1) the local Agent responds, (2) the local Tunnel is
+ready, and (3) ChatGPT has actually called an UDB tool. The third step stays
+**Chưa xác minh** until verified directly in ChatGPT; no remote grant or
+invented end-to-end success state is introduced. Failed local reads clear
+stale ready indicators.
+
 The **Bảo vệ** page now shows a read-only indicator of optional full Windows
 computer access. If enabled, it warns that this privilege is **unsandboxed**
 and can reach files protected only against project-scoped tools. The GUI

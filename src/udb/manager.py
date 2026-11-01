@@ -396,10 +396,36 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
 
     def build_protection(self):
         p, lay = self.page(
-            "Vùng được bảo vệ",
-            "Thư mục, checkpoint, mô hình, dữ liệu và bí mật luôn nằm ngoài quyền truy cập tự động của AI.",
+            "Bảo vệ và quyền truy cập",
+            "Đường dẫn bảo vệ áp dụng cho thao tác giới hạn theo dự án, không phải quyền Windows toàn diện.",
         )
-        self.protected = self.tree(["Đường dẫn được chặn"])
+        computer = panel()
+        cl = QVBoxLayout(computer)
+        cl.setContentsMargins(20, 16, 20, 16)
+        cl.setSpacing(9)
+        self.computer_grant_pill = StatusPill("Đang kiểm tra", "neutral")
+        self.computer_grant_pill.setAccessibleDescription(
+            "Quyền máy rộng trên Windows hiện tại; không phải quyền Sandbox."
+        )
+        cl.addLayout(
+            row(label("Quyền Windows toàn diện", "H2"), None, self.computer_grant_pill)
+        )
+        self.computer_grant_detail = label(
+            "Đang kiểm tra quyền chủ máy. Không thể cấp quyền tại trang này.",
+            "Muted",
+            True,
+        )
+        cl.addWidget(self.computer_grant_detail)
+        cl.addWidget(
+            label(
+                "Chỉ chủ máy có thể cấp hoặc thu hồi qua terminal Windows cục bộ. "
+                "Quyền toàn diện không chạy trong Sandbox.",
+                "Fine",
+                True,
+            )
+        )
+        lay.addWidget(computer)
+        self.protected = self.tree(["Đường dẫn bị chặn trong phạm vi dự án"])
         lay.addWidget(self.protected, 1)
         note = panel()
         nl = QVBoxLayout(note)
@@ -407,7 +433,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         nl.addWidget(label("Bảo vệ nhiều lớp", "H2"))
         nl.addWidget(
             label(
-                "Chặn checkpoint, weights, datasets, credential và đường dẫn vượt dự án. Chặn symlink, junction và hardlink. Sửa mã nguồn đã cấp quyền sẽ tự động, kiểm tra hash và backup.",
+                "Trong chế độ giới hạn theo dự án: chặn checkpoint, weights, datasets, credential và đường dẫn ngoài dự án; kiểm tra symlink/junction/hardlink, hash và backup. Quyền máy rộng được cấp riêng có thể truy cập dữ liệu mà tài khoản Windows đọc được.",
                 "Muted",
                 True,
             )

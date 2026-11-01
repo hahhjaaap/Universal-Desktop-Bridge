@@ -406,3 +406,39 @@ def test_failed_health_refresh_clears_stale_green_status(manager, monkeypatch):
     assert current_theme().muted in window.status_label.styleSheet()
     assert not window.connect_button.isEnabled()
     assert not (window.agent.state / "computer-access.dpapi").exists()
+
+
+def test_security_inventory_discloses_unsandboxed_access(manager, monkeypatch):
+    window, _ = manager
+    baseline = window.agent.projects()
+
+    monkeypatch.setattr("udb.computer_access.summary", lambda _agent: {"enabled": True})
+    window._refresh_security()
+    assert window.computer_grant_pill._status[0] == "Đã bật · không sandbox"
+    assert window.computer_grant_pill._status[1] == "paused"
+    assert "kể cả dữ liệu được chặn" in window.computer_grant_detail.text()
+    assert "udb revoke-access" in window.computer_grant_detail.text()
+
+    monkeypatch.setattr(
+        "udb.computer_access.summary", lambda _agent: {"enabled": False}
+    )
+    window._refresh_security()
+    assert window.computer_grant_pill._status[0] == "Không khả dụng"
+    assert window.agent.projects() == baseline
+    assert not (window.agent.state / "computer-access.dpapi").exists()
+
+
+def test_security_inventory_fails_closed_without_changing_owner_permissions(
+    manager, monkeypatch
+):
+    window, _ = manager
+
+    def unavailable(_agent):
+        raise OSError("Synthetic grant status unavailable")
+
+    monkeypatch.setattr("udb.computer_access.summary", unavailable)
+    window.refresh()
+    assert window.computer_grant_pill._status == ("Chưa xác minh", "neutral")
+    assert "không đọc được" in window.footer_status.text()
+    assert window.desktop_pause_button.isEnabled()
+    assert not (window.agent.state / "computer-access.dpapi").exists()

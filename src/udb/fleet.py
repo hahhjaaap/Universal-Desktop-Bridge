@@ -14,7 +14,7 @@ import ssl
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
-from urllib.request import HTTPSHandler, ProxyHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, ProxyHandler, Request, build_opener
 
 ID_PATTERN = re.compile(r"[a-z][a-z0-9-]{1,31}")
 MAX_RESPONSE = 8 * 1024 * 1024
@@ -68,6 +68,12 @@ def load_secret(home: Path, device_id: str) -> str:
     if not (43 <= len(value) <= 256 and re.fullmatch(r"[A-Za-z0-9_-]+", value)):
         raise ValueError("Invalid fleet token")
     return value
+
+
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # Never forward an authorization header to another endpoint.
+        return None
 
 
 class FleetRouter:
@@ -168,13 +174,13 @@ class FleetRouter:
             },
         )
         # Never use a proxy from the environment for local tailnet addresses.
-        client = build_opener(ProxyHandler({}), HTTPSHandler(context=ssl.create_default_context()))
+        client = build_opener(ProxyHandler({}), NoRedirect(), HTTPSHandler(context=ssl.create_default_context()))
         try:
             with client.open(req, timeout=15) as response:
                 if response.status != 200:
                     raise RuntimeError("Remote UDB unavailable")
                 raw = response.read(MAX_RESPONSE + 1)
-        except Exception as exc:
+        except Exception:
             # Never expose a token or target URL in an error.
             raise RuntimeError(
                 "Remote UDB failed or timed out; outcome unknown. Inspect before retry."

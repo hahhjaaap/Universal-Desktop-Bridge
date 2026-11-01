@@ -8,6 +8,7 @@ import time
 from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import QTreeWidgetItem
 
+from .manager_job_refresh import should_reload_job_details
 from .manager_widgets import ACCENT, MUTED, RAISED, WARNING, icon
 
 
@@ -304,7 +305,8 @@ class ManagerRefreshMixin:
             for path in protected:
                 self.protected.addTopLevelItem(QTreeWidgetItem([path]))
         job_sig = tuple((j["id"], j["status"], j["info"]) for j in jobs)
-        if job_sig != self.last_job_signature:
+        jobs_changed = job_sig != self.last_job_signature
+        if jobs_changed:
             self.last_job_signature = job_sig
             current = self.jobs.currentItem()
             old = current.data(0, Qt.ItemDataRole.UserRole) if current else None
@@ -342,8 +344,14 @@ class ManagerRefreshMixin:
         self.jobs.setVisible(bool(jobs))
         self.job_tabs.setVisible(bool(jobs))
         self.jobs_empty.setVisible(not jobs)
-        if self.jobs.selectedItems():
-            self.show_job()
+        selected = self.jobs.selectedItems()
+        if selected:
+            selected_id = selected[0].data(0, Qt.ItemDataRole.UserRole)
+            selected_status = next(
+                (j["status"] for j in jobs if j["id"] == selected_id), None
+            )
+            if should_reload_job_details(jobs_changed, selected_status):
+                self.show_job()
 
     def _refresh_connection(self, source_auto_projects):
         status = self.controller.status()

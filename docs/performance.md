@@ -96,3 +96,17 @@ The waiter microbenchmark excludes JSON parsing, network, subprocess I/O and
 backend processing. **Do not extrapolate queue-only speedups to UDB tool
 latency.** CI performance figures remain informational rather than speed
 thresholds; integration and permission regressions are required to pass.
+
+## Completed-job GUI refresh
+
+The native Qt manager updates the job inventory on each refresh, but the
+selected job details no longer trigger additional database/log/script reads
+when the job has reached a terminal state **and** its inventory signature is
+unchanged. Running, reviewing and stopping jobs still refresh their details,
+and selecting another job invokes the existing selection handler. A status
+transition updates the inventory signature and causes a detail refresh.
+
+This reduces idle disk reads and unnecessary text processing when the owner
+leaves the manager open on an already-completed task. It does not change job
+execution or log retention. The regression suite checks that terminal jobs
+skip repeated detail IO while live jobs are not throttled.

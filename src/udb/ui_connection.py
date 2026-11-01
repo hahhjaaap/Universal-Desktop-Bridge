@@ -20,9 +20,7 @@ class HealthIndicator:
 def worker_indicator(worker_ready: object) -> HealthIndicator:
     """A local worker heartbeat, not confirmation of AI authorization."""
     if worker_ready is True:
-        return HealthIndicator(
-            "Sẵn sàng", "ready", "Tác nhân UDB cục bộ đã phản hồi."
-        )
+        return HealthIndicator("Sẵn sàng", "ready", "Tác nhân UDB cục bộ đã phản hồi.")
     if worker_ready is False:
         return HealthIndicator(
             "Chưa sẵn sàng", "paused", "Tác nhân cục bộ chưa phản hồi."
@@ -39,9 +37,7 @@ def tunnel_indicator(state: Mapping[str, object]) -> HealthIndicator:
     connecting = state.get("connecting") is True
     wanted = state.get("tunnel_wanted") is True
     if ready and running:
-        return HealthIndicator(
-            "Sẵn sàng", "ready", "Tunnel trên máy này đã phản hồi."
-        )
+        return HealthIndicator("Sẵn sàng", "ready", "Tunnel trên máy này đã phản hồi.")
     if ready and not running:
         return HealthIndicator(
             "Chưa xác định",

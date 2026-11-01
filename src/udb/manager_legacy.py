@@ -11,9 +11,10 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import __version__
-from .connection import normalize_tunnel_id
-from .core import Agent, PolicyError
+from .connection import is_tunnel_id, normalize_tunnel_id
+from .core import Agent, PolicyError, reject_links
 from .credentials import load_key, save_key
+from .host_client import atomic_json
 from .windows_paths import system_executable
 
 
@@ -21,6 +22,16 @@ def command(home: Path, *args):
     from .launcher import worker_command
 
     return worker_command("core", [*args, "--home", str(home)])
+
+
+def read_tunnel_config(state: Path) -> dict:
+    """Use the bounded, link-safe state parser in the legacy manager as well."""
+    from .owner_command import read_object
+
+    try:
+        return read_object(Path(state) / "connection.json", 4096)
+    except FileNotFoundError:
+        return {}
 
 
 def run(home: Path):
@@ -111,8 +122,7 @@ def run(home: Path):
     def configure_tunnel():
         initial = ""
         cfg_path = agent.state / "connection.json"
-        if cfg_path.exists():
-            initial = json.loads(cfg_path.read_text("utf-8-sig")).get("tunnel_id", "")
+        initial = read_tunnel_config(agent.state).get("tunnel_id", "")
         tunnel = simpledialog.askstring(
             "Step 1 of 2 - Tunnel ID",
             "Tunnel ID (tunnel_...), NOT the API key. The existing ID is filled in:",
@@ -133,11 +143,10 @@ def run(home: Path):
         )
         if not key:
             return
+        reject_links(cfg_path)
         save_key(key)
         key = None
-        (agent.state / "connection.json").write_text(
-            json.dumps({"tunnel_id": tunnel}), encoding="utf-8"
-        )
+        atomic_json(cfg_path, {"tunnel_id": tunnel})
         messagebox.showinfo(
             "Saved locally",
             "Credential saved. Install official tunnel-client, then Start tunnel. No key is written to source or config.",
@@ -145,7 +154,9 @@ def run(home: Path):
         )
 
     def start_tunnel():
-        cfg = json.loads((agent.state / "connection.json").read_text("utf-8"))
+        cfg = read_tunnel_config(agent.state)
+        if not is_tunnel_id(cfg.get("tunnel_id")):
+            raise PolicyError("Invalid tunnel configuration; edit the connection locally.")
         secret = load_key()
         binary = home / "tools" / "tunnel-client.exe"
         if not binary.is_file():

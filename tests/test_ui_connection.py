@@ -16,12 +16,8 @@ def test_worker_indicators_need_explicit_boolean_evidence():
 
 
 def test_tunnel_health_cannot_pretend_client_connection():
-    assert tunnel_indicator(
-        {"ready": True, "tunnel_running": True}
-    ).tone == "ready"
-    inconsistent = tunnel_indicator(
-        {"ready": True, "tunnel_running": False}
-    )
+    assert tunnel_indicator({"ready": True, "tunnel_running": True}).tone == "ready"
+    inconsistent = tunnel_indicator({"ready": True, "tunnel_running": False})
     assert inconsistent.tone == "neutral"
     assert "không nhất quán" in inconsistent.detail
     assert tunnel_indicator({"connecting": True}).tone == "paused"

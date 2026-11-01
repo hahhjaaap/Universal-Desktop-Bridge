@@ -254,6 +254,12 @@ Owner approval dialogs now state an explicit operation-specific impact
 before the existing full review and local confirmation. No filtering of
 log bodies or secret content is performed.
 
+The **Bảo vệ** page also displays read-only, locally observed status for
+pending owner approvals, host-input pause and source auto-edit grants. These
+signals do **not** represent ChatGPT authorization, a completed security
+assessment or the state of every background process. Failed reads show
+**Chưa xác minh** instead of retaining stale positive states.
+
 The **Bảo vệ** page now shows a read-only indicator of optional full Windows
 computer access. If enabled, it warns that this privilege is **unsandboxed**
 and can reach files protected only against project-scoped tools. The GUI

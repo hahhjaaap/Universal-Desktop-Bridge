@@ -54,6 +54,10 @@ class ManagerRefreshMixin:
             indicator = unknown_indicator()
             self.tunnel_health.set_status(indicator.text, indicator.tone)
             self.tunnel_health.setToolTip(indicator.detail)
+            self.header_connection.set_status(
+                "Tunnel: " + indicator.text, indicator.tone
+            )
+            self.header_connection.setToolTip(indicator.detail)
             self._connection_ready = False
             self.status_label.setText("●  Không đọc được tunnel")
             theme = current_theme()
@@ -466,6 +470,8 @@ class ManagerRefreshMixin:
         indicator = tunnel_indicator(status)
         self.tunnel_health.set_status(indicator.text, indicator.tone)
         self.tunnel_health.setToolTip(indicator.detail)
+        self.header_connection.set_status("Tunnel: " + indicator.text, indicator.tone)
+        self.header_connection.setToolTip(indicator.detail)
         ready = status["ready"] is True and status["tunnel_running"] is True
         self._connection_ready = ready
         alive = status["tunnel_running"]

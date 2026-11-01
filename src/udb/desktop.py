@@ -124,9 +124,12 @@ class DesktopController:
 
     def save_settings(self, settings):
         from .host_client import atomic_json
+        from .ui_theme import normalize_preference
 
-        # Only presentation/launch preferences; never credentials.
+        # Only allow-listed presentation/launch preferences; never credentials.
         safe = {k: bool(settings.get(k)) for k in ("motion", "autoconnect")}
+        if "theme" in settings:
+            safe["theme"] = normalize_preference(settings["theme"])
         atomic_json(self.agent.state / "gui.json", safe)
 
     def configure(self, tunnel_id, key=""):

@@ -458,9 +458,7 @@ class ManagerRefreshMixin:
                     else "—"
                 )
                 self.activity_timeline.addTopLevelItem(
-                    QTreeWidgetItem(
-                        [clock, describe(event), event_state(event)]
-                    )
+                    QTreeWidgetItem([clock, describe(event), event_state(event)])
                 )
 
     def _refresh_connection(self, source_auto_projects):

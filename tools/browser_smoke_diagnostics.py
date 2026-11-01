@@ -25,13 +25,17 @@ def browser_smoke_failure(browser: object, *, stage: str, elapsed_ms: object) ->
         process_alive = None
     try:
         tabs = getattr(browser, "tabs", None)
-        owned_tab_count = min(100, max(0, len(tabs))) if isinstance(tabs, dict) else None
+        owned_tab_count = (
+            min(100, max(0, len(tabs))) if isinstance(tabs, dict) else None
+        )
     except (OSError, RuntimeError, TypeError):
         owned_tab_count = None
     try:
         channel = getattr(browser, "_cdp", None)
         markers = channel.event_markers() if channel is not None else None
-        recent_event_count = min(_MAX_EVENTS, len(markers)) if markers is not None else None
+        recent_event_count = (
+            min(_MAX_EVENTS, len(markers)) if markers is not None else None
+        )
     except (OSError, RuntimeError, TypeError, AttributeError):
         recent_event_count = None
     return {

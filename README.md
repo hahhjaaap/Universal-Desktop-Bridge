@@ -30,7 +30,11 @@ udb doctor
 udb start
 ```
 
-The managed release bundles its Python runtime and workers: **Python, Node.js, Git and Desktop Commander are not required to run it**. It installs under the current user's LocalAppData and stores user state separately in `%LOCALAPPDATA%\UniversalDesktopBridge`. It does not need administrator access. The standalone ZIP is checksum-verified but **not code-signed**.
+The managed release bundles its Python runtime and workers: **Python, Node.js, Git and Desktop Commander are not required to run it**. It installs under the current user's LocalAppData and stores user state separately in `%LOCALAPPDATA%\UniversalDesktopBridge`. It does not need administrator access. The standalone ZIP is checksum-verified but **not code-signed**. A
+Windows-only candidate-release checker is available in
+[Release signing and verification](docs/release-security.md), but no
+publisher certificate has been provisioned and no signed installer is
+claimed.
 
 The first attended `udb start` can guide setup. Offline mode works without a ChatGPT connection:
 

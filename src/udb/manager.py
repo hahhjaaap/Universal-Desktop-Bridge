@@ -391,11 +391,26 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
                 create,
             )
         )
+        self.job_search = QLineEdit()
+        self.job_search.setPlaceholderText("Tìm dự án, trạng thái hoặc Job ID…")
+        self.job_search.setAccessibleName("Tìm công việc theo thông tin")
+        self.job_search.setClearButtonEnabled(True)
+        self.job_search.setToolTip(
+            "Chỉ tìm trong thông tin công việc; không tìm nội dung log hoặc script."
+        )
+        self.job_group_filter = QComboBox()
+        self.job_group_filter.setAccessibleName("Lọc trạng thái công việc")
+        for value in ("Tất cả", "Đang chạy", "Cần chú ý", "Đã xong"):
+            self.job_group_filter.addItem(value)
+        self.job_search.textChanged.connect(self._refresh_jobs)
+        self.job_group_filter.currentIndexChanged.connect(self._refresh_jobs)
+        lay.addLayout(row(self.job_search, self.job_group_filter))
         self.jobs = self.tree(["Dự án", "Ngôn ngữ", "Trạng thái", "Job ID"])
         self.jobs.setColumnWidth(0, 190)
         self.jobs.setColumnWidth(1, 100)
         self.jobs.setColumnWidth(2, 140)
         self.jobs.setMaximumHeight(220)
+        self.jobs.setAccessibleName("Danh sách công việc của UDB")
         self.jobs.itemSelectionChanged.connect(self.show_job)
         lay.addWidget(self.jobs)
         self.job_tabs = QTabWidget()

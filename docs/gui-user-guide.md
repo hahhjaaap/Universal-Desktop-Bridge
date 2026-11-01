@@ -44,10 +44,9 @@ fall back to `system` rather than entering a Qt stylesheet. Existing
 `motion` and `autoconnect` preferences remain. No credentials are stored
 in `gui.json`.
 
-**Limitation:** The app does not yet subscribe to every live Windows theme
-change while it remains open. For the `system` option, reopen the app or
-reselect the option after changing Windows' appearance if the UI does not
-refresh automatically. System high-contrast mode and 200% DPI still need
+**Limitation:** The app listens for Qt's system color-scheme change signal and updates
+while it is running when supported. Some Windows themes or older platforms
+may not emit the signal; reopen the app if an OS appearance change is missed. System high-contrast mode and 200% DPI still need
 separate real-device review.
 
 ## Activity filters, navigation and approval review

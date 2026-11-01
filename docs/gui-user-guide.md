@@ -57,8 +57,11 @@ read only bounded task metadata and never search script or log contents.
 A failed/unknown task does not automatically become **Đã xong**. Changing
 filters clears hidden stale task details; no job state changes.
 The separate **Hoạt động MCP** tab shows a bounded read-only timeline of
-sanitized tool names, status and timestamps. It never displays request
-payloads, raw scripts or file bodies and cannot be used to re-run commands.
+sanitized tool names, status and timestamps. Unknown tool identifiers are
+rendered as **Công cụ UDB khác**, rather than revealing an arbitrary value
+from untrusted metadata; recognized tools use a fixed list of display names.
+It never displays request payloads, raw scripts or file bodies and cannot
+be used to re-run commands.
 The local **Xuất metadata đã ẩn thông tin nhạy cảm** action confirms intent,
 then saves a **new** JSON file (never overwriting an existing file) with
 only timestamps, tool labels and states. Inspect the destination before sharing

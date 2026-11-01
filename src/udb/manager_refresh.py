@@ -456,9 +456,7 @@ class ManagerRefreshMixin:
         if signature == self.activity_signature:
             return
         self.activity_signature = signature
-        self.jobs_empty.setVisible(
-            self.jobs.topLevelItemCount() == 0 and not events
-        )
+        self.jobs_empty.setVisible(self.jobs.topLevelItemCount() == 0 and not events)
         with QSignalBlocker(self.activity_timeline):
             self.activity_timeline.clear()
             for event in events:

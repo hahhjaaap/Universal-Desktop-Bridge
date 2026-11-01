@@ -1,10 +1,12 @@
 """Qt Common Room integration on a disposable v3 database, with no AI grant."""
 
 import datetime
+import os
 import sqlite3
 
 import pytest
 
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
 from udb.common_room_gui import CommonRoomDialog, database_for_project

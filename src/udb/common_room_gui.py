@@ -298,6 +298,9 @@ class CommonRoomDialog(QDialog):
         author = checked_text(self.name.text(), 80, "Tên thành viên")
         body = checked_text(self.composer.toPlainText(), 32000, "Nội dung")
         topic = self.topic.currentText()
+        stamp = datetime.datetime.now(datetime.timezone.utc).isoformat(
+            timespec="seconds"
+        )
         with open_room(self.room_path) as db:
             if not db.execute(
                 "SELECT 1 FROM participants WHERE name=?", (author,)
@@ -312,10 +315,11 @@ class CommonRoomDialog(QDialog):
                     author,
                     self.kind.currentText(),
                     body,
-                    datetime.datetime.now(datetime.timezone.utc).isoformat(
-                        timespec="seconds"
-                    ),
+                    stamp,
                 ),
+            )
+            db.execute(
+                "UPDATE participants SET last_seen=? WHERE name=?", (stamp, author)
             )
         self.composer.clear()
         self.reload()

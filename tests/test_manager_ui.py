@@ -330,3 +330,31 @@ def test_theme_picker_is_persistent_without_altering_grants(manager):
     finally:
         chooser.setCurrentIndex(chooser.findData("system"))
         QApplication.processEvents()
+
+
+def test_compact_navigation_keeps_accessible_routes_and_local_pause(manager):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QApplication
+
+    window, _ = manager
+    assert window.sidebar.width() == 200
+    window.sidebar_toggle.click()
+    QApplication.processEvents()
+    assert window.sidebar.width() == 72
+    assert window.sidebar_toggle.accessibleName() == "Mở rộng thanh điều hướng"
+    for index, button in enumerate(window.nav_buttons):
+        assert button.text() == ""
+        assert button.accessibleName() == window.nav_names[index]
+        assert button.toolTip()
+        assert button.maximumWidth() == 56
+    QTest.mouseClick(window.nav_buttons[2], Qt.MouseButton.LeftButton)
+    assert window.stack.currentIndex() == 2
+    QTest.mouseClick(window.nav_buttons[5], Qt.MouseButton.LeftButton)
+    assert window.stack.currentIndex() == 5
+    assert window.desktop_pause_button.isEnabled()
+    window.sidebar_toggle.click()
+    QApplication.processEvents()
+    assert window.sidebar.width() == 200
+    assert window.nav_buttons[1].text().startswith("Quyền AI")
+    assert not (window.agent.state / "computer-access.dpapi").exists()

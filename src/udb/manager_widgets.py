@@ -56,6 +56,7 @@ DANGER = DARK.danger
 
 STYLE = stylesheet(DARK)
 
+
 def label(text="", name="", wrap=False):
     w = QLabel(text)
     w.setTextFormat(Qt.TextFormat.PlainText)

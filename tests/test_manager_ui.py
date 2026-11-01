@@ -668,6 +668,45 @@ def test_security_posture_never_keeps_successful_state_after_read_failure(
     assert not (window.agent.state / "computer-access.dpapi").exists()
 
 
+def test_global_privilege_indicator_warns_about_unsandboxed_scope(manager, monkeypatch):
+    from PySide6.QtWidgets import QApplication
+
+    window, _ = manager
+    monkeypatch.setattr("udb.computer_access.summary", lambda _agent: {"enabled": True})
+    window._refresh_security()
+    assert window.header_privilege._status == ("Windows: không sandbox", "paused")
+    assert "không áp dụng" in window.header_privilege.toolTip()
+    window.navigate(0)
+    QApplication.processEvents()
+    assert window.header_privilege.isVisible()
+    window.navigate(5)
+    QApplication.processEvents()
+    assert window.header_privilege.isVisible()
+    assert not (window.agent.state / "computer-access.dpapi").exists()
+
+
+def test_global_privilege_indicator_fails_closed_and_distinguishes_scopes(
+    manager, monkeypatch
+):
+    window, _ = manager
+    monkeypatch.setattr(
+        "udb.computer_access.summary", lambda _agent: {"enabled": False}
+    )
+    window._refresh_security()
+    assert window.header_privilege._status == ("Quyền máy: không bật", "neutral")
+    assert "Sandbox" in window.header_privilege.toolTip()
+
+    def unreadable(_agent):
+        raise OSError("PRIVATE_UNTRUSTED_PATH")
+
+    monkeypatch.setattr("udb.computer_access.summary", unreadable)
+    window.refresh()
+    assert window.header_privilege._status == ("Quyền máy: chưa xác minh", "neutral")
+    assert "PRIVATE_UNTRUSTED_PATH" not in window.header_privilege.toolTip()
+    assert window.desktop_pause_button.isEnabled()
+    assert not (window.agent.state / "computer-access.dpapi").exists()
+
+
 def test_connection_onboarding_only_uses_observed_local_health(manager, monkeypatch):
     window, host = manager
     assert window.setup_agent_health._status == ("Sẵn sàng", "ready")

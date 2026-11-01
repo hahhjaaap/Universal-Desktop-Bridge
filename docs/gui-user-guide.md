@@ -72,8 +72,13 @@ The local **Xuất metadata đã ẩn thông tin nhạy cảm** action confirms 
 then saves a **new** JSON file (never overwriting an existing file) with
 only timestamps, tool labels and states. Inspect the destination before sharing
 it because even sanitized metadata can reveal which tools were used.
-A persistent header displays the current page and a **Tunnel-only** status;
-it does not authenticate a ChatGPT tool call.
+A persistent header displays the current page, a **Tunnel-only** status,
+and a separate **Windows privilege** indicator. If the optional broad
+current-user computer grant is active, it warns **Windows: không sandbox**
+on every page. Unknown local grant status stays **chưa xác minh**, never a
+green authorization or safety claim. Disabling that broad grant does not
+imply project-scoped or Sandbox permissions are disabled. The header does
+not authenticate a ChatGPT tool call.
 
 Keyboard shortcuts in the full manager: `Ctrl+1` through `Ctrl+6`
 navigate the six pages; `Ctrl+Shift+F` opens and focuses task search.

@@ -3,6 +3,7 @@
 This does not claim exhaustive coverage. No private user device or browser is
 contacted, and only aggregate counts (not test parameters) are exported.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -12,31 +13,70 @@ from xml.etree import ElementTree
 
 DOMAINS = {
     "mcp_protocol": (
-        "protocol", "stdio", "unified", "tool_consolidation", "proxy",
-        "backend_recovery", "session_lifecycle", "mcp",
+        "protocol",
+        "stdio",
+        "unified",
+        "tool_consolidation",
+        "proxy",
+        "backend_recovery",
+        "session_lifecycle",
+        "mcp",
     ),
     "owner_policy": (
-        "policy", "grant", "credential", "security", "access",
-        "sandbox", "source_access", "permissions",
+        "policy",
+        "grant",
+        "credential",
+        "security",
+        "access",
+        "sandbox",
+        "source_access",
+        "permissions",
     ),
     "files_documents": (
-        "file", "document", "spreadsheet", "upload", "download",
-        "media", "search", "accounting",
+        "file",
+        "document",
+        "spreadsheet",
+        "upload",
+        "download",
+        "media",
+        "search",
+        "accounting",
     ),
     "browser_desktop": (
-        "browser", "chrome", "cdp", "desktop", "uia", "pointer", "tab",
+        "browser",
+        "chrome",
+        "cdp",
+        "desktop",
+        "uia",
+        "pointer",
+        "tab",
     ),
     "background_jobs": (
-        "job", "process", "terminal", "host", "background", "work",
+        "job",
+        "process",
+        "terminal",
+        "host",
+        "background",
+        "work",
     ),
     "windows_installation": (
-        "release", "install", "build", "package", "windows",
+        "release",
+        "install",
+        "build",
+        "package",
+        "windows",
     ),
     "gui_manager": (
-        "manager", "onboarding", "quick_controls", "refresh",
+        "manager",
+        "onboarding",
+        "quick_controls",
+        "refresh",
     ),
     "fault_injection": (
-        "fault", "recovery", "simulation", "runtime_audit",
+        "fault",
+        "recovery",
+        "simulation",
+        "runtime_audit",
     ),
 }
 
@@ -52,10 +92,7 @@ def summarize(path: Path) -> dict:
         "passed": 0,
         "failed": 0,
         "skipped": 0,
-        "domains": {
-            name: {"passed": 0, "failed": 0, "skipped": 0}
-            for name in DOMAINS
-        },
+        "domains": {name: {"passed": 0, "failed": 0, "skipped": 0} for name in DOMAINS},
     }
     result["domains"]["uncategorized"] = {"passed": 0, "failed": 0, "skipped": 0}
     for case in cases:
@@ -68,8 +105,11 @@ def summarize(path: Path) -> dict:
         else:
             status = "passed"
         result[status] += 1
-        matched = [name for name, terms in DOMAINS.items()
-                   if any(term in cls for term in terms)]
+        matched = [
+            name
+            for name, terms in DOMAINS.items()
+            if any(term in cls for term in terms)
+        ]
         for name in matched or ["uncategorized"]:
             result["domains"][name][status] += 1
     result["unverified"] = [

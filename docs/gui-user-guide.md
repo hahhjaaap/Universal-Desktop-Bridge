@@ -50,6 +50,25 @@ reselect the option after changing Windows' appearance if the UI does not
 refresh automatically. System high-contrast mode and 200% DPI still need
 separate real-device review.
 
+## Activity filters, navigation and approval review
+
+In **Tiến trình**, search by project, language, status or job ID.
+Choose **Tất cả**, **Đang chạy**, **Cần chú ý** or **Đã xong**. Filters
+read only bounded task metadata and never search script or log contents.
+A failed/unknown task does not automatically become **Đã xong**. Changing
+filters clears hidden stale task details; no job state changes.
+
+Keyboard shortcuts in the full manager: `Ctrl+1` through `Ctrl+6`
+navigate the six pages; `Ctrl+Shift+F` opens and focuses task search.
+In **Kết nối**, **Sao chép lệnh kiểm tra** copies only `udb doctor --json`
+to the local clipboard; it does not execute a command or share diagnostics.
+
+Owner approval dialogs display an operation-specific impact notice:
+real file modification, host-side media download, Windows Sandbox desktop,
+or Sandbox script execution. Existing full diff/script tabs, request hash,
+expiry, explicit review checkbox and secondary local confirmation remain
+mandatory. Untrusted request/file strings are rendered as plain text.
+
 ## Navigation and quick controls
 
 The manager retains its six pages: **Dự án**, **Quyền AI**,

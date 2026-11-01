@@ -41,7 +41,6 @@ from PySide6.QtWidgets import (
 )
 
 from .ui_identity import ICON_SVG
-
 from .ui_theme import DARK, current_theme, stylesheet
 
 # Legacy constants remain for source compatibility. New painting is theme-aware.

@@ -161,6 +161,14 @@ checks; never route an unavailable remote command to the local machine.
 
 ## GUI state versus security state
 
+The **Bảo vệ** page also reads `computer_access.summary(agent)` to
+display whether an optional broad current-user Windows grant is usable.
+This is a **read-only** status: it does not invoke `enable_local` or
+`revoke_local`. Broad computer access is unsandboxed and can bypass
+project-scoped protected-path boundaries using the current user's Windows
+permissions. Failed status refreshes display `Chưa xác minh` rather than
+claiming a known security state.
+
 The GUI **observes and presents** backend state. Its Qt paint, sidebar,
 appearance and focus components do not authorize file writes, launch arbitrary
 programs or enable full-computer access. Owner approvals and protected-path

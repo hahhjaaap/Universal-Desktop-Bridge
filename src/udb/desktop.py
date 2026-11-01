@@ -134,14 +134,18 @@ class DesktopController:
             tunnel_id = normalize_tunnel_id(tunnel_id)
         except ValueError as exc:
             raise PolicyError(str(exc)) from None
+        from .host_client import atomic_json
+
+        # Reject linked/reparse-point destinations before changing credentials.
+        target = self.agent.state / "connection.json"
+        reject_links(target)
         if key:
             save_key(key)
         elif not self.config().get("tunnel_id"):
             raise PolicyError("Cần nhập runtime API key khi cấu hình lần đầu.")
-        from .host_client import atomic_json
 
         # Never expose a partially written tunnel identifier to the watchdog.
-        atomic_json(self.agent.state / "connection.json", {"tunnel_id": tunnel_id})
+        atomic_json(target, {"tunnel_id": tunnel_id})
 
     def alive(self, name):
         with self.lock:

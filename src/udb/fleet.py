@@ -7,7 +7,6 @@ configuration is exposed as a ChatGPT tool. No failover to the wrong machine.
 
 from __future__ import annotations
 
-import hmac
 import json
 import re
 import ssl

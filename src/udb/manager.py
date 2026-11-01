@@ -14,7 +14,7 @@ from PySide6.QtCore import (
     QThreadPool,
     QTimer,
 )
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -176,6 +176,16 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh)
         self.timer.start(1500)
+        self.navigation_shortcuts = []
+        for index in range(6):
+            shortcut = QShortcut(QKeySequence(f"Ctrl+{index + 1}"), self)
+            shortcut.activated.connect(
+                lambda index=index: self.navigate(index)
+            )
+            self.navigation_shortcuts.append(shortcut)
+        job_search_shortcut = QShortcut(QKeySequence("Ctrl+Shift+F"), self)
+        job_search_shortcut.activated.connect(self.focus_job_search)
+        self.navigation_shortcuts.append(job_search_shortcut)
         self.navigate(5)
         self.refresh()
 
@@ -508,6 +518,21 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         cl.setContentsMargins(23, 23, 23, 23)
         cl.setSpacing(15)
         cl.addWidget(label("Secure MCP Tunnel", "H2"))
+        cl.addWidget(
+            label(
+                "1. Kiểm tra tác nhân cục bộ → 2. Kiểm tra Tunnel → "
+                "3. Gọi một công cụ chỉ đọc trong ChatGPT. "
+                "Màu xanh ở Tunnel không chứng minh ChatGPT đã truy cập.",
+                "Muted",
+                True,
+            )
+        )
+        doctor = MotionButton("Sao chép lệnh kiểm tra", "file")
+        doctor.setAccessibleName("Sao chép lệnh udb doctor --json")
+        doctor.clicked.connect(
+            lambda: QApplication.clipboard().setText("udb doctor --json")
+        )
+        cl.addLayout(row(doctor, None))
         self.detail_status = label("", "Muted", True)
         cl.addWidget(self.detail_status)
         self.media_auto = QCheckBox(
@@ -638,6 +663,11 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             button.setAccessibleName(name)
             button.setToolTip(name)
         self._refresh_requests()
+
+    def focus_job_search(self):
+        self.navigate(2)
+        self.job_search.setFocus()
+        self.job_search.selectAll()
 
     def navigate(self, index):
         self.stack.setCurrentIndex(index)

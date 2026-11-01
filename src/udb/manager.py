@@ -14,7 +14,7 @@ from PySide6.QtCore import (
     QThreadPool,
     QTimer,
 )
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import __version__
+from .activity_presenter import ActivityFeed
 from .core import reject_links
 from .desktop import DesktopController
 from .manager_dialogs import ApprovalDialog, ConnectionDialog, SourceDialog
@@ -78,6 +79,8 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.last_pending = None
         self.last_job_signature = None
         self.connection_signature = None
+        self.activity_feed = ActivityFeed(self.agent.home)
+        self.activity_signature = None
         self._closing = False
         self._last_project_auth_check = 0.0
         self.setWindowTitle("Universal Desktop Bridge · " + __version__)
@@ -149,7 +152,29 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         nav.addWidget(self.sidebar_version)
         body.addWidget(sidebar)
         self.stack = QStackedWidget()
-        body.addWidget(self.stack, 1)
+        content_column = QVBoxLayout()
+        content_column.setContentsMargins(0, 0, 0, 0)
+        content_column.setSpacing(0)
+        header = QFrame()
+        header.setObjectName("AppHeader")
+        header_row = QHBoxLayout(header)
+        header_row.setContentsMargins(26, 10, 26, 10)
+        header_row.setSpacing(14)
+        self.header_title = label("Máy tính", "H2")
+        self.header_title.setAccessibleName("Trang đang xem")
+        header_row.addWidget(self.header_title)
+        header_row.addStretch()
+        self.header_connection = StatusPill("Tunnel chưa kiểm tra", "neutral")
+        self.header_connection.setAccessibleDescription(
+            "Chỉ là trạng thái tunnel, không xác minh công cụ ChatGPT."
+        )
+        self.header_connection.setToolTip(
+            "Kết nối tunnel không xác minh ChatGPT đã gọi được công cụ."
+        )
+        header_row.addWidget(self.header_connection)
+        content_column.addWidget(header)
+        content_column.addWidget(self.stack, 1)
+        body.addLayout(content_column, 1)
         self.dashboard = self.build_dashboard()
         self.stack.addWidget(self.dashboard)
         self.stack.addWidget(self.build_approvals())
@@ -176,6 +201,14 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh)
         self.timer.start(1500)
+        self.navigation_shortcuts = []
+        for index in range(6):
+            shortcut = QShortcut(QKeySequence(f"Ctrl+{index + 1}"), self)
+            shortcut.activated.connect(lambda index=index: self.navigate(index))
+            self.navigation_shortcuts.append(shortcut)
+        job_search_shortcut = QShortcut(QKeySequence("Ctrl+Shift+F"), self)
+        job_search_shortcut.activated.connect(self.focus_job_search)
+        self.navigation_shortcuts.append(job_search_shortcut)
         self.navigate(5)
         self.refresh()
 
@@ -391,11 +424,30 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
                 create,
             )
         )
+        self.job_search = QLineEdit()
+        self.job_search.setPlaceholderText("Tìm dự án, trạng thái hoặc Job ID…")
+        self.job_search.setAccessibleName("Tìm công việc theo thông tin")
+        self.job_search.setClearButtonEnabled(True)
+        self.job_search.setToolTip(
+            "Chỉ tìm trong thông tin công việc; không tìm nội dung log hoặc script."
+        )
+        self.job_group_filter = QComboBox()
+        self.job_group_filter.setAccessibleName("Lọc trạng thái công việc")
+        for value in ("Tất cả", "Đang chạy", "Cần chú ý", "Đã xong"):
+            self.job_group_filter.addItem(value)
+        self.job_search.textChanged.connect(lambda *_: self._refresh_jobs())
+        self.job_group_filter.currentIndexChanged.connect(
+            lambda *_: self._refresh_jobs()
+        )
+        lay.addLayout(row(self.job_search, self.job_group_filter))
+        self.job_filter_feedback = label("Danh sách công việc UDB", "Fine")
+        lay.addWidget(self.job_filter_feedback)
         self.jobs = self.tree(["Dự án", "Ngôn ngữ", "Trạng thái", "Job ID"])
         self.jobs.setColumnWidth(0, 190)
         self.jobs.setColumnWidth(1, 100)
         self.jobs.setColumnWidth(2, 140)
         self.jobs.setMaximumHeight(220)
+        self.jobs.setAccessibleName("Danh sách công việc của UDB")
         self.jobs.itemSelectionChanged.connect(self.show_job)
         lay.addWidget(self.jobs)
         self.job_tabs = QTabWidget()
@@ -406,6 +458,26 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.job_script = QPlainTextEdit()
         self.job_script.setReadOnly(True)
         self.job_tabs.addTab(self.job_script, "Script đã duyệt")
+        self.activity_timeline = self.tree(["Lúc", "Công cụ", "Kết quả"])
+        self.activity_timeline.setAccessibleName(
+            "Lịch sử hoạt động MCP đã lược bỏ dữ liệu nhạy cảm"
+        )
+        self.activity_timeline.setToolTip(
+            "Tối đa 40 bản ghi metadata; không chứa log, script hoặc tài liệu gốc."
+        )
+        self.activity_timeline.setColumnWidth(0, 85)
+        self.activity_timeline.setColumnWidth(1, 210)
+        activity_panel = QWidget()
+        activity_layout = QVBoxLayout(activity_panel)
+        activity_layout.setContentsMargins(8, 8, 8, 8)
+        activity_layout.setSpacing(8)
+        activity_layout.addWidget(self.activity_timeline, 1)
+        self.activity_export_button = MotionButton(
+            "Xuất metadata đã ẩn thông tin nhạy cảm", "file"
+        )
+        self.activity_export_button.clicked.connect(self.export_activity)
+        activity_layout.addLayout(row(None, self.activity_export_button))
+        self.job_tabs.addTab(activity_panel, "Hoạt động MCP")
         lay.addWidget(self.job_tabs, 1)
         self.jobs_empty = empty_state(
             "Chưa có tác vụ",
@@ -489,6 +561,21 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         cl.setContentsMargins(23, 23, 23, 23)
         cl.setSpacing(15)
         cl.addWidget(label("Secure MCP Tunnel", "H2"))
+        cl.addWidget(
+            label(
+                "1. Kiểm tra tác nhân cục bộ → 2. Kiểm tra Tunnel → "
+                "3. Gọi một công cụ chỉ đọc trong ChatGPT. "
+                "Màu xanh ở Tunnel không chứng minh ChatGPT đã truy cập.",
+                "Muted",
+                True,
+            )
+        )
+        doctor = MotionButton("Sao chép lệnh kiểm tra", "file")
+        doctor.setAccessibleName("Sao chép lệnh udb doctor --json")
+        doctor.clicked.connect(
+            lambda: QApplication.clipboard().setText("udb doctor --json")
+        )
+        cl.addLayout(row(doctor, None))
         self.detail_status = label("", "Muted", True)
         cl.addWidget(self.detail_status)
         self.media_auto = QCheckBox(
@@ -620,8 +707,73 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             button.setToolTip(name)
         self._refresh_requests()
 
+    def focus_job_search(self):
+        self.navigate(2)
+        self.job_search.setFocus()
+        self.job_search.selectAll()
+
+    def export_activity(self):
+        # Explicit local-only export: no raw log contents, script, paths or IDs.
+        from .activity_presenter import describe, event_state
+
+        try:
+            events = self.activity_feed.poll()
+        except (OSError, ValueError):
+            QMessageBox.warning(
+                self, "Chưa xuất được", "Không đọc được metadata hoạt động."
+            )
+            return
+        if not events:
+            QMessageBox.information(
+                self, "Không có dữ liệu", "Chưa có hoạt động nào để xuất."
+            )
+            return
+        consent = QMessageBox.question(
+            self,
+            "Xác nhận xuất nhật ký",
+            "Chỉ xuất tối đa 40 bản ghi: thời gian, tên công cụ và trạng thái. "
+            "Không xuất nội dung file, script, khóa hay ID phiên. Tiếp tục?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if consent != QMessageBox.StandardButton.Yes:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self,
+            "Lưu nhật ký UDB (metadata)",
+            "udb-activity-redacted.json",
+            "JSON (*.json)",
+        )
+        if not destination:
+            return
+        records = [
+            {
+                "time": (
+                    time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(event["at"]))
+                    if event.get("at") and event["at"] > 0
+                    else "unknown"
+                ),
+                "tool": describe(event),
+                "state": event_state(event),
+            }
+            for event in events[:40]
+        ]
+        try:
+            with Path(destination).open("x", encoding="utf-8") as stream:
+                json.dump(records, stream, ensure_ascii=False, indent=2)
+                stream.write("\n")
+        except OSError:
+            QMessageBox.warning(
+                self, "Chưa xuất được", "Không thể tạo tệp mới hoặc tệp đã tồn tại."
+            )
+            return
+        QMessageBox.information(
+            self, "Đã tạo bản xuất", "Đã lưu metadata hoạt động đã lược bỏ dữ liệu."
+        )
+
     def navigate(self, index):
         self.stack.setCurrentIndex(index)
+        self.header_title.setText(self.nav_names[index])
         for i, btn in enumerate(self.nav_buttons):
             btn.selected(i == index)
         self.stack.currentWidget().updateGeometry()

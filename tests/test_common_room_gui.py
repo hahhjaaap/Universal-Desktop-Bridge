@@ -9,8 +9,9 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
+from PySide6.QtWidgets import QApplication
+
 from udb.common_room_gui import CommonRoomDialog, database_for_project
-from udb.manager import make_app
 
 
 def room_fixture(tmp_path):
@@ -42,7 +43,7 @@ def room_fixture(tmp_path):
 
 
 def test_existing_room_is_edited_without_creating_a_second_database(tmp_path):
-    make_app()
+    app = QApplication.instance() or QApplication([])
     root, path = room_fixture(tmp_path)
     dialog = CommonRoomDialog(root)
     assert dialog.room_path == path
@@ -69,7 +70,7 @@ def test_missing_workspace_never_created(tmp_path):
 
 
 def test_task_revision_refuses_stale_writes(tmp_path):
-    make_app()
+    app = QApplication.instance() or QApplication([])
     root, path = room_fixture(tmp_path)
     with sqlite3.connect(path) as db:
         stamp = datetime.datetime.now(datetime.timezone.utc).isoformat()

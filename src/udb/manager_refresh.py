@@ -25,13 +25,21 @@ class ManagerRefreshMixin:
             ("Máy tính", self._refresh_host),
             ("Quyền AI", self._refresh_requests),
             ("Tiến trình", self._refresh_jobs),
+            ("Bảo mật", self._refresh_security),
         ):
             try:
                 result = refresh()
                 if name == "Dự án":
                     source_auto_projects = result
             except Exception as exc:
-                errors.append(name + ": " + str(exc))
+                if name == "Bảo mật":
+                    errors.append("Bảo mật: không đọc được trạng thái")
+                    self.computer_grant_pill.set_status("Chưa xác minh", "neutral")
+                    self.computer_grant_detail.setText(
+                        "Không xác minh được quyền Windows; xem kiểm tra cục bộ."
+                    )
+                else:
+                    errors.append(name + ": " + str(exc))
                 if name == "Máy tính":
                     indicator = unknown_indicator()
                     self.local_health.set_status(indicator.text, indicator.tone)
@@ -319,6 +327,30 @@ class ManagerRefreshMixin:
         )
         permission_nav.setAccessibleName(permission_text)
         permission_nav.setToolTip(permission_text)
+
+    def _refresh_security(self):
+        from .computer_access import summary
+
+        state = summary(self.agent)
+        if state.get("enabled") is True:
+            self.computer_grant_pill.set_status("Đã bật · không sandbox", "paused")
+            self.computer_grant_detail.setText(
+                "Quyền điều khiển Windows toàn diện đang được cấp. "
+                "AI có thể thao tác tệp, chạy chương trình và dùng chuột/phím "
+                "trong phạm vi tài khoản Windows, kể cả dữ liệu được chặn "
+                "đối với dự án. Thu hồi cục bộ: udb revoke-access."
+            )
+        elif state.get("enabled") is False:
+            self.computer_grant_pill.set_status("Không khả dụng", "neutral")
+            self.computer_grant_detail.setText(
+                "Quyền máy Windows toàn diện không khả dụng. "
+                "Quyền dự án và Windows Sandbox được quản lý riêng."
+            )
+        else:
+            self.computer_grant_pill.set_status("Chưa xác minh", "neutral")
+            self.computer_grant_detail.setText(
+                "Chưa có bằng chứng xác minh trạng thái quyền máy."
+            )
 
     def _refresh_jobs(self):
         with self.agent.connect() as c:

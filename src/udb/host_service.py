@@ -30,8 +30,11 @@ def pending_inbox_commands(folder):
     """
     names = os.listdir(folder)
     if os.name == "nt":
-        return [folder / n for n in sorted(names, key=os.path.normcase)
-                if n.lower().endswith(".json")]
+        return [
+            folder / n
+            for n in sorted(names, key=os.path.normcase)
+            if n.lower().endswith(".json")
+        ]
     return [folder / n for n in sorted(names) if n.endswith(".json")]
 
 

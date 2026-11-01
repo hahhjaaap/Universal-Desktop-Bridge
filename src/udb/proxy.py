@@ -110,7 +110,9 @@ def normalized_output(tool: str, result: dict[str, Any]) -> dict[str, Any]:
 
 
 class UnifiedProxy:
-    def __init__(self, primary: StdioChild, companion: StdioChild, activity=None, fleet=None):
+    def __init__(
+        self, primary: StdioChild, companion: StdioChild, activity=None, fleet=None
+    ):
         self.primary = primary
         self.companion = companion
         self.send_lock = threading.Lock()
@@ -296,11 +298,14 @@ class UnifiedProxy:
             if arguments:
                 raise ValueError("fleet_list_computers accepts no arguments")
             from .protocol import annotate
+
             return annotate(text_result(self.fleet.list_computers()))
         if self.fleet is not None and name == "fleet_call":
             if set(arguments) != {"computer_id", "tool", "arguments"}:
                 raise ValueError("fleet_call needs computer_id, tool and arguments")
-            machine, tool, a = (arguments[x] for x in ("computer_id", "tool", "arguments"))
+            machine, tool, a = (
+                arguments[x] for x in ("computer_id", "tool", "arguments")
+            )
             if not isinstance(tool, str) or not tool or tool.startswith("fleet_"):
                 raise ValueError("Invalid fleet tool")
             if not isinstance(a, dict):
@@ -309,6 +314,7 @@ class UnifiedProxy:
                 return self.call_tool({"name": tool, "arguments": a})
             remote_result = self.fleet.invoke(machine, tool, a)
             from .protocol import annotate
+
             return annotate(normalized_output(tool, remote_result))
         # Refresh tool routing on first invocation. Do not retry side effects.
         if not self.tool_routes:
@@ -613,7 +619,9 @@ def run(settings) -> int:
     )
     from .activity import Activity
 
-    proxy = UnifiedProxy(original, companion, Activity(home), FleetRouter.from_home(home))
+    proxy = UnifiedProxy(
+        original, companion, Activity(home), FleetRouter.from_home(home)
+    )
     try:
         original.start()
         companion.start()

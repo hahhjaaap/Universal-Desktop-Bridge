@@ -42,72 +42,20 @@ from PySide6.QtWidgets import (
 
 from .ui_identity import ICON_SVG
 
-BG = "#0d1216"
-PANEL = "#151e24"
-RAISED = "#1d2b32"
-LINE = "#2b3c45"
-TEXT = "#edf5f3"
-MUTED = "#9fb2ba"
-ACCENT = "#78dfbc"
-WARNING = "#edc486"
-DANGER = "#f4a6a6"
+from .ui_theme import DARK, current_theme, stylesheet
 
+# Legacy constants remain for source compatibility. New painting is theme-aware.
+BG = DARK.bg
+PANEL = DARK.panel
+RAISED = DARK.raised
+LINE = DARK.line
+TEXT = DARK.text
+MUTED = DARK.muted
+ACCENT = DARK.accent
+WARNING = DARK.warning
+DANGER = DARK.danger
 
-STYLE = f"""
-QWidget {{ color:{TEXT}; font-family:"Segoe UI"; font-size:14px; }}
-QMainWindow, QDialog {{ background:{BG}; }}
-QWidget#Root, QWidget#Page, QWidget#PageHeader, QStackedWidget {{ background:{BG}; }}
-QFrame#Sidebar {{ background:{PANEL}; border-right:1px solid {LINE}; }}
-QFrame#Panel {{ background:{PANEL}; border:1px solid {LINE}; border-radius:16px; }}
-QFrame#Hero {{ background:#152c29; border:1px solid #2d5447; border-radius:16px; }}
-QFrame#Footer {{ border-top:1px solid {LINE}; background:{BG}; }}
-QLabel {{ background:transparent; border:0; }}
-QLabel#H1 {{ font-size:27px; font-weight:600; }}
-QLabel#H2 {{ font-size:18px; font-weight:600; }}
-QLabel#EmptyTitle {{ font-size:21px; font-weight:600; }}
-QLabel#EmptyIcon {{ color:{ACCENT}; font-size:32px; }}
-QLabel#Subtitle {{ color:{MUTED}; font-size:14px; }}
-QLabel#Brand {{ font-size:30px; font-weight:600; letter-spacing:-1px; }}
-QLabel#Eyebrow {{ color:{MUTED}; font-size:12px; letter-spacing:1.2px; }}
-QLabel#Muted {{ color:{MUTED}; font-size:14px; }}
-QLabel#Fine {{ color:{MUTED}; font-size:13px; }}
-QLabel#Warning {{ color:{WARNING}; font-size:12px; }}
-QLabel#Badge {{ background:{RAISED}; color:{ACCENT}; border-radius:9px; padding:3px 8px; }}
-QLineEdit, QPlainTextEdit, QListWidget, QTreeWidget {{ background:{BG}; color:{TEXT}; border:1px solid {LINE}; border-radius:8px; selection-background-color:#28483f; selection-color:{TEXT}; }}
-QLineEdit {{ padding:10px 12px; }}
-QLineEdit#ProjectPath {{ background:transparent; border:0; padding:0; color:{MUTED}; font-size:12px; }}
-QLineEdit:focus, QPlainTextEdit:focus, QTreeWidget:focus, QListWidget:focus {{ border-color:#78dfbc; }}
-QPlainTextEdit {{ padding:12px; font-family:"Cascadia Code",Consolas,monospace; font-size:13px; }}
-QTreeWidget {{ border:0; outline:0; background:transparent; alternate-background-color:{PANEL}; }}
-QTreeWidget::item {{ padding:12px 10px; border-bottom:1px solid {LINE}; }}
-QTreeWidget::item:selected {{ background:#213b35; color:{TEXT}; }}
-QTreeWidget::item:hover {{ background:#1a2b32; }}
-QHeaderView::section {{ background:{BG}; color:{MUTED}; border:0; border-bottom:1px solid {LINE}; padding:10px 7px; font-size:12px; }}
-QListWidget::item {{ padding:10px; }}
-QListWidget::item:selected {{ background:#213b35; }}
-QScrollArea {{ background:transparent; border:0; }}
-QScrollBar:vertical {{ background:{BG}; width:10px; margin:0; }}
-QScrollBar::handle:vertical {{ background:#3a515b; min-height:28px; border-radius:5px; }}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height:0; }}
-QScrollBar:horizontal {{ background:{BG}; height:10px; }}
-QScrollBar::handle:horizontal {{ background:#3a515b; min-width:28px; border-radius:5px; }}
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width:0; }}
-QTabWidget::pane {{ border:1px solid {LINE}; border-radius:7px; }}
-QTabBar::tab {{ background:{PANEL}; color:{MUTED}; padding:10px 16px; border-bottom:2px solid transparent; }}
-QTabBar::tab:selected {{ color:{TEXT}; border-bottom:2px solid {ACCENT}; }}
-QCheckBox {{ spacing:10px; padding:7px 0; }}
-QCheckBox::indicator {{ width:17px; height:17px; background:{BG}; border:1px solid #536b75; border-radius:4px; }}
-QCheckBox::indicator:checked {{ background:{ACCENT}; border:4px solid #254f41; }}
-QToolButton {{ color:{MUTED}; background:transparent; border:0; padding:8px 0; text-align:left; }}
-QToolButton:hover {{ color:{TEXT}; }}
-QToolButton:focus {{ border:1px solid {ACCENT}; border-radius:6px; }}
-QToolTip {{ background:{RAISED}; color:{TEXT}; border:1px solid {LINE}; padding:7px; }}
-QMessageBox {{ background:{BG}; }}
-QMessageBox QPushButton, QInputDialog QPushButton {{ background:{RAISED}; border:1px solid {LINE}; border-radius:6px; padding:8px 18px; min-width:75px; }}
-QMessageBox QPushButton:hover, QInputDialog QPushButton:hover {{ background:#314438; }}
-QSplitter::handle {{ background:transparent; width:1px; }}
-"""
-
+STYLE = stylesheet(DARK)
 
 def label(text="", name="", wrap=False):
     w = QLabel(text)
@@ -145,7 +93,7 @@ def empty_state(title, description, glyph="check"):
     lay.setSpacing(12)
     lay.addStretch()
     mark = QLabel()
-    mark.setPixmap(icon(glyph, ACCENT, 40).pixmap(40, 40))
+    mark.setPixmap(icon(glyph, current_theme().accent, 40).pixmap(40, 40))
     mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
     mark.setMinimumHeight(48)
     lay.addWidget(mark)
@@ -160,7 +108,9 @@ def empty_state(title, description, glyph="check"):
     return card
 
 
-def icon(name, color=TEXT, size=20):
+def icon(name, color=None, size=20):
+    if color is None:
+        color = current_theme().text
     pm = QPixmap(size * 2, size * 2)
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
@@ -348,11 +298,12 @@ class StatusPill(QLabel):
         if getattr(self, "_status", None) == (text, tone):
             return
         self._status = (text, tone)
+        theme = current_theme()
         colors = {
-            "ready": ("#1b3c31", ACCENT),
-            "paused": ("#3b3021", WARNING),
-            "owner": ("#20384a", "#a8d4ee"),
-            "neutral": (RAISED, MUTED),
+            "ready": (theme.success_bg, theme.accent),
+            "paused": (theme.warning_bg, theme.warning),
+            "owner": (theme.owner_bg, theme.accent),
+            "neutral": (theme.raised, theme.muted),
         }
         background, foreground = colors.get(tone, colors["neutral"])
         self.setText("●  " + text)
@@ -361,6 +312,11 @@ class StatusPill(QLabel):
             f"background:{background};color:{foreground};border:0;border-radius:13px;"
             "padding:5px 11px;font-size:12px;font-weight:600;"
         )
+
+    def refresh_theme(self):
+        text, tone = getattr(self, "_status", ("", "neutral"))
+        self._status = None
+        self.set_status(text, tone)
 
 
 class MotionButton(QPushButton):
@@ -413,6 +369,9 @@ class MotionButton(QPushButton):
         self.anim.setEndValue(v)
         self.anim.start()
 
+    def refresh_theme(self):
+        self.update()
+
     def sizeHint(self):
         return QSize(
             max(
@@ -427,12 +386,13 @@ class MotionButton(QPushButton):
     def paintEvent(self, e):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        theme = current_theme()
         base = QColor(
-            ACCENT
+            theme.accent
             if self.kind == "primary"
-            else ("#213b35" if self._selected else PANEL)
+            else (theme.selected if self._selected else theme.panel)
         )
-        over = QColor("#9ae9cf" if self.kind == "primary" else "#233941")
+        over = QColor(theme.accent if self.kind == "primary" else theme.hover)
         bg = QColor(
             *[
                 round(
@@ -443,21 +403,21 @@ class MotionButton(QPushButton):
             ]
         )
         fg = QColor(
-            "#0c3025"
+            theme.accent_text
             if self.kind == "primary"
-            else (DANGER if self.kind == "danger" else TEXT)
+            else (theme.danger if self.kind == "danger" else theme.text)
         )
         if not self.isEnabled():
-            bg = QColor("#202b32")
-            fg = QColor("#73868e")
+            bg = QColor(theme.disabled_bg)
+            fg = QColor(theme.disabled_text)
         rect = QRectF(self.rect()).adjusted(1, 1, -1, -1)
         p.setBrush(bg)
         p.setPen(
             QPen(
                 QColor(
-                    ACCENT
+                    theme.focus
                     if self.hasFocus()
-                    else (LINE if self.kind != "primary" else ACCENT)
+                    else (theme.line if self.kind != "primary" else theme.accent)
                 ),
                 1,
             )
@@ -517,9 +477,11 @@ class StatusBand(QFrame):
             p = QPainter(self)
             x = (self.width() + 220) * self._progress - 220
             g = QLinearGradient(x, 0, x + 220, 0)
-            g.setColorAt(0, QColor("#0078dfbc"))
-            g.setColorAt(0.5, QColor(ACCENT))
-            g.setColorAt(1, QColor("#0078dfbc"))
+            c = QColor(current_theme().accent)
+            c.setAlpha(0)
+            g.setColorAt(0, c)
+            g.setColorAt(0.5, QColor(current_theme().accent))
+            g.setColorAt(1, c)
             p.fillRect(QRectF(x, self.height() - 2, 220, 2), g)
             p.end()
 

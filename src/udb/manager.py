@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import __version__
+from .activity_presenter import ActivityFeed
 from .core import reject_links
 from .desktop import DesktopController
 from .manager_dialogs import ApprovalDialog, ConnectionDialog, SourceDialog
@@ -78,6 +79,8 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.last_pending = None
         self.last_job_signature = None
         self.connection_signature = None
+        self.activity_feed = ActivityFeed(self.agent.home)
+        self.activity_signature = None
         self._closing = False
         self._last_project_auth_check = 0.0
         self.setWindowTitle("Universal Desktop Bridge · " + __version__)
@@ -435,6 +438,16 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.job_script = QPlainTextEdit()
         self.job_script.setReadOnly(True)
         self.job_tabs.addTab(self.job_script, "Script đã duyệt")
+        self.activity_timeline = self.tree(["Lúc", "Công cụ", "Kết quả"])
+        self.activity_timeline.setAccessibleName(
+            "Lịch sử hoạt động MCP đã lược bỏ dữ liệu nhạy cảm"
+        )
+        self.activity_timeline.setToolTip(
+            "Tối đa 40 bản ghi metadata; không chứa log, script hoặc tài liệu gốc."
+        )
+        self.activity_timeline.setColumnWidth(0, 85)
+        self.activity_timeline.setColumnWidth(1, 210)
+        self.job_tabs.addTab(self.activity_timeline, "Hoạt động MCP")
         lay.addWidget(self.job_tabs, 1)
         self.jobs_empty = empty_state(
             "Chưa có tác vụ",

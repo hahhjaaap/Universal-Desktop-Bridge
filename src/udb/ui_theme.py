@@ -108,7 +108,7 @@ def contrast_ratio(foreground: str, background: str) -> float:
     """WCAG relative luminance ratio, used as a regression check."""
     def lum(hex_color: str) -> float:
         channels = [_linear(int(hex_color[i:i + 2], 16)) for i in (1, 3, 5)]
-        return sum(a * b for a, b in zip(channels, (0.2126, 0.7152, 0.0722)))
+        return sum(a * b for a, b in zip(channels, (0.2126, 0.7152, 0.0722), strict=True))
 
     top, bottom = sorted((lum(foreground), lum(background)), reverse=True)
     return (top + 0.05) / (bottom + 0.05)

@@ -389,9 +389,7 @@ class ManagerRefreshMixin:
         indicator = tunnel_indicator(status)
         self.tunnel_health.set_status(indicator.text, indicator.tone)
         self.tunnel_health.setToolTip(indicator.detail)
-        ready = (
-            status["ready"] is True and status["tunnel_running"] is True
-        )
+        ready = status["ready"] is True and status["tunnel_running"] is True
         self._connection_ready = ready
         alive = status["tunnel_running"]
         wanted = status["tunnel_wanted"]

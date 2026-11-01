@@ -235,6 +235,33 @@ For native Windows pointer preview use
 Passing CI and screenshots does not replace real Windows accessibility or
 security assessment. The published v0.10.0 installer is still the old release.
 
+The **Bảo vệ** page now shows a read-only indicator of optional full Windows
+computer access. If enabled, it warns that this privilege is **unsandboxed**
+and can reach files protected only against project-scoped tools. The GUI
+cannot enable or revoke this grant; use the attended local terminal
+(`udb revoke-access` to revoke).
+For the complete user-facing behavior and security limitations, read
+[Desktop GUI guide](docs/gui-user-guide.md) and the
+[enterprise UI/security roadmap](docs/gui-enterprise-roadmap.md).
+
+Developer-only disposable visual review:
+
+```powershell
+python -m ruff check src tools tests
+python -m ruff format --check .
+python -m pytest tests/test_ui_theme.py tests/test_manager_ui.py tests/test_quick_controls.py
+python -c "from udb.manager import self_test; self_test('ui-previews')"
+```
+
+The GUI self-test captures six existing pages under light/dark palettes and
+does not approve any file mutations. For headless Linux install
+`PySide6-Essentials==6.10.2` and set `QT_QPA_PLATFORM=offscreen`.
+For native Windows pointer preview use
+`python tools/check_windows_workflows.py --pointer-preview PATH.png`.
+Passing CI and screenshots does not replace real Windows accessibility or
+security assessment. The published v0.10.0 installer is still the old release.
+
+
 ## Build from source (developers)
 
 Python **3.11+** is required for development. Windows is required for native desktop/GUI and frozen EXE acceptance; Linux supports source, protocol and policy tests.

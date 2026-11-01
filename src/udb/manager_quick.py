@@ -20,8 +20,6 @@ from PySide6.QtWidgets import (
 from .activity_presenter import ActivityFeed, describe, event_state, summary
 from .manager_widgets import (
     ACCENT,
-    TEXT,
-    WARNING,
     MotionButton,
     StatusPill,
     Worker,
@@ -30,6 +28,7 @@ from .manager_widgets import (
     panel,
     row,
 )
+from .ui_theme import current_theme
 
 
 class QuickControls(QDialog):
@@ -263,8 +262,9 @@ class QuickControls(QDialog):
             )
             tone = "paused"
         self.activity_title.setText(title)
+        theme = current_theme()
         self.activity_title.setStyleSheet(
-            "color:" + (WARNING if tone == "paused" else TEXT)
+            "color:" + (theme.warning if tone == "paused" else theme.text)
         )
         self.activity_detail.setText(detail)
         signature = tuple((x["seq"], x.get("status")) for x in self.events)
@@ -286,6 +286,11 @@ class QuickControls(QDialog):
                 + "</qt>",
             )
             self.history.addTopLevelItem(item)
+
+    def refresh_theme(self):
+        # The activity signature may be unchanged, but colors are not.
+        self._history_signature = None
+        self.render_activity()
 
     def request_quit(self):
         self.owner._quit_requested = True

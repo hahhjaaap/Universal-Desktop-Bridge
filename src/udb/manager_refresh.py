@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QTreeWidgetItem
 
 from .manager_job_refresh import should_reload_job_details
 from .manager_widgets import icon
+from .ui_jobs import job_metadata, visible_jobs
 from .ui_connection import tunnel_indicator, unknown_indicator, worker_indicator
 from .ui_theme import current_theme
 
@@ -361,6 +362,13 @@ class ManagerRefreshMixin:
                 dict(r)
                 for r in c.execute("SELECT * FROM jobs ORDER BY rowid DESC LIMIT 30")
             ]
+        all_jobs = jobs
+        jobs = visible_jobs(
+            all_jobs, self.job_search.text(), self.job_group_filter.currentText()
+        )
+        self.job_filter_feedback.setText(
+            f"Hiển thị {len(jobs)}/{len(all_jobs)} công việc"
+        )
         protected_signature = tuple(protected)
         if protected_signature != getattr(self, "_protected_signature", None):
             self._protected_signature = protected_signature
@@ -376,7 +384,7 @@ class ManagerRefreshMixin:
             with QSignalBlocker(self.jobs):
                 self.jobs.clear()
                 for j in jobs:
-                    info = json.loads(j["info"])
+                    info = job_metadata(j)
                     status_text = {
                         "running": "Đang chạy",
                         "reviewing": "Đã xong · đang xem",
@@ -407,6 +415,9 @@ class ManagerRefreshMixin:
         self.jobs.setVisible(bool(jobs))
         self.job_tabs.setVisible(bool(jobs))
         self.jobs_empty.setVisible(not jobs)
+        if not jobs:
+            self.job_output.clear()
+            self.job_script.clear()
         selected = self.jobs.selectedItems()
         if selected:
             selected_id = selected[0].data(0, Qt.ItemDataRole.UserRole)

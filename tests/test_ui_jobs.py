@@ -9,9 +9,7 @@ def _job(job_id, status, project, language, script="TOP SECRET"):
     return dict(
         id=job_id,
         status=status,
-        info=json.dumps(
-            {"project": project, "language": language, "script": script}
-        ),
+        info=json.dumps({"project": project, "language": language, "script": script}),
     )
 
 
@@ -29,12 +27,8 @@ def test_metadata_filters_ignore_private_scripts():
         _job("job-2", "failed", "Beta", "PowerShell"),
         _job("job-3", "completed", "Gamma", "Python"),
     ]
-    assert [r["id"] for r in visible_jobs(rows, "alpha", "Tất cả")] == [
-        "job-1"
-    ]
-    assert [r["id"] for r in visible_jobs(rows, "job-2", "Cần chú ý")] == [
-        "job-2"
-    ]
+    assert [r["id"] for r in visible_jobs(rows, "alpha", "Tất cả")] == ["job-1"]
+    assert [r["id"] for r in visible_jobs(rows, "job-2", "Cần chú ý")] == ["job-2"]
     assert visible_jobs(rows, "TOP SECRET", "Tất cả") == []
     assert len(visible_jobs(rows, "", "Tất cả")) == 3
     assert len(visible_jobs(rows, "", "bogus")) == 3
@@ -43,4 +37,6 @@ def test_metadata_filters_ignore_private_scripts():
 def test_broken_job_metadata_is_safe():
     assert job_metadata({"info": "{"}) == {}
     assert job_metadata({"info": "[]"}) == {}
-    assert visible_jobs([{"id": "abc", "status": "failed", "info": "{"}], "", "Cần chú ý")
+    assert visible_jobs(
+        [{"id": "abc", "status": "failed", "info": "{"}], "", "Cần chú ý"
+    )

@@ -37,6 +37,12 @@ Choose:
 | **Sáng** | Always use UDB's light palette |
 | **Tối** | Always use UDB's dark palette |
 
+In the same **Giao diện ứng dụng** section, **Giảm chuyển động trong giao
+diện** disables nonessential hover/transitional animations. Changes take
+effect immediately and persist in the existing bounded `gui.json`
+`motion` preference. Saving failure restores the previous choice; this
+setting never grants AI access.
+
 The selection is applied immediately to the running Qt application and saved
 as an allow-listed `theme` preference in the owner's bounded `gui.json`
 settings. The key is one of `system`, `light`, `dark`; invalid values

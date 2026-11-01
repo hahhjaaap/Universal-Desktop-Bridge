@@ -710,3 +710,40 @@ def test_onboarding_fail_closed_if_host_or_tunnel_status_unreadable(
     assert window.setup_chatgpt_health._status == ("Chưa xác minh", "neutral")
     assert window.desktop_pause_button.isEnabled()
     assert not (window.agent.state / "computer-access.dpapi").exists()
+
+
+def test_reduced_motion_is_persistent_and_does_not_change_ai_permissions(manager):
+    from PySide6.QtWidgets import QApplication
+
+    window, _ = manager
+    app = QApplication.instance()
+    before = window.agent.projects()
+    assert not window.reduce_motion.isChecked()
+    window.reduce_motion.setChecked(True)
+    assert app.property("motion") is False
+    assert window.controller.settings()["motion"] is False
+    assert window.agent.projects() == before
+    assert window.desktop_pause_button.isEnabled()
+    window.reduce_motion.setChecked(False)
+    assert app.property("motion") is True
+    assert window.controller.settings()["motion"] is True
+    assert not (window.agent.state / "computer-access.dpapi").exists()
+
+
+def test_reduced_motion_save_error_restores_previous_state(manager, monkeypatch):
+    from PySide6.QtWidgets import QApplication, QMessageBox
+
+    window, _ = manager
+    app = QApplication.instance()
+    previous = app.property("motion")
+    warnings = []
+    monkeypatch.setattr(
+        window.controller, "save_settings", lambda *_: (_ for _ in ()).throw(OSError())
+    )
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args: warnings.append(args[2]))
+    window.reduce_motion.setChecked(True)
+    assert not window.reduce_motion.isChecked()
+    assert app.property("motion") == previous
+    assert len(warnings) == 1
+    assert "trước đó" in warnings[0]
+    assert not (window.agent.state / "computer-access.dpapi").exists()

@@ -720,6 +720,16 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.theme_picker.setCurrentIndex(self.theme_picker.findData(choice))
         self.theme_picker.currentIndexChanged.connect(self.change_theme)
         al.addWidget(self.theme_picker)
+        self.reduce_motion = QCheckBox("Giảm chuyển động trong giao diện")
+        self.reduce_motion.setAccessibleName("Giảm chuyển động giao diện UDB")
+        self.reduce_motion.setToolTip(
+            "Tắt hiệu ứng hover và chuyển cảnh không thiết yếu; không đổi quyền AI."
+        )
+        self.reduce_motion.setChecked(
+            self.controller.settings().get("motion", True) is False
+        )
+        self.reduce_motion.toggled.connect(self.change_motion)
+        al.addWidget(self.reduce_motion)
         lay.addWidget(appearance)
         lay.addStretch()
         return p
@@ -753,6 +763,33 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         apply_theme(QApplication.instance(), choice)
         self._update_window_chrome()
         self.refresh()
+
+    def change_motion(self, reduce_motion):
+        settings = self.controller.settings()
+        previous_motion = settings.get("motion", True) is not False
+        desired_motion = not bool(reduce_motion)
+        if desired_motion == previous_motion:
+            QApplication.instance().setProperty("motion", desired_motion)
+            return
+        try:
+            self.controller.save_settings(
+                {
+                    "motion": desired_motion,
+                    "autoconnect": settings.get("autoconnect", False),
+                    "theme": normalize_preference(settings.get("theme")),
+                }
+            )
+        except Exception:
+            self.reduce_motion.blockSignals(True)
+            self.reduce_motion.setChecked(not previous_motion)
+            self.reduce_motion.blockSignals(False)
+            QMessageBox.warning(
+                self,
+                "Không lưu được chuyển động",
+                "Cài đặt chuyển động trước đó được giữ nguyên.",
+            )
+            return
+        QApplication.instance().setProperty("motion", desired_motion)
 
     def toggle_sidebar(self):
         self._sidebar_compact = not self._sidebar_compact

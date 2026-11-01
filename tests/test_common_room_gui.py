@@ -73,7 +73,8 @@ def test_task_revision_refuses_stale_writes(tmp_path):
         stamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
         db.execute(
             "INSERT INTO tasks(request_id,topic,title,state,revision,created_at,updated_at) "
-            "VALUES('req','general','work','todo',1,?,?)", (stamp, stamp)
+            "VALUES('req','general','work','todo',1,?,?)",
+            (stamp, stamp),
         )
     dialog = CommonRoomDialog(root)
     item = dialog.tasks.topLevelItem(0)

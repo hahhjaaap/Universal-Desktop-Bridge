@@ -45,7 +45,11 @@ def database_for_project(root: str | Path) -> Path:
     reject_links(project)
     if not project.is_dir() or project.resolve() != project:
         raise ValueError("Thư mục dự án đã thay đổi.")
-    room = project if project.name == "chatgpt-workspace" else project / "chatgpt-workspace"
+    room = (
+        project
+        if project.name == "chatgpt-workspace"
+        else project / "chatgpt-workspace"
+    )
     path = room / "workspace.sqlite3"
     reject_links(room)
     reject_links(path)
@@ -66,7 +70,9 @@ def open_room(path: Path):
     connection.execute("PRAGMA foreign_keys=ON")
     if connection.execute("PRAGMA user_version").fetchone()[0] < 3:
         connection.close()
-        raise ValueError("Common Room chưa có schema v3; hãy mở Workspace v2 để nâng cấp.")
+        raise ValueError(
+            "Common Room chưa có schema v3; hãy mở Workspace v2 để nâng cấp."
+        )
     return connection
 
 
@@ -181,10 +187,12 @@ class CommonRoomDialog(QDialog):
         actions.addWidget(self.state)
         actions.addWidget(update)
         area.addLayout(actions)
-        area.addWidget(QLabel(
-            "Cập nhật có kiểm tra revision để tránh ghi đè việc chat khác vừa thay đổi. "
-            "Trạng thái 'done' không chứng minh tác vụ đã được kiểm tra."
-        ))
+        area.addWidget(
+            QLabel(
+                "Cập nhật có kiểm tra revision để tránh ghi đè việc chat khác vừa thay đổi. "
+                "Trạng thái 'done' không chứng minh tác vụ đã được kiểm tra."
+            )
+        )
 
     def _build_browser(self):
         area = self._page("Browser")
@@ -195,10 +203,12 @@ class CommonRoomDialog(QDialog):
         self.browser_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.browser_image.setMinimumHeight(300)
         area.addWidget(self.browser_image, 1)
-        area.addWidget(QLabel(
-            "Chỉ xem cache của Common Room; không khởi động browser hoặc "
-            "sử dụng hồ sơ Chrome cá nhân."
-        ))
+        area.addWidget(
+            QLabel(
+                "Chỉ xem cache của Common Room; không khởi động browser hoặc "
+                "sử dụng hồ sơ Chrome cá nhân."
+            )
+        )
 
     def action(self, callback):
         try:
@@ -209,7 +219,8 @@ class CommonRoomDialog(QDialog):
     def reload(self):
         with open_room(self.room_path) as db:
             topics = [
-                r["name"] for r in db.execute("SELECT name FROM topics ORDER BY name LIMIT 200")
+                r["name"]
+                for r in db.execute("SELECT name FROM topics ORDER BY name LIMIT 200")
             ]
         selected = self.topic.currentText()
         self.topic.blockSignals(True)
@@ -228,27 +239,34 @@ class CommonRoomDialog(QDialog):
                 term = self.search.text().casefold()
                 rows = db.execute(
                     "SELECT id, author, kind, body, created_at FROM messages "
-                    "WHERE topic=? ORDER BY id DESC LIMIT 200", (current,)
+                    "WHERE topic=? ORDER BY id DESC LIMIT 200",
+                    (current,),
                 ).fetchall()
                 tasks = db.execute(
                     "SELECT id,title,assignee,state,revision FROM tasks "
-                    "WHERE topic=? ORDER BY id DESC LIMIT 200", (current,)
+                    "WHERE topic=? ORDER BY id DESC LIMIT 200",
+                    (current,),
                 ).fetchall()
             self.messages.clear()
             for row in reversed(rows):
                 if term and term not in (row["body"] + " " + row["author"]).casefold():
                     continue
-                item = QTreeWidgetItem([
-                    str(row["id"]), row["author"], row["kind"], row["body"][:180]
-                ])
+                item = QTreeWidgetItem(
+                    [str(row["id"]), row["author"], row["kind"], row["body"][:180]]
+                )
                 item.setData(0, Qt.ItemDataRole.UserRole, row["body"])
                 self.messages.addTopLevelItem(item)
             self.tasks.clear()
             for item in tasks:
-                entry = QTreeWidgetItem([
-                    str(item["id"]), item["title"], item["assignee"] or "Chưa giao",
-                    item["state"], str(item["revision"])
-                ])
+                entry = QTreeWidgetItem(
+                    [
+                        str(item["id"]),
+                        item["title"],
+                        item["assignee"] or "Chưa giao",
+                        item["state"],
+                        str(item["revision"]),
+                    ]
+                )
                 self.tasks.addTopLevelItem(entry)
             self.load_browser()
         except (OSError, ValueError, sqlite3.Error) as exc:
@@ -266,8 +284,13 @@ class CommonRoomDialog(QDialog):
             db.execute(
                 "INSERT INTO participants(name,role,last_seen) VALUES(?,?,?) "
                 "ON CONFLICT(name) DO UPDATE SET last_seen=excluded.last_seen",
-                (member, "Người dùng UDB GUI",
-                 datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")),
+                (
+                    member,
+                    "Người dùng UDB GUI",
+                    datetime.datetime.now(datetime.timezone.utc).isoformat(
+                        timespec="seconds"
+                    ),
+                ),
             )
         self.reload()
 
@@ -283,8 +306,16 @@ class CommonRoomDialog(QDialog):
             db.execute(
                 "INSERT INTO messages(request_id,topic,author,kind,body,reply_to,created_at) "
                 "VALUES(?,?,?,?,?,NULL,?)",
-                (str(uuid.uuid4()), topic, author, self.kind.currentText(), body,
-                 datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")),
+                (
+                    str(uuid.uuid4()),
+                    topic,
+                    author,
+                    self.kind.currentText(),
+                    body,
+                    datetime.datetime.now(datetime.timezone.utc).isoformat(
+                        timespec="seconds"
+                    ),
+                ),
             )
         self.composer.clear()
         self.reload()
@@ -298,9 +329,17 @@ class CommonRoomDialog(QDialog):
             db.execute(
                 "INSERT INTO tasks(request_id,topic,title,assignee,initial_assignee,"
                 "state,revision,created_at,updated_at) VALUES(?,?,?,NULL,NULL,'todo',1,?,?)",
-                (str(uuid.uuid4()), self.topic.currentText(),
-                 title, datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-                 datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")),
+                (
+                    str(uuid.uuid4()),
+                    self.topic.currentText(),
+                    title,
+                    datetime.datetime.now(datetime.timezone.utc).isoformat(
+                        timespec="seconds"
+                    ),
+                    datetime.datetime.now(datetime.timezone.utc).isoformat(
+                        timespec="seconds"
+                    ),
+                ),
             )
         self.reload()
 
@@ -323,8 +362,14 @@ class CommonRoomDialog(QDialog):
                 db.execute(
                     "UPDATE tasks SET state=?,revision=revision+1,updated_at=? "
                     "WHERE id=? AND revision=?",
-                    (new_state, datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-                     task_id, revision),
+                    (
+                        new_state,
+                        datetime.datetime.now(datetime.timezone.utc).isoformat(
+                            timespec="seconds"
+                        ),
+                        task_id,
+                        revision,
+                    ),
                 )
         self.reload()
 
@@ -356,12 +401,20 @@ class CommonRoomDialog(QDialog):
                 + f" · ảnh cách đây {age:.0f}s"
             )
             pixmap = QPixmap()
-            if not pixmap.loadFromData(raw, "JPG") or pixmap.width() > 4096 or pixmap.height() > 4096:
+            if (
+                not pixmap.loadFromData(raw, "JPG")
+                or pixmap.width() > 4096
+                or pixmap.height() > 4096
+            ):
                 raise ValueError("Ảnh cache không hợp lệ")
-            self.browser_image.setPixmap(pixmap.scaled(
-                720, 420, Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation
-            ))
+            self.browser_image.setPixmap(
+                pixmap.scaled(
+                    720,
+                    420,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
         except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             self.browser_status.setText("Không có cache browser hợp lệ: " + str(exc))
             self.browser_image.clear()

@@ -147,7 +147,15 @@ def main():
             first = json.loads(record_path.read_text(encoding="utf-8"))
             exe = Path(first["exe"])
             assert exe.is_file() and first["home"] == str(home)
-            link = root / "test roaming profile" / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Universal Desktop Bridge.lnk"
+            link = (
+                root
+                / "test roaming profile"
+                / "Microsoft"
+                / "Windows"
+                / "Start Menu"
+                / "Programs"
+                / "Universal Desktop Bridge.lnk"
+            )
             assert link.is_file(), "Installer did not register the Start Menu shortcut"
 
             def shortcut_target():
@@ -157,8 +165,18 @@ def main():
                     + "); [Console]::WriteLine($s.TargetPath)"
                 )
                 result = subprocess.run(
-                    [str(powershell), "-NoProfile", "-NonInteractive", "-Command", command],
-                    capture_output=True, text=True, env=env, timeout=30, check=True
+                    [
+                        str(powershell),
+                        "-NoProfile",
+                        "-NonInteractive",
+                        "-Command",
+                        command,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                    timeout=30,
+                    check=True,
                 )
                 return result.stdout.strip()
 

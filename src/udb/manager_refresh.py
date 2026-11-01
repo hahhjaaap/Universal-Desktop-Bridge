@@ -55,17 +55,11 @@ class ManagerRefreshMixin:
                     indicator = unknown_indicator()
                     self.local_health.set_status(indicator.text, indicator.tone)
                     self.local_health.setToolTip(indicator.detail)
-                    self.security_pause_status.set_status(
-                        "Chưa xác minh", "neutral"
-                    )
+                    self.security_pause_status.set_status("Chưa xác minh", "neutral")
                 elif name == "Dự án":
-                    self.security_autonomy_status.set_status(
-                        "Chưa xác minh", "neutral"
-                    )
+                    self.security_autonomy_status.set_status("Chưa xác minh", "neutral")
                 elif name == "Quyền AI":
-                    self.security_approval_status.set_status(
-                        "Chưa xác minh", "neutral"
-                    )
+                    self.security_approval_status.set_status("Chưa xác minh", "neutral")
         try:
             self._refresh_connection(source_auto_projects)
         except Exception as exc:

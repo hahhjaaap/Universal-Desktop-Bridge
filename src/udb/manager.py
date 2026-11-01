@@ -531,6 +531,10 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self._sidebar_compact = not self._sidebar_compact
         compact = self._sidebar_compact
         self.sidebar.setFixedWidth(72 if compact else 200)
+        self.sidebar_nav.setSpacing(6 if compact else 9)
+        self.sidebar_toggle.setMaximumWidth(56 if compact else 10000)
+        for button in self.nav_buttons:
+            button.setMaximumWidth(56 if compact else 10000)
         self.sidebar_nav.setContentsMargins(
             8 if compact else 16, 20 if compact else 26,
             8 if compact else 16, 18 if compact else 20

@@ -80,6 +80,9 @@ checks; never route an unavailable remote command to the local machine.
   pause and background-session controls.
 - `udb.manager_dialogs`: local source browser, connection settings, and
   owner-only approval dialogs; no remote approval API.
+- `udb.ui_connection`: pure fail-closed read-only Agent/Tunnel/ChatGPT health
+  viewmodels. Only explicit local and tunnel signals can be marked ready;
+  the GUI cannot assert ChatGPT tool discovery without a real invocation.
 - `udb.manager_refresh`: status polling, project list refresh, real
   permission count updates and accessibility text for compact navigation.
 - `udb.manager_widgets`: reusable Qt components, theme-aware custom-painted

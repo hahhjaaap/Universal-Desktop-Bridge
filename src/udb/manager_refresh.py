@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QTreeWidgetItem
 
 from .manager_job_refresh import should_reload_job_details
 from .manager_widgets import icon
+from .ui_connection import tunnel_indicator, unknown_indicator, worker_indicator
 from .ui_theme import current_theme
 
 
@@ -31,10 +32,28 @@ class ManagerRefreshMixin:
                     source_auto_projects = result
             except Exception as exc:
                 errors.append(name + ": " + str(exc))
+                if name == "Máy tính":
+                    indicator = unknown_indicator()
+                    self.local_health.set_status(indicator.text, indicator.tone)
+                    self.local_health.setToolTip(indicator.detail)
         try:
             self._refresh_connection(source_auto_projects)
         except Exception as exc:
             errors.append("Kết nối: " + str(exc))
+            indicator = unknown_indicator()
+            self.tunnel_health.set_status(indicator.text, indicator.tone)
+            self.tunnel_health.setToolTip(indicator.detail)
+            self._connection_ready = False
+            self.status_label.setText("●  Không đọc được tunnel")
+            theme = current_theme()
+            self.status_label.setStyleSheet(
+                f"color:{theme.muted}; background:{theme.raised};"
+                " border-radius:9px; padding:4px 10px;"
+            )
+            self.connect_button.setEnabled(False)
+            self.connection_hint.setText(
+                "Chưa xác minh kết nối mới; thử kiểm tra lại từ ChatGPT."
+            )
         if errors:
             self.footer_status.setText(
                 "Không tải được trạng thái · " + " · ".join(errors)
@@ -220,6 +239,9 @@ class ManagerRefreshMixin:
                 self.host_sessions.addTopLevelItem(item)
         self.host_sessions.setVisible(bool(sessions))
         self.host_sessions_empty.setVisible(not sessions)
+        indicator = worker_indicator(hs.get("worker_ready"))
+        self.local_health.set_status(indicator.text, indicator.tone)
+        self.local_health.setToolTip(indicator.detail)
 
     def _refresh_requests(self):
         self.media_auto.blockSignals(True)
@@ -364,7 +386,10 @@ class ManagerRefreshMixin:
 
     def _refresh_connection(self, source_auto_projects):
         status = self.controller.status()
-        ready = status["ready"]
+        indicator = tunnel_indicator(status)
+        self.tunnel_health.set_status(indicator.text, indicator.tone)
+        self.tunnel_health.setToolTip(indicator.detail)
+        ready = status["ready"] is True and status["tunnel_running"] is True
         self._connection_ready = ready
         alive = status["tunnel_running"]
         wanted = status["tunnel_wanted"]
@@ -396,9 +421,9 @@ class ManagerRefreshMixin:
             "Tắt MCP cục bộ" if status["local_running"] else "Bật MCP cục bộ"
         )
         self.connection_hint.setText(
-            "Tunnel hoạt động; hãy kiểm tra ChatGPT có thấy và gọi được công cụ UDB."
+            "Tunnel sẵn sàng trên máy này; ChatGPT chưa được xác minh."
             if ready
-            else "Private MCP tunnel · không mở cổng công khai"
+            else "Tunnel là bước cục bộ; ChatGPT cần kiểm tra công cụ riêng."
         )
         self.detail_status.setText(
             "Tunnel: "

@@ -49,6 +49,7 @@ from .manager_widgets import (
     DiffHighlighter,
     MotionButton,
     StatusBand,
+    StatusPill,
     Worker,
     empty_state,
     icon,
@@ -217,22 +218,56 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         top.addWidget(self.status_label)
         lay.insertLayout(0, top)
         self.band = StatusBand()
-        band = QHBoxLayout(self.band)
-        band.setContentsMargins(22, 20, 22, 20)
+        band = QVBoxLayout(self.band)
+        band.setContentsMargins(22, 15, 22, 15)
+        band.setSpacing(10)
+        heading = QHBoxLayout()
         info = QVBoxLayout()
-        info.setSpacing(6)
-        info.addWidget(label("Kết nối với ChatGPT Chat", "H2"))
+        info.setSpacing(4)
+        info.addWidget(label("Trạng thái kết nối UDB", "H2"))
         self.connection_hint = label(
-            "Private MCP tunnel · không mở cổng công khai", "Muted", True
+            "Tunnel và ChatGPT là hai bước xác minh riêng biệt.",
+            "Muted",
+            True,
         )
         info.addWidget(self.connection_hint)
-        band.addLayout(info, 1)
+        heading.addLayout(info, 1)
         self.configure_button = MotionButton("Cấu hình", "settings")
         self.configure_button.clicked.connect(self.configure)
-        band.addWidget(self.configure_button)
+        heading.addWidget(self.configure_button)
         self.connect_button = MotionButton("Kết nối", "power", "primary")
         self.connect_button.clicked.connect(self.toggle_tunnel)
-        band.addWidget(self.connect_button)
+        heading.addWidget(self.connect_button)
+        band.addLayout(heading)
+        health = QHBoxLayout()
+        health.setSpacing(8)
+        self.local_health = StatusPill("Chưa kiểm tra", "neutral")
+        self.tunnel_health = StatusPill("Chưa kiểm tra", "neutral")
+        self.chatgpt_health = StatusPill("Chưa xác minh", "neutral")
+        for title, pill, description in (
+            (
+                "Agent",
+                self.local_health,
+                "Trạng thái tác nhân UDB trên máy tính này.",
+            ),
+            (
+                "Tunnel",
+                self.tunnel_health,
+                "Tình trạng đường truyền MCP trên máy tính này.",
+            ),
+            (
+                "ChatGPT",
+                self.chatgpt_health,
+                "Không thể xác minh công cụ ChatGPT từ trạng thái tunnel.",
+            ),
+        ):
+            title_label = label(title, "Fine")
+            health.addWidget(title_label)
+            pill.setAccessibleDescription(description)
+            pill.setToolTip(description)
+            health.addWidget(pill)
+        health.addStretch()
+        band.addLayout(health)
         lay.addWidget(self.band)
         split = QSplitter()
         split.setChildrenCollapsible(False)

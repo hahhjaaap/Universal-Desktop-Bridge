@@ -206,8 +206,13 @@ changes computer permissions, credentials or MCP access. The desktop shell
 uses shared Qt theme tokens and visible keyboard focus states, but it has not
 yet completed all enterprise GUI / accessibility milestones.
 
-The **Tunnel đã kết nối** indicator means the local tunnel is ready, **not**
-that ChatGPT has verified MCP tool discovery and invocation. The emergency
+The Overview status strip separately reports the local **Agent**, **Tunnel**
+and **ChatGPT** verification levels. ChatGPT remains **Chưa xác minh**
+(unverified) until independently tested from the ChatGPT conversation. A
+failed local/tunnel status read becomes **Chưa xác định** rather than
+retaining a stale green indicator. The **Tunnel đã kết nối** indicator
+means the local tunnel is ready, **not** that ChatGPT has verified MCP
+tool discovery and invocation. The emergency
 Windows pause controls stay distinct from background browser and job lifecycle.
 For the complete user-facing behavior and security limitations, read
 [Desktop GUI guide](docs/gui-user-guide.md) and the

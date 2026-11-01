@@ -50,6 +50,8 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix="udb-installer-") as folder:
         root = Path(folder).resolve()
+        # Keep the Start Menu link in this fixture, not the runner's real profile.
+        env["APPDATA"] = str(root / "test roaming profile")
         # The Windows PowerShell launcher may inherit a PowerShell 7 module path.
         env["PSModulePath"] = str(root / "no extra PowerShell modules")
         feed = root / "feed"
@@ -145,6 +147,22 @@ def main():
             first = json.loads(record_path.read_text(encoding="utf-8"))
             exe = Path(first["exe"])
             assert exe.is_file() and first["home"] == str(home)
+            link = root / "test roaming profile" / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Universal Desktop Bridge.lnk"
+            assert link.is_file(), "Installer did not register the Start Menu shortcut"
+
+            def shortcut_target():
+                command = (
+                    "$s=(New-Object -ComObject WScript.Shell).CreateShortcut("
+                    + json.dumps(str(link))
+                    + "); [Console]::WriteLine($s.TargetPath)"
+                )
+                result = subprocess.run(
+                    [str(powershell), "-NoProfile", "-NonInteractive", "-Command", command],
+                    capture_output=True, text=True, env=env, timeout=30, check=True
+                )
+                return result.stdout.strip()
+
+            assert shortcut_target().lower() == str(exe).lower()
             assert sentinel.read_text() == "existing owner data"
             assert not (home / "state/computer-access.dpapi").exists()
             assert not (home / "state/connection.json").exists()
@@ -206,6 +224,7 @@ def main():
             run_install()
             second = json.loads(record_path.read_text(encoding="utf-8"))
             assert second["exe"] != first["exe"] and second["previous"] == first
+            assert shortcut_target().lower() == str(second["exe"]).lower()
             switched = app("status", "--json", image=second["exe"])
             assert (
                 switched["manager_running"] and switched["connection_mode"] == "offline"
@@ -218,6 +237,7 @@ def main():
             assert rollback["home_preserved"]
             restored = json.loads(record_path.read_text(encoding="utf-8"))
             assert restored["exe"] == first["exe"]
+            assert shortcut_target().lower() == str(first["exe"]).lower()
             assert app("status", "--json")["manager_running"]
             assert preference.read_bytes() == before_mode
 

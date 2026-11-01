@@ -60,6 +60,12 @@ filters clears hidden stale task details; no job state changes.
 The separate **Hoạt động MCP** tab shows a bounded read-only timeline of
 sanitized tool names, status and timestamps. It never displays request
 payloads, raw scripts or file bodies and cannot be used to re-run commands.
+The local **Xuất metadata đã ẩn thông tin nhạy cảm** action confirms intent,
+then saves a **new** JSON file (never overwriting an existing file) with
+only timestamps, tool labels and states. Inspect the destination before sharing
+it because even sanitized metadata can reveal which tools were used.
+A persistent header displays the current page and a **Tunnel-only** status;
+it does not authenticate a ChatGPT tool call.
 
 Keyboard shortcuts in the full manager: `Ctrl+1` through `Ctrl+6`
 navigate the six pages; `Ctrl+Shift+F` opens and focuses task search.

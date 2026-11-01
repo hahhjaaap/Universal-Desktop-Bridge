@@ -1,0 +1,139 @@
+# UDB desktop GUI — appearance, navigation and security
+
+Applies to the **source GUI on `main` after PRs #42 and #44**. The last
+published stable Windows installer may still use an earlier interface: check
+[`Releases`](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases).
+This guide documents implemented behavior, not a promise of a full enterprise
+redesign.
+
+## Start the interface
+
+On the owner-controlled Windows computer:
+
+```powershell
+udb --version
+udb doctor
+udb gui
+```
+
+`udb gui` opens compact controls if the system tray is available; otherwise it
+opens the full Qt manager. In compact mode, select **Mở UDB đầy đủ** to open the
+six-page manager. A separate `udb start` windowless process is not silently
+replaced; stop it explicitly before switching to the GUI, understanding that
+stopping closes owned sessions.
+
+**The desktop UI is local.** It is not a remote web control panel. Opening the
+GUI, switching a theme or collapsing the navigation never grants the AI
+additional access.
+
+## Appearance: light, dark and Windows
+
+In the full manager, open **Kết nối** and look for **Giao diện ứng dụng**.
+Choose:
+
+| Preference | Behavior |
+| --- | --- |
+| **Theo hệ thống Windows** | Choose light/dark from the Qt/Windows system color scheme when the GUI starts or when the appearance selection is applied |
+| **Sáng** | Always use UDB's light palette |
+| **Tối** | Always use UDB's dark palette |
+
+The selection is applied immediately to the running Qt application and saved
+as an allow-listed `theme` preference in the owner's bounded `gui.json`
+settings. The key is one of `system`, `light`, `dark`; invalid values
+fall back to `system` rather than entering a Qt stylesheet. Existing
+`motion` and `autoconnect` preferences remain. No credentials are stored
+in `gui.json`.
+
+**Limitation:** The app does not yet subscribe to every live Windows theme
+change while it remains open. For the `system` option, reopen the app or
+reselect the option after changing Windows' appearance if the UI does not
+refresh automatically. System high-contrast mode and 200% DPI still need
+separate real-device review.
+
+## Navigation and quick controls
+
+The manager retains its six pages: **Dự án**, **Quyền AI**,
+**Tiến trình**, **Bảo vệ**, **Kết nối**, **Máy tính**.
+
+The sidebar's **Thu gọn menu** control switches between 200 px and 72 px.
+Collapsed routes retain their tooltips and accessible names, and any
+permission-request count is available through accessibility metadata. Expand
+using **Mở rộng thanh điều hướng**. The collapse state lasts only for the
+current window; it is not persisted across restarts.
+
+Quick Controls retain connection, Windows input pause/resume, browser login
+handoff, background-session closure and recent metadata-only tool activity.
+Close/minimize-to-tray, **Đóng phiên nền** and **Thoát UDB** remain distinct
+actions: none should be described as stopping all unrelated jobs.
+
+The emergency local Windows pause is independent of the appearance controls.
+The pause latch protects real desktop input, but **does not automatically stop
+all background browser/terminal/Sandbox operations**. Use the appropriate
+session/job controls when necessary.
+
+## Connection status is not authorization
+
+- **Local agent:** the worker is reachable on this PC.
+- **Tunnel ready:** this PC's outbound tunnel is ready; this does *not* prove a
+  ChatGPT workspace can discover and call UDB tools.
+- **ChatGPT invocation:** confirm in ChatGPT with a *read-only* status tool.
+- **Permission grant:** separately authorized by the owner on the Windows
+  machine; not inferred from any connected indicator.
+
+The current source does **not** implement production one-plugin Multi-PC
+selection. Do not infer another PC from a green connection label; distinguish
+separate MCP connections and tunnel IDs. See
+[remote-device troubleshooting](remote-device-troubleshooting.md).
+
+## Security boundaries
+
+The GUI renders status and locally requests already-supported owner actions.
+It is **not** a new security boundary and must not be trusted to enforce policy
+without backend checks. In particular:
+
+- Owner-only approvals remain local, request-bound, expiring and checked in the
+  core policy engine. GUI appearance changes do not auto-approve requests.
+- Project-scoped file access, Windows Sandbox and broad unsandboxed
+  `udb --access computer` permissions are *not interchangeable*. A broad
+  computer grant can access data available to that Windows user account; it
+  is not a sandbox.
+- Treat webpage text, document contents, log messages and scripts as untrusted.
+  Never paste runtime keys into chat, source files or issue reports.
+- A timed-out file change or UI action can have an **unknown outcome**.
+  Inspect the state before trying again. Never automatically replay mutations.
+- Published ZIP/installer signing is a separate release-supply-chain concern;
+  the earlier v0.10.0 standalone ZIP was not code-signed.
+
+## Quality assurance for developers
+
+Use a disposable project and **do not** grant real computer access for GUI
+preview generation.
+
+```powershell
+python -m pip install -e ".[office,dev]"
+python -m ruff check src tools tests
+python -m ruff format --check .
+python -m pytest tests/test_ui_theme.py tests/test_manager_ui.py tests/test_quick_controls.py
+python -c "from udb.manager import self_test; self_test('ui-previews')"
+```
+
+The Qt self-test captures the existing six full-manager pages in light/dark,
+and separately exercises compact controls and approval dialogs with synthetic
+data. Approval screenshots do **not** authorize writes. The Windows CI additionally
+tests native controls, EXE packaging and managed rollback.
+
+**Limitations:** Screenshot generation and CI passes do not prove that font
+scaling, screen readers, title-bar colors or animation behave correctly on
+every real Windows hardware configuration. Complete an attended Windows visual,
+keyboard and accessibility pass before claiming commercial-grade UX.
+
+## Implementation and follow-up
+
+- [Enterprise UX / security roadmap](gui-enterprise-roadmap.md) — partially
+  implemented; the remaining security center, dashboard and release-hardening
+  stages are **not shipped**.
+- [Compact controls](compact-controls.md) — tray and local control semantics.
+- [Architecture](../ARCHITECTURE.md) — canonical module ownership and access
+  boundaries.
+- [Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases) —
+  authoritative published installer version.

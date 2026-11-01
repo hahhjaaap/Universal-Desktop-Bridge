@@ -272,6 +272,11 @@ ready, and (3) ChatGPT has actually called an UDB tool. The third step stays
 invented end-to-end success state is introduced. Failed local reads clear
 stale ready indicators.
 
+The app header now also carries an always-visible, read-only **Windows
+privilege** warning: an enabled broad unsandboxed computer grant is distinct
+from project permissions and Tunnel readiness. Unknown/unreadable grant
+states appear neutral, never as a verified safe or authorized result.
+
 The **Bảo vệ** page now shows a read-only indicator of optional full Windows
 computer access. If enabled, it warns that this privilege is **unsandboxed**
 and can reach files protected only against project-scoped tools. The GUI

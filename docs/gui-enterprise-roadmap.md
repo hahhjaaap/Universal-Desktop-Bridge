@@ -15,6 +15,7 @@
 | Task filters / audit timeline / approval impact (Phases 4/5 partial) | Merged PR #51 | Local metadata search, read-only MCP activity timeline, explicit consent and no-overwrite audit export, keyboard navigation, operation-specific approval review and connection diagnostics |
 | Reduced-motion accessibility preference | In source follow-up PR | Native Qt settings toggle, safe allow-listed persistence, immediate effect and rollback on save failure |
 | New full dashboard / complete enterprise shell | Not implemented | No claimed task percentages or multi-machine router |
+| Global privilege-warning header (Phase 5 partial) | Merged PR #57 | Read-only unsandboxed Windows warning visible across pages; unknown on failed read |
 | Security privilege disclosure (Phase 5 partial) | Merged PR #48 | Read-only broad Windows grant status and explicit unsandboxed warning; no owner grant setter exposed |
 | Native three-step connection onboarding (Phase 6 partial) | In source follow-up PR | Worker and tunnel status are local-only; ChatGPT tool discovery stays unverified without external read-only call |
 | Release signature verifier (Phase 7 partial) | Merged PR #50 | Windows-only Authenticode signer-pin checker; **no certificate or signed installer** |

@@ -172,6 +172,14 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             "Kết nối tunnel không xác minh ChatGPT đã gọi được công cụ."
         )
         header_row.addWidget(self.header_connection)
+        self.header_privilege = StatusPill("Quyền máy: chưa xác minh", "neutral")
+        self.header_privilege.setAccessibleDescription(
+            "Cảnh báo quyền điều khiển Windows toàn diện, không phải quyền dự án."
+        )
+        self.header_privilege.setToolTip(
+            "Trạng thái quyền máy không sandbox, đọc từ tài khoản Windows cục bộ."
+        )
+        header_row.addWidget(self.header_privilege)
         content_column.addWidget(header)
         content_column.addWidget(self.stack, 1)
         body.addLayout(content_column, 1)

@@ -43,6 +43,12 @@ class ManagerRefreshMixin:
                 if name == "Bảo mật":
                     errors.append("Bảo mật: không đọc được trạng thái")
                     self.computer_grant_pill.set_status("Chưa xác minh", "neutral")
+                    self.header_privilege.set_status(
+                        "Quyền máy: chưa xác minh", "neutral"
+                    )
+                    self.header_privilege.setToolTip(
+                        "Không thể đọc trạng thái quyền Windows toàn diện cục bộ."
+                    )
                     self.computer_grant_detail.setText(
                         "Không xác minh được quyền Windows; xem kiểm tra cục bộ."
                     )
@@ -378,6 +384,11 @@ class ManagerRefreshMixin:
         )
         if state.get("enabled") is True:
             self.computer_grant_pill.set_status("Đã bật · không sandbox", "paused")
+            self.header_privilege.set_status("Windows: không sandbox", "paused")
+            self.header_privilege.setToolTip(
+                "Quyền máy rộng đang bật; AI có thể truy cập dữ liệu của tài khoản "
+                "Windows. Các hạn chế theo dự án không áp dụng cho quyền này."
+            )
             self.computer_grant_detail.setText(
                 "Quyền điều khiển Windows toàn diện đang được cấp. "
                 "AI có thể thao tác tệp, chạy chương trình và dùng chuột/phím "
@@ -386,12 +397,21 @@ class ManagerRefreshMixin:
             )
         elif state.get("enabled") is False:
             self.computer_grant_pill.set_status("Không khả dụng", "neutral")
+            self.header_privilege.set_status("Quyền máy: không bật", "neutral")
+            self.header_privilege.setToolTip(
+                "Không có quyền máy rộng được xác minh. Quyền dự án và Sandbox "
+                "vẫn được quản lý riêng."
+            )
             self.computer_grant_detail.setText(
                 "Quyền máy Windows toàn diện không khả dụng. "
                 "Quyền dự án và Windows Sandbox được quản lý riêng."
             )
         else:
             self.computer_grant_pill.set_status("Chưa xác minh", "neutral")
+            self.header_privilege.set_status("Quyền máy: chưa xác minh", "neutral")
+            self.header_privilege.setToolTip(
+                "Không có bằng chứng mới để xác minh quyền máy Windows."
+            )
             self.computer_grant_detail.setText(
                 "Chưa có bằng chứng xác minh trạng thái quyền máy."
             )

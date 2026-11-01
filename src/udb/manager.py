@@ -182,9 +182,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.navigation_shortcuts = []
         for index in range(6):
             shortcut = QShortcut(QKeySequence(f"Ctrl+{index + 1}"), self)
-            shortcut.activated.connect(
-                lambda index=index: self.navigate(index)
-            )
+            shortcut.activated.connect(lambda index=index: self.navigate(index))
             self.navigation_shortcuts.append(shortcut)
         job_search_shortcut = QShortcut(QKeySequence("Ctrl+Shift+F"), self)
         job_search_shortcut.activated.connect(self.focus_job_search)

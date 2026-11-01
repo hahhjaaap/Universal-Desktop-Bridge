@@ -13,7 +13,13 @@ import ssl
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
-from urllib.request import HTTPRedirectHandler, HTTPSHandler, ProxyHandler, Request, build_opener
+from urllib.request import (
+    HTTPRedirectHandler,
+    HTTPSHandler,
+    ProxyHandler,
+    Request,
+    build_opener,
+)
 
 ID_PATTERN = re.compile(r"[a-z][a-z0-9-]{1,31}")
 MAX_RESPONSE = 8 * 1024 * 1024

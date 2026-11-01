@@ -211,7 +211,9 @@ class ManagerRefreshMixin:
                         str(session.get("tabs", 0)) if browser else "—",
                     ]
                 )
-                item.setIcon(0, icon("browser" if browser else "file", current_theme().accent))
+                item.setIcon(
+                    0, icon("browser" if browser else "file", current_theme().accent)
+                )
                 item.setToolTip(
                     0, session.get("task", "") + "\n" + session["session_id"]
                 )

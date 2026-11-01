@@ -666,3 +666,47 @@ def test_security_posture_never_keeps_successful_state_after_read_failure(
         assert pill._status == ("Chưa xác minh", "neutral")
     assert window.desktop_pause_button.isEnabled()
     assert not (window.agent.state / "computer-access.dpapi").exists()
+
+
+def test_connection_onboarding_only_uses_observed_local_health(manager, monkeypatch):
+    window, host = manager
+    assert window.setup_agent_health._status == ("Sẵn sàng", "ready")
+    assert window.setup_chatgpt_health._status == ("Chưa xác minh", "neutral")
+
+    host["worker_ready"] = False
+    window._refresh_host()
+    assert window.setup_agent_health._status == ("Chưa sẵn sàng", "paused")
+    host["worker_ready"] = True
+    window._refresh_host()
+    assert window.setup_agent_health._status == ("Sẵn sàng", "ready")
+
+    status = dict(window.controller.status())
+    status.update(ready=True, tunnel_running=True, connecting=False, tunnel_wanted=True)
+    monkeypatch.setattr(window.controller, "status", lambda: status)
+    window._refresh_connection(set())
+    assert window.setup_tunnel_health._status == ("Sẵn sàng", "ready")
+    assert window.setup_chatgpt_health._status == ("Chưa xác minh", "neutral")
+    assert not (window.agent.state / "computer-access.dpapi").exists()
+
+
+def test_onboarding_fail_closed_if_host_or_tunnel_status_unreadable(
+    manager, monkeypatch
+):
+    window, _ = manager
+    status = dict(window.controller.status())
+    status.update(ready=True, tunnel_running=True, connecting=False, tunnel_wanted=True)
+    monkeypatch.setattr(window.controller, "status", lambda: status)
+    window._refresh_connection(set())
+    assert window.setup_tunnel_health._status == ("Sẵn sàng", "ready")
+
+    def unavailable(*_args, **_kwargs):
+        raise OSError("untrusted status error secret")
+
+    monkeypatch.setattr("udb.host_client.status", unavailable)
+    monkeypatch.setattr(window.controller, "status", unavailable)
+    window.refresh()
+    assert window.setup_agent_health._status == ("Chưa xác định", "neutral")
+    assert window.setup_tunnel_health._status == ("Chưa xác định", "neutral")
+    assert window.setup_chatgpt_health._status == ("Chưa xác minh", "neutral")
+    assert window.desktop_pause_button.isEnabled()
+    assert not (window.agent.state / "computer-access.dpapi").exists()

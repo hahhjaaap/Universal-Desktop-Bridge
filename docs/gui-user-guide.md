@@ -50,6 +50,34 @@ reselect the option after changing Windows' appearance if the UI does not
 refresh automatically. System high-contrast mode and 200% DPI still need
 separate real-device review.
 
+## Activity filters, navigation and approval review
+
+In **Tiến trình**, search by project, language, status or job ID.
+Choose **Tất cả**, **Đang chạy**, **Cần chú ý** or **Đã xong**. Filters
+read only bounded task metadata and never search script or log contents.
+A failed/unknown task does not automatically become **Đã xong**. Changing
+filters clears hidden stale task details; no job state changes.
+The separate **Hoạt động MCP** tab shows a bounded read-only timeline of
+sanitized tool names, status and timestamps. It never displays request
+payloads, raw scripts or file bodies and cannot be used to re-run commands.
+The local **Xuất metadata đã ẩn thông tin nhạy cảm** action confirms intent,
+then saves a **new** JSON file (never overwriting an existing file) with
+only timestamps, tool labels and states. Inspect the destination before sharing
+it because even sanitized metadata can reveal which tools were used.
+A persistent header displays the current page and a **Tunnel-only** status;
+it does not authenticate a ChatGPT tool call.
+
+Keyboard shortcuts in the full manager: `Ctrl+1` through `Ctrl+6`
+navigate the six pages; `Ctrl+Shift+F` opens and focuses task search.
+In **Kết nối**, **Sao chép lệnh kiểm tra** copies only `udb doctor --json`
+to the local clipboard; it does not execute a command or share diagnostics.
+
+Owner approval dialogs display an operation-specific impact notice:
+real file modification, host-side media download, Windows Sandbox desktop,
+or Sandbox script execution. Existing full diff/script tabs, request hash,
+expiry, explicit review checkbox and secondary local confirmation remain
+mandatory. Untrusted request/file strings are rendered as plain text.
+
 ## Navigation and quick controls
 
 The manager retains its six pages: **Dự án**, **Quyền AI**,

@@ -303,3 +303,30 @@ def test_failed_window_close_explains_cleanup_and_allows_retry(manager, monkeypa
     assert window.isVisible() and not window._closing and window.timer.isActive()
     assert warnings == ["Simulated cleanup failure"]
     assert window.close() is True
+
+
+def test_theme_picker_is_persistent_without_altering_grants(manager):
+    from PySide6.QtWidgets import QApplication
+
+    from udb.ui_theme import current_theme
+
+    window, _ = manager
+    chooser = window.theme_picker
+    assert chooser.accessibleName() == "Chế độ giao diện UDB"
+    assert chooser.count() == 3
+    before = window.agent.projects()
+    try:
+        chooser.setCurrentIndex(chooser.findData("light"))
+        QApplication.processEvents()
+        assert current_theme().name == "light"
+        assert window.controller.settings()["theme"] == "light"
+        assert window.agent.projects() == before
+        assert not (window.agent.state / "computer-access.dpapi").exists()
+        chooser.setCurrentIndex(chooser.findData("dark"))
+        QApplication.processEvents()
+        assert current_theme().name == "dark"
+        assert window.controller.settings()["theme"] == "dark"
+        assert window.desktop_pause_button.isEnabled()
+    finally:
+        chooser.setCurrentIndex(chooser.findData("system"))
+        QApplication.processEvents()

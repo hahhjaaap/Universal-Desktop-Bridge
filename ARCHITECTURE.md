@@ -80,8 +80,20 @@ checks; never route an unavailable remote command to the local machine.
   pause and background-session controls.
 - `udb.manager_dialogs`: local source browser, connection settings, and
   owner-only approval dialogs; no remote approval API.
-- `udb.manager_refresh`: status polling and project list refresh.
-- `udb.manager_widgets`: reusable UI widgets and styles.
+- `udb.manager_refresh`: status polling, project list refresh, real
+  permission count updates and accessibility text for compact navigation.
+- `udb.manager_widgets`: reusable Qt components, theme-aware custom-painted
+  buttons and status indicators. Previous static dark constants remain as
+  compatibility exports; new render paths resolve the active theme.
+- `udb.ui_theme`: strict `system`/`light`/`dark` presentation preference,
+  frozen light/dark tokens, Qt stylesheet/palette application and contrast
+  checks. Invalid settings fall back to `system`, never interpreted as CSS.
+- `udb.manager`: sidebar can collapse to 72 px while preserving all six
+  routes; appearance selector lives under Connection & Settings. This changes
+  only local GUI state, not project access or owner authorization.
+- `udb.desktop.DesktopController.save_settings`: atomically persists only
+  allow-listed GUI settings (`motion`, `autoconnect`, `theme`).
+  Appearance changes cannot write credentials or issue grants.
 - `udb.companion.jobs`: cancellation, task status and checkpoint lifecycle.
 - `udb.companion.search`: search controller plus isolated worker entrypoint;
   `background.search_worker` remains a compatibility export.
@@ -146,6 +158,28 @@ checks; never route an unavailable remote command to the local machine.
   reconciled against the surviving owned window after a transition failure.
 - `computer_status` can report the local grant without a running host worker;
   process availability is explicitly unknown in that fallback. It issues no grant.
+
+## GUI state versus security state
+
+The GUI **observes and presents** backend state. Its Qt paint, sidebar,
+appearance and focus components do not authorize file writes, launch arbitrary
+programs or enable full-computer access. Owner approvals and protected-path
+checks remain in the core/host policy layer; backend authorization is required
+even if a GUI button is enabled. Conversely, a visual **Tunnel đã kết nối**
+indicator is not end-to-end proof that ChatGPT has discovered UDB's tools.
+
+The 200 px/72 px navigation preference is per window and not persisted.
+The theme preference is persisted to bounded local `gui.json`, applying
+the Qt/Windows system color scheme at launch or when reselected.
+The code does not continuously listen for every Windows color-scheme event;
+the remaining system-theme and accessibility QA is documented in
+[Desktop GUI guide](docs/gui-user-guide.md).
+
+The enterprise UX roadmap and threat model live in
+[docs/gui-enterprise-roadmap.md](docs/gui-enterprise-roadmap.md).
+Theme foundation and compact navigation are implemented in source; dashboard
+redesign, advanced security center, multi-device routing and signed publishing
+remain separate development tasks, **not current release guarantees**.
 
 ## Where new code belongs
 

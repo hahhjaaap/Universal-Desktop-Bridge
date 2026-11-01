@@ -175,6 +175,14 @@ project-scoped protected-path boundaries using the current user's Windows
 permissions. Failed status refreshes display `Chưa xác minh` rather than
 claiming a known security state.
 
+The additional read-only security posture panel derives approval counts
+from `pending_local()`, input pause from `desktop_control.paused()`, and
+scoped source-auto permissions from `source_autonomy_projects()`. Pure
+`ui_security` presentation helpers map invalid/missing values to an
+unverified, neutral state; each failed local poll clears its corresponding
+display. No permission setter, remote confirmation, or new access-control
+endpoint is introduced.
+
 The GUI **observes and presents** backend state. Its Qt paint, sidebar,
 appearance and focus components do not authorize file writes, launch arbitrary
 programs or enable full-computer access. Owner approvals and protected-path

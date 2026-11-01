@@ -142,6 +142,16 @@ as UDB's computer API, not from a checkbox or ChatGPT connection status.
 - **Chưa xác minh:** status could not be read; the UI never reports granted or
   safe access based on a failed check.
 
+The read-only **Tổng quan quyền và hoạt động** area has three separate
+owner-local observations: (1) pending approval count, (2) Windows host-input
+pause state, and (3) number of projects with scoped auto-source edits enabled.
+Each indicator distinguishes unknown data from a successful read and does
+not reproduce request payloads, project paths or credentials. A timestamp
+identifies the last local grant-check attempt; it is not proof of a recent
+ChatGPT tool invocation. Pausing host input does **not** terminate browser,
+Sandbox or other background jobs. A zero approval count does not certify
+overall system security.
+
 The GUI does not offer a remote grant/revoke button. Protected-path tables
 describe scoped project restrictions, **not** absolute Windows isolation.
 

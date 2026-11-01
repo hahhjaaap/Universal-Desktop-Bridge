@@ -13,6 +13,11 @@ from .manager_job_refresh import should_reload_job_details
 from .manager_widgets import icon
 from .ui_connection import tunnel_indicator, unknown_indicator, worker_indicator
 from .ui_jobs import job_metadata, visible_jobs
+from .ui_security import (
+    approval_indicator,
+    input_pause_indicator,
+    source_autonomy_indicator,
+)
 from .ui_theme import current_theme
 
 
@@ -41,12 +46,20 @@ class ManagerRefreshMixin:
                     self.computer_grant_detail.setText(
                         "Không xác minh được quyền Windows; xem kiểm tra cục bộ."
                     )
+                    self.security_observed.setText(
+                        "Kiểm tra quyền Windows thất bại · Chưa xác minh."
+                    )
                 else:
                     errors.append(name + ": " + str(exc))
                 if name == "Máy tính":
                     indicator = unknown_indicator()
                     self.local_health.set_status(indicator.text, indicator.tone)
                     self.local_health.setToolTip(indicator.detail)
+                    self.security_pause_status.set_status("Chưa xác minh", "neutral")
+                elif name == "Dự án":
+                    self.security_autonomy_status.set_status("Chưa xác minh", "neutral")
+                elif name == "Quyền AI":
+                    self.security_approval_status.set_status("Chưa xác minh", "neutral")
         try:
             self._refresh_connection(source_auto_projects)
         except Exception as exc:
@@ -85,6 +98,9 @@ class ManagerRefreshMixin:
     def _refresh_projects(self):
         projects = self.agent.projects()
         source_auto_projects = set(self.agent.source_autonomy_projects())
+        auto = source_autonomy_indicator(len(source_auto_projects))
+        self.security_autonomy_status.set_status(auto.text, auto.tone)
+        self.security_autonomy_status.setToolTip(auto.detail)
         signature = tuple(
             (p["id"], p["root"], p["writable"], p["id"] in source_auto_projects)
             for p in projects
@@ -125,6 +141,9 @@ class ManagerRefreshMixin:
         hs = host_status(self.agent)
         rs = hs["resources"]
         is_paused = paused(self.agent)
+        pause_state = input_pause_indicator(is_paused)
+        self.security_pause_status.set_status(pause_state.text, pause_state.tone)
+        self.security_pause_status.setToolTip(pause_state.detail)
         sessions = hs.get("sessions", [])
         handed_off = any(x.get("presentation") == "visible" for x in sessions)
         self._browser_handed_off = handed_off
@@ -265,6 +284,11 @@ class ManagerRefreshMixin:
         self.media_auto.setChecked(self.agent.media_autonomy())
         self.media_auto.blockSignals(False)
         rows = self.agent.pending_local()
+        approval_state = approval_indicator(len(rows))
+        self.security_approval_status.set_status(
+            approval_state.text, approval_state.tone
+        )
+        self.security_approval_status.setToolTip(approval_state.detail)
         self.pending_rows = {r["id"]: r for r in rows}
         signature = tuple((r["id"], r["kind"], r["payload"]) for r in rows)
         if signature != self.last_pending:
@@ -341,6 +365,11 @@ class ManagerRefreshMixin:
         from .computer_access import summary
 
         state = summary(self.agent)
+        self.security_observed.setText(
+            "Lần kiểm tra trên máy: "
+            + time.strftime("%H:%M:%S", time.localtime())
+            + " · Trạng thái chưa đọc được hiển thị riêng."
+        )
         if state.get("enabled") is True:
             self.computer_grant_pill.set_status("Đã bật · không sandbox", "paused")
             self.computer_grant_detail.setText(

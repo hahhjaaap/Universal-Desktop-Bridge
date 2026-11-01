@@ -616,3 +616,53 @@ def test_mcp_activity_tab_stays_available_with_no_sandbox_jobs(manager, monkeypa
     assert window.job_tabs.isVisible()
     assert window.activity_timeline.topLevelItemCount() == 1
     assert not window.jobs_empty.isVisible()
+
+
+def test_security_posture_panel_is_owner_local_and_read_only(manager, monkeypatch):
+    from udb.desktop_control import pause_local
+
+    window, _ = manager
+    window.navigate(3)
+    assert window.security_approval_status._status == ("0 yêu cầu", "neutral")
+    assert window.security_autonomy_status._status == ("Không bật", "neutral")
+    assert window.security_pause_status._status == ("Chưa tạm dừng", "neutral")
+    assert window.security_observed.text().startswith("Lần kiểm tra trên máy:")
+
+    pause_local(window.agent, True)
+    try:
+        window._refresh_host()
+        assert window.security_pause_status._status == ("Đang tạm dừng", "owner")
+        assert "nền" in window.security_pause_status.toolTip()
+        assert window.desktop_resume_button.isEnabled()
+    finally:
+        pause_local(window.agent, False)
+
+    monkeypatch.setattr(
+        window.agent, "source_autonomy_projects", lambda: {"synthetic-project"}
+    )
+    window._refresh_projects()
+    assert window.security_autonomy_status._status == ("1 dự án", "paused")
+    assert not (window.agent.state / "computer-access.dpapi").exists()
+
+
+def test_security_posture_never_keeps_successful_state_after_read_failure(
+    manager, monkeypatch
+):
+    window, _ = manager
+    assert window.security_pause_status._status[0] == "Chưa tạm dừng"
+
+    def unavailable(*_args, **_kwargs):
+        raise OSError("Synthetic status failure")
+
+    monkeypatch.setattr("udb.host_client.status", unavailable)
+    monkeypatch.setattr(window.agent, "pending_local", unavailable)
+    monkeypatch.setattr(window.agent, "source_autonomy_projects", unavailable)
+    window.refresh()
+    for pill in (
+        window.security_pause_status,
+        window.security_approval_status,
+        window.security_autonomy_status,
+    ):
+        assert pill._status == ("Chưa xác minh", "neutral")
+    assert window.desktop_pause_button.isEnabled()
+    assert not (window.agent.state / "computer-access.dpapi").exists()

@@ -739,8 +739,10 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         if consent != QMessageBox.StandardButton.Yes:
             return
         destination, _ = QFileDialog.getSaveFileName(
-            self, "Lưu nhật ký UDB (metadata)", "udb-activity-redacted.json",
-            "JSON (*.json)"
+            self,
+            "Lưu nhật ký UDB (metadata)",
+            "udb-activity-redacted.json",
+            "JSON (*.json)",
         )
         if not destination:
             return

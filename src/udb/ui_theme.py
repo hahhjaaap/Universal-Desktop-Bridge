@@ -89,9 +89,11 @@ LIGHT = Theme(
 
 def normalize_preference(preference: object) -> str:
     """Unknown or corrupted local settings cannot inject arbitrary CSS."""
-    return preference if type(preference) is str and preference in {
-        "system", "light", "dark"
-    } else "system"
+    return (
+        preference
+        if type(preference) is str and preference in {"system", "light", "dark"}
+        else "system"
+    )
 
 
 def pick_theme(preference: object, system_dark: bool = False) -> Theme:
@@ -107,8 +109,10 @@ def _linear(rgb: int) -> float:
 def contrast_ratio(foreground: str, background: str) -> float:
     """WCAG relative luminance ratio, used as a regression check."""
     def lum(hex_color: str) -> float:
-        channels = [_linear(int(hex_color[i:i + 2], 16)) for i in (1, 3, 5)]
-        return sum(a * b for a, b in zip(channels, (0.2126, 0.7152, 0.0722), strict=True))
+        channels = [_linear(int(hex_color[i : i + 2], 16)) for i in (1, 3, 5)]
+        return sum(
+            a * b for a, b in zip(channels, (0.2126, 0.7152, 0.0722), strict=True)
+        )
 
     top, bottom = sorted((lum(foreground), lum(background)), reverse=True)
     return (top + 0.05) / (bottom + 0.05)
@@ -185,6 +189,7 @@ def stylesheet(theme: Theme) -> str:
 def current_theme(app=None) -> Theme:
     if app is None:
         from PySide6.QtWidgets import QApplication
+
         app = QApplication.instance()
     return LIGHT if app and app.property("udb_theme") == "light" else DARK
 
@@ -196,9 +201,7 @@ def apply_theme(app, preference: object = "system") -> Theme:
 
     dark_system = False
     try:
-        dark_system = (
-            QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark
-        )
+        dark_system = QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark
     except (AttributeError, RuntimeError):
         pass
     theme = pick_theme(preference, dark_system)

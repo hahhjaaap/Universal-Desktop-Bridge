@@ -371,7 +371,9 @@ def test_security_inventory_discloses_unsandboxed_access(manager, monkeypatch):
     assert "kể cả dữ liệu được chặn" in window.computer_grant_detail.text()
     assert "udb revoke-access" in window.computer_grant_detail.text()
 
-    monkeypatch.setattr("udb.computer_access.summary", lambda _agent: {"enabled": False})
+    monkeypatch.setattr(
+        "udb.computer_access.summary", lambda _agent: {"enabled": False}
+    )
     window._refresh_security()
     assert window.computer_grant_pill._status[0] == "Không khả dụng"
     assert window.agent.projects() == baseline

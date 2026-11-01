@@ -42,7 +42,6 @@ from . import __version__
 from .core import reject_links
 from .desktop import DesktopController
 from .manager_dialogs import ApprovalDialog, ConnectionDialog, SourceDialog
-from .ui_theme import apply_theme, current_theme, normalize_preference
 from .manager_host import ManagerHostMixin
 from .manager_refresh import ManagerRefreshMixin
 from .manager_widgets import (
@@ -57,6 +56,7 @@ from .manager_widgets import (
     panel,
     row,
 )
+from .ui_theme import apply_theme, current_theme, normalize_preference
 
 PLUGIN_URL = (
     "https://chatgpt.com/plugins/plugin_asdk_app_6ad78a6c547c81919d4efa885507ead2"

@@ -55,6 +55,10 @@ class ManagerRefreshMixin:
                     indicator = unknown_indicator()
                     self.local_health.set_status(indicator.text, indicator.tone)
                     self.local_health.setToolTip(indicator.detail)
+                    self.setup_agent_health.set_status(
+                        indicator.text, indicator.tone
+                    )
+                    self.setup_agent_health.setToolTip(indicator.detail)
                     self.security_pause_status.set_status("Chưa xác minh", "neutral")
                 elif name == "Dự án":
                     self.security_autonomy_status.set_status("Chưa xác minh", "neutral")
@@ -67,6 +71,10 @@ class ManagerRefreshMixin:
             indicator = unknown_indicator()
             self.tunnel_health.set_status(indicator.text, indicator.tone)
             self.tunnel_health.setToolTip(indicator.detail)
+            self.setup_tunnel_health.set_status(
+                indicator.text, indicator.tone
+            )
+            self.setup_tunnel_health.setToolTip(indicator.detail)
             self.header_connection.set_status(
                 "Tunnel: " + indicator.text, indicator.tone
             )
@@ -278,6 +286,8 @@ class ManagerRefreshMixin:
         indicator = worker_indicator(hs.get("worker_ready"))
         self.local_health.set_status(indicator.text, indicator.tone)
         self.local_health.setToolTip(indicator.detail)
+        self.setup_agent_health.set_status(indicator.text, indicator.tone)
+        self.setup_agent_health.setToolTip(indicator.detail)
 
     def _refresh_requests(self):
         self.media_auto.blockSignals(True)
@@ -506,6 +516,8 @@ class ManagerRefreshMixin:
         indicator = tunnel_indicator(status)
         self.tunnel_health.set_status(indicator.text, indicator.tone)
         self.tunnel_health.setToolTip(indicator.detail)
+        self.setup_tunnel_health.set_status(indicator.text, indicator.tone)
+        self.setup_tunnel_health.setToolTip(indicator.detail)
         self.header_connection.set_status("Tunnel: " + indicator.text, indicator.tone)
         self.header_connection.setToolTip(
             indicator.detail + " ChatGPT chưa được xác minh bằng lời gọi công cụ."

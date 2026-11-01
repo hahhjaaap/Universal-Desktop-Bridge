@@ -85,6 +85,23 @@ selection. Do not infer another PC from a green connection label; distinguish
 separate MCP connections and tunnel IDs. See
 [remote-device troubleshooting](remote-device-troubleshooting.md).
 
+## Security page: distinguish actual protection boundaries
+
+The **Bảo vệ** page displays a local read-only **Quyền Windows toàn diện**
+indicator. It derives its state from the same local computer-grant validation
+as UDB's computer API, not from a checkbox or ChatGPT connection status.
+
+- **Đã bật · không sandbox:** the current Windows user has granted broad
+  computer operations; project-protected paths are **not** an access boundary
+  for this privilege. A local attended owner can revoke via `udb revoke-access`.
+- **Không khả dụng:** no usable broad grant was confirmed. Project-scoped and
+  Sandbox permissions are separate and may still be active.
+- **Chưa xác minh:** status could not be read; the UI never reports granted or
+  safe access based on a failed check.
+
+The GUI does not offer a remote grant/revoke button. Protected-path tables
+describe scoped project restrictions, **not** absolute Windows isolation.
+
 ## Security boundaries
 
 The GUI renders status and locally requests already-supported owner actions.

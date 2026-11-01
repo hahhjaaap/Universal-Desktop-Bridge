@@ -239,6 +239,11 @@ For native Windows pointer preview use
 Passing CI and screenshots does not replace real Windows accessibility or
 security assessment. The published v0.10.0 installer is still the old release.
 
+The **Kết nối → Giao diện ứng dụng** settings now expose a local
+**Giảm chuyển động** option. This changes only animations and persists as
+the existing allow-listed `motion` preference in `gui.json`; it cannot
+change browser, project or computer permissions.
+
 The full manager also includes a persistent themed page header with an
 explicit **Tunnel** (not ChatGPT) indicator. The **Hoạt động MCP** tab
 displays a bounded, sanitized tool activity timeline. Owner-triggered audit

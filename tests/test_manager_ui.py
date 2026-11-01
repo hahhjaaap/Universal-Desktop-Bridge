@@ -358,3 +358,47 @@ def test_compact_navigation_keeps_accessible_routes_and_local_pause(manager):
     assert window.sidebar.width() == 200
     assert window.nav_buttons[1].text().startswith("Quyền AI")
     assert not (window.agent.state / "computer-access.dpapi").exists()
+
+
+def test_dashboard_displays_independent_connection_evidence(manager, monkeypatch):
+    window, _ = manager
+    assert window.local_health.accessibleName() == "Sẵn sàng"
+    assert window.chatgpt_health.accessibleName() == "Chưa xác minh"
+    assert window.chatgpt_health._status[1] == "neutral"
+
+    status = window.controller.status()
+    status.update(ready=True, tunnel_running=True, tunnel_wanted=True)
+    monkeypatch.setattr(window.controller, "status", lambda: status)
+    window._refresh_connection(set())
+    assert window.tunnel_health._status == ("Sẵn sàng", "ready")
+    assert window.chatgpt_health._status == ("Chưa xác minh", "neutral")
+    assert "ChatGPT chưa được xác minh" in window.connection_hint.text()
+
+    status["tunnel_running"] = False
+    window._refresh_connection(set())
+    assert window.tunnel_health._status == ("Chưa xác định", "neutral")
+    assert window._connection_ready is False
+
+
+def test_failed_health_refresh_clears_stale_green_status(manager, monkeypatch):
+    window, _ = manager
+
+    def fail(_agent):
+        raise OSError("Synthetic local worker failed")
+
+    monkeypatch.setattr("udb.host_client.status", fail)
+    window.refresh()
+    assert window.local_health._status == ("Chưa xác định", "neutral")
+    assert window.desktop_pause_button.isEnabled()
+    assert window.chatgpt_health._status == ("Chưa xác minh", "neutral")
+
+    monkeypatch.setattr(
+        window.controller,
+        "status",
+        lambda: (_ for _ in ()).throw(OSError("Synthetic connection failure")),
+    )
+    window.refresh()
+    assert window.tunnel_health._status == ("Chưa xác định", "neutral")
+    assert window._connection_ready is False
+    assert "Không đọc được tunnel" in window.status_label.text()
+    assert not (window.agent.state / "computer-access.dpapi").exists()

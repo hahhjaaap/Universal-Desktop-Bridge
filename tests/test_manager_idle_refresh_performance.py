@@ -64,6 +64,12 @@ def test_unchanged_job_inventory_skips_finished_job_io(
         jobs=jobs,
         job_tabs=Mock(),
         jobs_empty=Mock(),
+        job_search=SimpleNamespace(text=lambda: ""),
+        job_group_filter=SimpleNamespace(currentText=lambda: "Tất cả"),
+        job_filter_feedback=Mock(),
+        activity_timeline=SimpleNamespace(topLevelItemCount=lambda: 0),
+        job_output=Mock(),
+        job_script=Mock(),
         show_job=Mock(),
     )
     ManagerRefreshMixin._refresh_jobs(screen)

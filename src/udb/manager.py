@@ -532,6 +532,48 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             )
         )
         lay.addWidget(computer)
+        posture = panel()
+        posture_layout = QVBoxLayout(posture)
+        posture_layout.setContentsMargins(20, 16, 20, 16)
+        posture_layout.setSpacing(10)
+        posture_layout.addWidget(label("Tổng quan quyền và hoạt động", "H2"))
+        posture_layout.addWidget(
+            label(
+                "Chỉ hiển thị dữ liệu vừa đọc trên máy này. Không phải chứng nhận "
+                "an toàn hoặc quyền truy cập của ChatGPT.",
+                "Muted",
+                True,
+            )
+        )
+        self.security_approval_status = StatusPill("Chưa kiểm tra", "neutral")
+        self.security_pause_status = StatusPill("Chưa kiểm tra", "neutral")
+        self.security_autonomy_status = StatusPill("Chưa kiểm tra", "neutral")
+        for heading, pill, description in (
+            (
+                "Yêu cầu phê duyệt cục bộ",
+                self.security_approval_status,
+                "Số yêu cầu đang chờ chủ máy xem.",
+            ),
+            (
+                "Đầu vào Windows",
+                self.security_pause_status,
+                "Chỉ trạng thái tạm dừng chuột/phím host; không dừng tác vụ nền.",
+            ),
+            (
+                "Tự sửa mã nguồn",
+                self.security_autonomy_status,
+                "Số dự án đang bật quyền tự sửa mã nguồn theo phạm vi.",
+            ),
+        ):
+            pill.setToolTip(description)
+            pill.setAccessibleDescription(description)
+            heading_label = label(heading, "Fine")
+            posture_layout.addLayout(row(heading_label, None, pill))
+        self.security_observed = label(
+            "Chưa có trạng thái vừa xác minh.", "Fine", True
+        )
+        posture_layout.addWidget(self.security_observed)
+        lay.addWidget(posture)
         self.protected = self.tree(["Đường dẫn bị chặn trong phạm vi dự án"])
         lay.addWidget(self.protected, 1)
         note = panel()

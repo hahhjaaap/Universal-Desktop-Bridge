@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from udb import desktop
+from udb.core import PolicyError
 from udb.owner_command import CommandError
 
 
@@ -89,7 +90,7 @@ def test_symlinked_connection_never_changes_credentials(tmp_path, monkeypatch):
         "save_key",
         lambda *_args: pytest.fail("Credentials changed before state validation"),
     )
-    with pytest.raises(Exception):
+    with pytest.raises(PolicyError):
         desktop.DesktopController.configure(
             controller_for(tmp_path), "tunnel_" + "b" * 32, "SYNTHETIC_ONLY"
         )

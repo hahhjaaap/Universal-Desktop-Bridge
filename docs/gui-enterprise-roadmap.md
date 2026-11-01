@@ -12,6 +12,7 @@
 | Appearance foundation | Merged PR #42 | Strict `system`/`light`/`dark` palette, allow-listed local persistence, visual/contrast regressions |
 | Collapsible navigation | Merged PR #44 (supersedes #43) | 200 px/72 px sidebar, six existing routes and accessible labels |
 | New dashboard / complete enterprise shell | Not implemented | No claimed task percentages or multi-machine router |
+| Security privilege disclosure (Phase 5 partial) | Implemented in source follow-up | Read-only broad Windows grant status and explicit unsandboxed warning; no owner grant setter exposed |
 | Advanced security center and signed release | Not implemented | Existing owner-only approvals retained; supply-chain work remains separate |
 
 See [Desktop GUI user guide](gui-user-guide.md) for current behavior and

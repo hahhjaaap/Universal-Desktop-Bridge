@@ -151,6 +151,7 @@ def test_agent_loopback_only_and_owner_control_denied():
             server.shutdown()
             thread.join(timeout=5)
 
+
 def test_hub_timeout_exceeds_remote_backend_deadline(tmp_path, monkeypatch):
     from udb import fleet as fleet_module
 

@@ -116,6 +116,7 @@ class UnifiedProxy:
         self.send_lock = threading.Lock()
         self.tool_routes: dict[str, StdioChild] = {}
         self.tool_cache: list[dict[str, Any]] | None = None
+        self.public_tool_names: frozenset[str] = frozenset()
         self.route_lock = threading.Lock()
         self.startup_ok = False
         self.closed = threading.Event()
@@ -297,6 +298,7 @@ class UnifiedProxy:
             catalog = public_catalog(result, routes)
             self.tool_routes = routes
             self.tool_cache = catalog
+            self.public_tool_names = frozenset(tool["name"] for tool in catalog)
             return {"tools": copy.deepcopy(self.tool_cache)}
 
     def call_tool(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -310,9 +312,7 @@ class UnifiedProxy:
         # Refresh tool routing on first invocation. Do not retry side effects.
         if not self.tool_routes:
             self.tools_list()
-        if name not in self.tool_routes and name not in {
-            t["name"] for t in self.tool_cache or []
-        }:
+        if name not in self.tool_routes and name not in self.public_tool_names:
             raise ValueError("Unknown MCP tool")
         name, arguments = resolve_call(name, arguments)
         params = {**params, "name": name, "arguments": arguments}

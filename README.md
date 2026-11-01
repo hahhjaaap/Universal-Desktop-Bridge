@@ -209,6 +209,11 @@ yet completed all enterprise GUI / accessibility milestones.
 The **Tunnel đã kết nối** indicator means the local tunnel is ready, **not**
 that ChatGPT has verified MCP tool discovery and invocation. The emergency
 Windows pause controls stay distinct from background browser and job lifecycle.
+The **Bảo vệ** page now shows a read-only indicator of optional full Windows
+computer access. If enabled, it warns that this privilege is **unsandboxed**
+and can reach files protected only against project-scoped tools. The GUI
+cannot enable or revoke this grant; use the attended local terminal
+(`udb revoke-access` to revoke).
 For the complete user-facing behavior and security limitations, read
 [Desktop GUI guide](docs/gui-user-guide.md) and the
 [enterprise UI/security roadmap](docs/gui-enterprise-roadmap.md).

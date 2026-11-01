@@ -590,3 +590,29 @@ def test_audit_export_never_contains_raw_payload_or_ids(manager, monkeypatch, tm
     target.write_text("OWNER KEEP", encoding="utf-8")
     window.export_activity()
     assert target.read_text(encoding="utf-8") == "OWNER KEEP"
+
+
+def test_mcp_activity_tab_stays_available_with_no_sandbox_jobs(manager, monkeypatch):
+    window, _ = manager
+    assert window.jobs.topLevelItemCount() == 0
+    monkeypatch.setattr(
+        window.activity_feed,
+        "poll",
+        lambda: [
+            {
+                "seq": 1,
+                "kind": "result",
+                "tool": "host_browser",
+                "status": "PASS",
+                "at": 0,
+                "details": {},
+            }
+        ],
+    )
+    window._refresh_activity()
+    window._refresh_jobs()
+    assert window.job_tabs.isVisible() is False  # Jobs page isn't active.
+    window.navigate(2)
+    assert window.job_tabs.isVisible()
+    assert window.activity_timeline.topLevelItemCount() == 1
+    assert not window.jobs_empty.isVisible()

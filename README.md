@@ -38,9 +38,9 @@ revision checks, and view verified browser-cache previews.
 Windows Start/Search is populated by a **per-user Start Menu shortcut**, not by
 extracting a portable ZIP. The managed installer creates/updates a UDB-owned
 shortcut on successful install/rollback (opt out with `-NoStartMenu`). For
-an existing portable EXE, run `tools/create_start_shortcut.ps1 -Exe
-"C:\path\to\UDB\udb.exe"` from a trusted repository checkout in your own
-PowerShell window. The shortcut opens the UDB GUI; it never grants access or
+an existing portable EXE, open an attended PowerShell terminal in the
+extracted UDB folder and run `.\tools\create_start_shortcut.ps1 -Exe .\udb.exe`
+from the bundled portable helper (or use it from a trusted source checkout). The shortcut opens the UDB GUI; it never grants access or
 starts an online session by itself. Windows Search indexing may take time.
 
 ## Windows x64: install and start

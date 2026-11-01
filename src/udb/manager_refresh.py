@@ -9,7 +9,8 @@ from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import QTreeWidgetItem
 
 from .manager_job_refresh import should_reload_job_details
-from .manager_widgets import ACCENT, MUTED, RAISED, WARNING, icon
+from .manager_widgets import icon
+from .ui_theme import current_theme
 
 
 class ManagerRefreshMixin:
@@ -68,7 +69,7 @@ class ManagerRefreshMixin:
                             else "Chỉ đọc",
                         ]
                     )
-                    item.setIcon(0, icon("folder", MUTED))
+                    item.setIcon(0, icon("folder", current_theme().muted))
                     item.setData(0, Qt.ItemDataRole.UserRole, proj)
                     item.setToolTip(0, proj["root"])
                     self.projects.addTopLevelItem(item)
@@ -210,7 +211,9 @@ class ManagerRefreshMixin:
                         str(session.get("tabs", 0)) if browser else "—",
                     ]
                 )
-                item.setIcon(0, icon("browser" if browser else "file", ACCENT))
+                item.setIcon(
+                    0, icon("browser" if browser else "file", current_theme().accent)
+                )
                 item.setToolTip(
                     0, session.get("task", "") + "\n" + session["session_id"]
                 )
@@ -372,11 +375,12 @@ class ManagerRefreshMixin:
         )
         if not self.busy:
             self.status_label.setText("●  " + text)
+        theme = current_theme()
         self.status_label.setStyleSheet(
             "color:"
-            + (ACCENT if ready else WARNING if alive else MUTED)
+            + (theme.accent if ready else theme.warning if alive else theme.muted)
             + "; background:"
-            + RAISED
+            + theme.raised
             + "; border-radius:9px; padding:4px 10px;"
         )
         self.connect_button.setText("Ngắt kết nối" if wanted else "Kết nối")

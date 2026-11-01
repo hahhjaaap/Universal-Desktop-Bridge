@@ -156,7 +156,9 @@ def run(home: Path):
     def start_tunnel():
         cfg = read_tunnel_config(agent.state)
         if not is_tunnel_id(cfg.get("tunnel_id")):
-            raise PolicyError("Invalid tunnel configuration; edit the connection locally.")
+            raise PolicyError(
+                "Invalid tunnel configuration; edit the connection locally."
+            )
         secret = load_key()
         binary = home / "tools" / "tunnel-client.exe"
         if not binary.is_file():

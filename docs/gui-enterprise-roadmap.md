@@ -126,6 +126,11 @@ Threat-model review, static/security scanning, dependency audits, manual penetra
 - New features disabled by default behind explicit local settings until verified on real Windows.
 - Compare p50/p95 UI latency, responsiveness and idle resources to stage-0 baseline; reject regressions unless justified.
 - Review screenshots manually; automated passing tests alone do not establish professional look or accessibility.
+- On a disposable owned-browser CDP screenshot failure, collect only bounded
+  process-alive, tab-count, event-count and elapsed-time diagnostics. Never
+  dump URLs, credentials, target/session IDs or page bodies; never retry an
+  uncertain side-effecting operation. See
+  [CI screenshot reliability issue #54](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/54).
 - Release/merge each PR independently after passing gates; preserve rollback and configuration migration compatibility.
 
 ## 7. Suggested acceptance targets (targets, not measured current values)

@@ -550,3 +550,41 @@ def test_persistent_app_header_tracks_navigation_not_remote_authorization(manage
         assert window.header_connection.isVisible()
         assert window.header_connection.text().startswith("●  Tunnel:")
     assert not (window.agent.state / "computer-access.dpapi").exists()
+
+
+def test_audit_export_never_contains_raw_payload_or_ids(manager, monkeypatch, tmp_path):
+    import json
+
+    from PySide6.QtWidgets import QFileDialog, QMessageBox
+
+    window, _ = manager
+    secret = "SENSITIVE_PAYLOAD"
+    event = {
+        "seq": 9,
+        "kind": "result",
+        "status": "PASS",
+        "tool": "computer_files",
+        "call_id": "SECRET_CALL_ID",
+        "at": 0,
+        "details": {"content": secret, "action": "read"},
+    }
+    monkeypatch.setattr(window.activity_feed, "poll", lambda: [event])
+    target = tmp_path / "owner-export.json"
+    monkeypatch.setattr(
+        QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Yes
+    )
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a: (str(target), "JSON"))
+    monkeypatch.setattr(QMessageBox, "information", lambda *a: None)
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a: None)
+    window.export_activity()
+    data = target.read_text(encoding="utf-8")
+    records = json.loads(data)
+    assert len(records) == 1
+    assert set(records[0]) == {"time", "tool", "state"}
+    assert records[0]["tool"].startswith("Tệp trên máy")
+    assert secret not in data
+    assert "SECRET_CALL_ID" not in data
+    # Exclusive creation must not overwrite an existing owner file.
+    target.write_text("OWNER KEEP", encoding="utf-8")
+    window.export_activity()
+    assert target.read_text(encoding="utf-8") == "OWNER KEEP"

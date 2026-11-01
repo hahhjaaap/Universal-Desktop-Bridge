@@ -200,8 +200,8 @@ selection is not persisted between launches.
 Under **Kết nối → Giao diện ứng dụng**, select **Theo hệ thống Windows**,
 **Sáng**, or **Tối**. Appearance updates immediately in the Qt application and
 is saved to the user's local, allow-listed `gui.json` preferences; the
-Windows-derived choice is evaluated when selected or at startup, rather
-than subscribing to every live Windows theme change. Theme switching never
+Windows-derived choice is applied at startup and when Qt reports a system
+color-scheme change; unsupported platforms retain startup detection. Theme switching never
 changes computer permissions, credentials or MCP access. The desktop shell
 uses shared Qt theme tokens and visible keyboard focus states, but it has not
 yet completed all enterprise GUI / accessibility milestones.

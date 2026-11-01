@@ -55,9 +55,7 @@ class ManagerRefreshMixin:
                     indicator = unknown_indicator()
                     self.local_health.set_status(indicator.text, indicator.tone)
                     self.local_health.setToolTip(indicator.detail)
-                    self.setup_agent_health.set_status(
-                        indicator.text, indicator.tone
-                    )
+                    self.setup_agent_health.set_status(indicator.text, indicator.tone)
                     self.setup_agent_health.setToolTip(indicator.detail)
                     self.security_pause_status.set_status("Chưa xác minh", "neutral")
                 elif name == "Dự án":
@@ -71,9 +69,7 @@ class ManagerRefreshMixin:
             indicator = unknown_indicator()
             self.tunnel_health.set_status(indicator.text, indicator.tone)
             self.tunnel_health.setToolTip(indicator.detail)
-            self.setup_tunnel_health.set_status(
-                indicator.text, indicator.tone
-            )
+            self.setup_tunnel_health.set_status(indicator.text, indicator.tone)
             self.setup_tunnel_health.setToolTip(indicator.detail)
             self.header_connection.set_status(
                 "Tunnel: " + indicator.text, indicator.tone

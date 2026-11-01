@@ -7,7 +7,9 @@ import pytest
 from tools.report_system_simulation import main, summarize
 
 
-def test_report_counts_cross_domain_scenarios_without_echoing_parameters(tmp_path, capsys):
+def test_report_counts_cross_domain_scenarios_without_echoing_parameters(
+    tmp_path, capsys
+):
     source = tmp_path / "results.xml"
     source.write_text(
         """<testsuite name="pytest" tests="4">
@@ -38,7 +40,8 @@ def test_simulation_reports_failures_as_failure(tmp_path):
     source.write_text(
         """<testsuite><testcase classname="tests.core.test_policy" name="failure">
         <failure message="not safe">synthetic stack</failure>
-        </testcase></testsuite>""", encoding="utf-8"
+        </testcase></testsuite>""",
+        encoding="utf-8",
     )
     out = tmp_path / "result.json"
     assert main(["--junitxml", str(source), "--output", str(out)]) == 1

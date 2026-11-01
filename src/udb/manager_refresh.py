@@ -57,7 +57,9 @@ class ManagerRefreshMixin:
             self.header_connection.set_status(
                 "Tunnel: " + indicator.text, indicator.tone
             )
-            self.header_connection.setToolTip(indicator.detail)
+            self.header_connection.setToolTip(
+            indicator.detail + " ChatGPT chưa được xác minh bằng lời gọi công cụ."
+        )
             self._connection_ready = False
             self.status_label.setText("●  Không đọc được tunnel")
             theme = current_theme()
@@ -476,7 +478,9 @@ class ManagerRefreshMixin:
         self.tunnel_health.set_status(indicator.text, indicator.tone)
         self.tunnel_health.setToolTip(indicator.detail)
         self.header_connection.set_status("Tunnel: " + indicator.text, indicator.tone)
-        self.header_connection.setToolTip(indicator.detail)
+        self.header_connection.setToolTip(
+            indicator.detail + " ChatGPT chưa được xác minh bằng lời gọi công cụ."
+        )
         ready = status["ready"] is True and status["tunnel_running"] is True
         self._connection_ready = ready
         alive = status["tunnel_running"]

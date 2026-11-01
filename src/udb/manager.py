@@ -14,15 +14,12 @@ from PySide6.QtCore import (
     QThreadPool,
     QTimer,
 )
-from PySide6.QtGui import (
-    QColor,
-    QFont,
-    QPalette,
-)
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -45,14 +42,11 @@ from . import __version__
 from .core import reject_links
 from .desktop import DesktopController
 from .manager_dialogs import ApprovalDialog, ConnectionDialog, SourceDialog
+from .ui_theme import apply_theme, current_theme, normalize_preference
 from .manager_host import ManagerHostMixin
 from .manager_refresh import ManagerRefreshMixin
 from .manager_widgets import (
     ACCENT,
-    BG,
-    PANEL,
-    STYLE,
-    TEXT,
     DiffHighlighter,
     MotionButton,
     StatusBand,
@@ -450,8 +444,64 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             True,
         )
         lay.addWidget(help_text)
+        appearance = panel()
+        al = QVBoxLayout(appearance)
+        al.setContentsMargins(23, 20, 23, 20)
+        al.setSpacing(12)
+        al.addWidget(label("Giao diện ứng dụng", "H2"))
+        al.addWidget(
+            label(
+                "Chọn chế độ sáng, tối hoặc tự động theo Windows. "
+                "Tùy chọn này chỉ thay đổi cách hiển thị, không thay đổi quyền AI.",
+                "Muted",
+                True,
+            )
+        )
+        self.theme_picker = QComboBox()
+        self.theme_picker.setAccessibleName("Chế độ giao diện UDB")
+        for name, value in (
+            ("Theo hệ thống Windows", "system"),
+            ("Sáng", "light"),
+            ("Tối", "dark"),
+        ):
+            self.theme_picker.addItem(name, value)
+        choice = normalize_preference(self.controller.settings().get("theme"))
+        self.theme_picker.setCurrentIndex(self.theme_picker.findData(choice))
+        self.theme_picker.currentIndexChanged.connect(self.change_theme)
+        al.addWidget(self.theme_picker)
+        lay.addWidget(appearance)
         lay.addStretch()
         return p
+
+    def change_theme(self, index):
+        choice = self.theme_picker.itemData(index)
+        if choice not in ("system", "light", "dark"):
+            return
+        settings = self.controller.settings()
+        previous = normalize_preference(settings.get("theme"))
+        if choice == previous:
+            return
+        try:
+            self.controller.save_settings(
+                {
+                    "motion": settings.get("motion", True),
+                    "autoconnect": settings.get("autoconnect", False),
+                    "theme": choice,
+                }
+            )
+        except Exception:
+            self.theme_picker.blockSignals(True)
+            self.theme_picker.setCurrentIndex(self.theme_picker.findData(previous))
+            self.theme_picker.blockSignals(False)
+            QMessageBox.warning(
+                self,
+                "Không lưu được giao diện",
+                "Không thể lưu thay đổi giao diện. Cài đặt trước đó được giữ nguyên.",
+            )
+            return
+        apply_theme(QApplication.instance(), choice)
+        self._update_window_chrome()
+        self.refresh()
 
     def navigate(self, index):
         self.stack.setCurrentIndex(index)
@@ -833,18 +883,21 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
 
         QDesktopServices.openUrl(QUrl(url))
 
-    def showEvent(self, event):
-        super().showEvent(event)
+    def _update_window_chrome(self):
         if os.name == "nt":
             try:
                 import ctypes
 
-                value = ctypes.c_int(1)
+                value = ctypes.c_int(1 if current_theme().name == "dark" else 0)
                 ctypes.windll.dwmapi.DwmSetWindowAttribute(
                     int(self.winId()), 20, ctypes.byref(value), ctypes.sizeof(value)
                 )
             except Exception:
-                pass  # DWM styling is cosmetic and may be unsupported.
+                pass  # DWM styling is cosmetic and must never block the UI.
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._update_window_chrome()
 
     def closeEvent(self, event):
         if getattr(self, "_keep_in_tray", False) and not getattr(
@@ -880,17 +933,9 @@ def make_app():
     app.setOrganizationName("UniversalDesktopBridge")
     app.setStyle(QStyleFactory.create("Fusion"))
     app.setFont(QFont("Segoe UI", 10))
-    app.setStyleSheet(STYLE)
     app.setProperty("motion", True)
-    palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor(BG))
-    palette.setColor(QPalette.ColorRole.Base, QColor(BG))
-    palette.setColor(QPalette.ColorRole.Text, QColor(TEXT))
-    palette.setColor(QPalette.ColorRole.WindowText, QColor(TEXT))
-    palette.setColor(QPalette.ColorRole.Button, QColor(PANEL))
-    palette.setColor(QPalette.ColorRole.ButtonText, QColor(TEXT))
-    palette.setColor(QPalette.ColorRole.Highlight, QColor("#28483f"))
-    app.setPalette(palette)
+    # Deterministic default for synthetic Qt tests; run() applies user settings.
+    apply_theme(app, "dark")
     return app
 
 
@@ -920,6 +965,7 @@ def run(home: Path, start_tunnel=False, screenshot=None):
     controller = DesktopController(home)
     settings = controller.settings()
     app.setProperty("motion", settings.get("motion", True))
+    apply_theme(app, settings.get("theme", "system"))
     controller.start_host()
     window = MainWindow(home, controller)
     # The full manager remains the fallback when a tray cannot be reached.

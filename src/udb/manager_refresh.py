@@ -46,6 +46,9 @@ class ManagerRefreshMixin:
                     self.computer_grant_detail.setText(
                         "Không xác minh được quyền Windows; xem kiểm tra cục bộ."
                     )
+                    self.security_observed.setText(
+                        "Kiểm tra quyền Windows thất bại · Chưa xác minh."
+                    )
                 else:
                     errors.append(name + ": " + str(exc))
                 if name == "Máy tính":

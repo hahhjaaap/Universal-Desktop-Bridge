@@ -1,14 +1,32 @@
 """Native UIA patterns on one Job-owned disposable WPF form; no owner grant."""
 
+import ctypes
 import json
 import os
 import time
 import uuid
+from ctypes import wintypes
 from pathlib import Path
 
 import pytest
 
 pytestmark = pytest.mark.skipif(os.name != "nt", reason="Native Windows UIA fixture")
+
+
+class _LastInputInfo(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.UINT), ("dwTime", wintypes.DWORD)]
+
+
+def _last_input_tick():
+    info = _LastInputInfo()
+    info.cbSize = ctypes.sizeof(info)
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    get_last_input_info = user32.GetLastInputInfo
+    get_last_input_info.argtypes = [ctypes.POINTER(_LastInputInfo)]
+    get_last_input_info.restype = wintypes.BOOL
+    if not get_last_input_info(ctypes.byref(info)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return info.dwTime
 
 
 def test_native_control_patterns_on_one_owned_window(tmp_path, monkeypatch):
@@ -79,6 +97,7 @@ def test_native_control_patterns_on_one_owned_window(tmp_path, monkeypatch):
                 raise
 
         cursor, foreground = win32gui.GetCursorPos(), win32gui.GetForegroundWindow()
+        last_input = _last_input_tick()
         tree = action("snapshot")["elements"]
         assert any(
             e.get("automation_id") == "Choice" and "Toggle" in e.get("patterns", [])
@@ -109,12 +128,17 @@ def test_native_control_patterns_on_one_owned_window(tmp_path, monkeypatch):
         assert action("expand", automation_id="Details")["expanded"]
         assert action("collapse", automation_id="Details")["expanded"] is False
         assert action("scroll_into_view", automation_id="Row19")["offscreen"] is False
-        assert win32gui.GetCursorPos() == cursor
         closed = action("close_window", wait_ms=1000)
         assert (
             closed["requested"]
             and closed["forced"] is False
             and closed["closed_observed"]
         )
+        if _last_input_tick() != last_input:
+            pytest.skip(
+                "Physical user input occurred during the UIA fixture; "
+                "cursor invariance cannot be isolated on this desktop."
+            )
+        assert win32gui.GetCursorPos() == cursor
     finally:
         process.close()

@@ -4,7 +4,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$Exe,
-    [string]$Home = (Join-Path $env:LOCALAPPDATA 'UniversalDesktopBridge'),
+    [string]$DataHome = (Join-Path $env:LOCALAPPDATA 'UniversalDesktopBridge'),
     [string]$ShortcutDir = (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs')
 )
 $ErrorActionPreference = 'Stop'
@@ -37,7 +37,7 @@ if ((Test-Path -LiteralPath $link) -and $shortcut.Description -ne 'UDB-managed S
     throw 'The existing shortcut is not UDB-managed; nothing was overwritten.'
 }
 $shortcut.TargetPath = $target
-$shortcut.Arguments = '--home "' + ([IO.Path]::GetFullPath($Home)) + '" gui'
+$shortcut.Arguments = '--home "' + ([IO.Path]::GetFullPath($DataHome)) + '" gui'
 $shortcut.WorkingDirectory = [IO.Path]::GetDirectoryName($target)
 $shortcut.IconLocation = $target + ',0'
 $shortcut.Description = 'UDB-managed Start Menu shortcut'

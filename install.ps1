@@ -136,7 +136,7 @@ function Set-ActiveRelease($Record,$Old) {
         throw 'Activation failed; previous installation retained. Run udb doctor.'
     }
 }
-function Register-UdbStartMenu([string]$Image,[string]$Home) {
+function Register-UdbStartMenu([string]$Image,[string]$DataDirectory) {
     # Per-user application search shortcut; no elevation, startup task or grant.
     # Never overwrite a link that was not originally created by UDB.
     if (!$env:APPDATA) { throw 'APPDATA is not configured.' }
@@ -149,7 +149,7 @@ function Register-UdbStartMenu([string]$Image,[string]$Home) {
         throw 'Existing shortcut belongs to another application; preserved.'
     }
     $shortcut.TargetPath = (Assert-LocalPath $Image)
-    $shortcut.Arguments = '--home "' + $Home + '" gui'
+    $shortcut.Arguments = '--home "' + $DataDirectory + '" gui'
     $shortcut.WorkingDirectory = [IO.Path]::GetDirectoryName($Image)
     $shortcut.IconLocation = $Image + ',0'
     $shortcut.Description = 'UDB-managed Start Menu shortcut'

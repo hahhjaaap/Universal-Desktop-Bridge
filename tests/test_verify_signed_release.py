@@ -23,7 +23,11 @@ def test_valid_signature_must_match_exact_pinned_certificate():
         "SignerCertificate": {"Thumbprint": expected.lower(), "Subject": "Example"},
     }
     assert signature_is_trusted(signed, expected)
-    assert not signature_is_trusted({"Status": 2, "SignerCertificate": signed["SignerCertificate"]}, expected)
-    assert not signature_is_trusted({"Status": 0, "SignerCertificate": {"Thumbprint": "22" * 20}}, expected)
+    assert not signature_is_trusted(
+        {"Status": 2, "SignerCertificate": signed["SignerCertificate"]}, expected
+    )
+    assert not signature_is_trusted(
+        {"Status": 0, "SignerCertificate": {"Thumbprint": "22" * 20}}, expected
+    )
     assert not signature_is_trusted({"Status": 0, "SignerCertificate": None}, expected)
     assert not signature_is_trusted({}, expected)

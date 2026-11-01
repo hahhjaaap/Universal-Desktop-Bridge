@@ -159,6 +159,7 @@ class ConnectionDialog(QDialog):
                 {
                     "motion": self.motion.isChecked(),
                     "autoconnect": self.auto.isChecked(),
+                    "theme": self.controller.settings().get("theme", "system"),
                 }
             )
             QApplication.instance().setProperty("motion", self.motion.isChecked())

@@ -1,15 +1,32 @@
 # UDB Enterprise Desktop UI — design, security and delivery roadmap
 
-**Status:** proposal only — no GUI behavior or permission changes in this document.
-**Baseline:** UDB `main` 0.10.1 (2026-11-01); published Windows installer v0.10.0.
+**Status (2026-11-01):** incremental implementation underway in source; the full enterprise GUI and hardening plan remain **unfinished**.
+**Baseline:** UDB `main` 0.10.1; latest published Windows installer v0.10.0. GUI changes merged after that release do **not** update the installer.
 **Target:** a polished Windows desktop product with verifiable controls, not an AI-styled dashboard.
+
+### Implementation ledger (source, not released installer)
+
+| Slice | Code status | Evidence / boundary |
+| --- | --- | --- |
+| Architecture/roadmap | Merged PR #41 | Planning document and security requirements |
+| Appearance foundation | Merged PR #42 | Strict `system`/`light`/`dark` palette, allow-listed local persistence, visual/contrast regressions |
+| Collapsible navigation | Implemented in the navigation follow-up, pending integration/verification in this document's baseline | 200 px/72 px sidebar, six existing routes and accessible labels |
+| New dashboard / complete enterprise shell | Not implemented | No claimed task percentages or multi-machine router |
+| Advanced security center and signed release | Not implemented | Existing owner-only approvals retained; supply-chain work remains separate |
+
+See [Desktop GUI user guide](gui-user-guide.md) for current behavior and
+[Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases)
+for shipped installer status.
+
+The baseline inventory below is **historical**, recorded before the GUI
+foundation PRs. Do not treat every item in that inventory as current code.
 
 ## 1. Grounded baseline
 
-Existing code and behaviors to preserve:
+Pre-redesign code and behaviors identified for preservation:
 
-- `src/udb/manager.py`: six stacked sections (Projects, AI Permissions, Jobs, Protection, Connection, Computer), fixed 200 px sidebar, 1220×820 default / 940×640 minimum size, 1500 ms refresh timer.
-- `src/udb/manager_widgets.py`: single hard-coded dark QSS theme; custom-painted `MotionButton`; `StatusPill`; Qt accessibility names partially present.
+- `src/udb/manager.py`: six stacked sections (Projects, AI Permissions, Jobs, Protection, Connection, Computer), original fixed 200 px sidebar (now 200/72 px collapsible in source), 1220×820 default / 940×640 minimum size, 1500 ms refresh timer.
+- `src/udb/manager_widgets.py`: original hard-coded dark QSS theme (superseded in source by `ui_theme.py` light/dark tokens); custom-painted `MotionButton`; `StatusPill`; accessibility labels are evolving.
 - `src/udb/manager_quick.py`: compact 480×670 controls, tray, local pause, browser handoff, recent activity. It is not a full task progress monitor.
 - `src/udb/manager_dialogs.py`: local-only approval with complete content/diff tabs, explicit checkbox, second local confirmation and expiry. Never weaken these checks to simplify UX.
 - `src/udb/manager_host.py`, `manager_refresh.py`: host/workspace controls and status polling; current local/tunnel readiness is not proof of real ChatGPT end-to-end connectivity.
@@ -23,7 +40,7 @@ Visual direction: restrained Windows 11 Fluent-inspired enterprise desktop softw
 
 ### Main shell
 
-- Desktop-native title bar and window controls; 240 px expanded / 68 px collapsed navigation; content region and contextual right-side details drawer.
+- Desktop-native title bar and window controls; **current implementation uses 200 px expanded / 72 px collapsed navigation**. A broader layout refactor with a contextual right-side details drawer is still proposed.
 - Persistent title/header: app name, **verified target machine identity** (when available), clearly separated local agent / tunnel / ChatGPT RPC states, action to pause local Windows input.
 - Do not show green Connected based on tunnel status alone; show `unknown` or `not checked` for missing RPC evidence.
 - Pages: Overview, Activity & Jobs, Computers & Sessions, Projects & Files, Permissions & Approvals, Security & Audit, Connections & Devices, Settings. Existing six sections may be migrated incrementally using stable adapters.
@@ -42,7 +59,7 @@ Visual direction: restrained Windows 11 Fluent-inspired enterprise desktop softw
 
 ## 3. Theme and component system
 
-Implement `ui/theme.py`, `ui/tokens.py`, `ui/components/`, `ui/viewmodels/` under canonical `src/udb/`, or equivalent minimal modules compatible with packaging.
+Theme tokens and Qt palette support are now implemented in canonical `src/udb/ui_theme.py`, with theme-aware widgets under `manager_widgets.py`. Future shared components and read-only viewmodels may be split into additional modules, but must remain compatible with packaging and backend security boundaries.
 
 - Tokens: surfaces/text/borders/focus, semantic states, spacing/radius/typography/elevation/motion. Example palette: background `#F5F7FA`, dark background `#101828`, primary `#2D6CDF`, dark surface `#253349`; **verify actual contrast before finalizing**.
 - Typography: Segoe UI Variable when installed, Segoe UI fallback; localized text at 100–200% DPI and Windows text scaling. Do not download or distribute font binaries.

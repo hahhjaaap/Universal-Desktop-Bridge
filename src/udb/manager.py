@@ -49,6 +49,7 @@ from .manager_widgets import (
     DiffHighlighter,
     MotionButton,
     StatusBand,
+    StatusPill,
     Worker,
     empty_state,
     icon,

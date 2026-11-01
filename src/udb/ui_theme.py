@@ -227,6 +227,7 @@ def apply_theme(app, preference: object = "system") -> Theme:
     app.setStyleSheet(stylesheet(theme))
     if not getattr(app, "_udb_theme_hook_installed", False):
         try:
+
             def on_color_scheme_changed(*_):
                 if app.property("udb_theme_preference") != "system":
                     return

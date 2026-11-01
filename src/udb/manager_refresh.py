@@ -290,7 +290,13 @@ class ManagerRefreshMixin:
         self.approval_empty.setVisible(not rows)
         self.approval_review.setEnabled(bool(rows))
         self.review_button.setEnabled(bool(rows))
-        self.nav_buttons[1].setText("Quyền AI" + (f"  {len(rows)}" if rows else ""))
+        permission_text = "Quyền AI" + (f"  {len(rows)}" if rows else "")
+        permission_nav = self.nav_buttons[1]
+        permission_nav.setText(
+            "" if getattr(self, "_sidebar_compact", False) else permission_text
+        )
+        permission_nav.setAccessibleName(permission_text)
+        permission_nav.setToolTip(permission_text)
 
     def _refresh_jobs(self):
         with self.agent.connect() as c:

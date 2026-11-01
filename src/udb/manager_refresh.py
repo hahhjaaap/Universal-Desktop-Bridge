@@ -419,8 +419,11 @@ class ManagerRefreshMixin:
                 if jobs and not self.jobs.selectedItems():
                     self.jobs.setCurrentItem(self.jobs.topLevelItem(0))
         self.jobs.setVisible(bool(jobs))
-        self.job_tabs.setVisible(bool(jobs))
-        self.jobs_empty.setVisible(not jobs)
+        # MCP activity exists independently of Sandbox/background job records.
+        self.job_tabs.setVisible(True)
+        self.jobs_empty.setVisible(
+            not jobs and self.activity_timeline.topLevelItemCount() == 0
+        )
         if not jobs:
             self.job_output.clear()
             self.job_script.clear()
@@ -439,6 +442,7 @@ class ManagerRefreshMixin:
         except (OSError, ValueError):
             self.activity_timeline.clear()
             self.activity_signature = None
+            self.jobs_empty.setVisible(self.jobs.topLevelItemCount() == 0)
             return
         signature = tuple(
             (
@@ -452,6 +456,9 @@ class ManagerRefreshMixin:
         if signature == self.activity_signature:
             return
         self.activity_signature = signature
+        self.jobs_empty.setVisible(
+            self.jobs.topLevelItemCount() == 0 and not events
+        )
         with QSignalBlocker(self.activity_timeline):
             self.activity_timeline.clear()
             for event in events:

@@ -401,4 +401,8 @@ def test_failed_health_refresh_clears_stale_green_status(manager, monkeypatch):
     assert window.tunnel_health._status == ("Chưa xác định", "neutral")
     assert window._connection_ready is False
     assert "Không đọc được tunnel" in window.status_label.text()
+    from udb.ui_theme import current_theme
+
+    assert current_theme().muted in window.status_label.styleSheet()
+    assert not window.connect_button.isEnabled()
     assert not (window.agent.state / "computer-access.dpapi").exists()

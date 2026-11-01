@@ -45,6 +45,12 @@ class ManagerRefreshMixin:
             self.tunnel_health.setToolTip(indicator.detail)
             self._connection_ready = False
             self.status_label.setText("●  Không đọc được tunnel")
+            theme = current_theme()
+            self.status_label.setStyleSheet(
+                f"color:{theme.muted}; background:{theme.raised};"
+                " border-radius:9px; padding:4px 10px;"
+            )
+            self.connect_button.setEnabled(False)
             self.connection_hint.setText(
                 "Chưa xác minh kết nối mới; thử kiểm tra lại từ ChatGPT."
             )

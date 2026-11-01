@@ -4,7 +4,7 @@
 
 **Tiếng Việt:** UDB kết nối trợ lý AI với máy tính Windows theo quyền do chủ máy cấp. Hỗ trợ thao tác tệp, terminal, ứng dụng, trình duyệt riêng biệt và rà soát hóa đơn Excel. **Không tự cấp quyền, không tự kê khai thuế, không tự sửa dữ liệu kế toán gốc.**
 
-> **Release status (verified 2026-11-01):** The `main` source version is **0.10.1**, while the latest published stable Windows installer is **v0.10.0**. Source branches and draft pull requests are **not** installed by the release installer. Always check [Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases) and the intended commit before updating. Tool counts are derived at runtime; do not infer a tool count from a README snapshot.
+> **Source vs release (updated 2026-11-01):** The `main` source version is **0.10.1**, while the latest published stable Windows installer is **v0.10.0**. Source now includes a light/dark/system GUI appearance foundation and collapsible navigation, but **these changes are not part of the published v0.10.0 installer**. A merged PR is not a Windows release. Always inspect [Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases), the installed `udb --version`, and the intended commit before updating. Tool counts are derived at runtime, not from README snapshots.
 
 ## What UDB does
 
@@ -182,27 +182,53 @@ Existing `virtual_pointer` move/click actions remain bounded Win32
 messages; compatibility depends on the application, and an independent
 visual cursor is **not** a second hardware/system mouse.
 
-## Interface and visual checks
+## Desktop interface — source GUI (2026-11-01)
 
-`udb gui` opens a compact control panel when a system tray is available. It keeps
-connection, Windows pause/resume, browser handoff and background-session closure
-together, with recent metadata-only tool activity. Closing its windows returns
-to the tray; use **Thoát UDB** in the tray menu to stop the GUI-owned runtime.
-Without a tray, the full manager stays reachable; **Thu gọn** opens the small
-panel and closing it returns to the manager. See [Compact controls](docs/compact-controls.md).
+`udb gui` opens a compact native control panel when a system tray is
+available. It offers connection, local Windows pause/resume, browser login
+handoff, background-session closure and recent metadata-only activity.
+Closing its windows returns to the tray; **Thoát UDB** in the tray menu
+explicitly stops the GUI-owned runtime. Without a tray the full manager is
+available. See [Compact controls](docs/compact-controls.md).
 
-The full manager opens on **Trợ lý trên máy**, with pinned pause/resume controls,
-separate browser/session cards and expandable resource details. Long content
-scrolls without hiding the pause controls. A connected client is not displayed
-as active work; the UI distinguishes readiness, local pause and owner handoff.
-Browser and native cursor decoration share a quiet mint/charcoal palette.
+The **full manager** retains six pages — **Dự án**, **Quyền AI**,
+**Tiến trình**, **Bảo vệ**, **Kết nối** and **Máy tính**. Its sidebar can be
+collapsed from 200 px to 72 px with **Thu gọn menu** and expanded again;
+tooltips and accessible route names remain available when compact. This
+selection is not persisted between launches.
 
-To render the actual Qt UI with disposable synthetic data:
-`python -c "from udb.manager import self_test; self_test('ui-previews')"`.
-For headless Linux, install `PySide6-Essentials==6.10.2` and set
-`QT_QPA_PLATFORM=offscreen`. To render and check the
-actual Windows pointer without capturing the user's desktop, run
-`python tools/check_windows_workflows.py --pointer-preview PATH.png` on Windows.
+Under **Kết nối → Giao diện ứng dụng**, select **Theo hệ thống Windows**,
+**Sáng**, or **Tối**. Appearance updates immediately in the Qt application and
+is saved to the user's local, allow-listed `gui.json` preferences; the
+Windows-derived choice is evaluated when selected or at startup, rather
+than subscribing to every live Windows theme change. Theme switching never
+changes computer permissions, credentials or MCP access. The desktop shell
+uses shared Qt theme tokens and visible keyboard focus states, but it has not
+yet completed all enterprise GUI / accessibility milestones.
+
+The **Tunnel đã kết nối** indicator means the local tunnel is ready, **not**
+that ChatGPT has verified MCP tool discovery and invocation. The emergency
+Windows pause controls stay distinct from background browser and job lifecycle.
+For the complete user-facing behavior and security limitations, read
+[Desktop GUI guide](docs/gui-user-guide.md) and the
+[enterprise UI/security roadmap](docs/gui-enterprise-roadmap.md).
+
+Developer-only disposable visual review:
+
+```powershell
+python -m ruff check src tools tests
+python -m ruff format --check .
+python -m pytest tests/test_ui_theme.py tests/test_manager_ui.py tests/test_quick_controls.py
+python -c "from udb.manager import self_test; self_test('ui-previews')"
+```
+
+The GUI self-test captures six existing pages under light/dark palettes and
+does not approve any file mutations. For headless Linux install
+`PySide6-Essentials==6.10.2` and set `QT_QPA_PLATFORM=offscreen`.
+For native Windows pointer preview use
+`python tools/check_windows_workflows.py --pointer-preview PATH.png`.
+Passing CI and screenshots does not replace real Windows accessibility or
+security assessment. The published v0.10.0 installer is still the old release.
 
 ## Build from source (developers)
 
@@ -273,7 +299,7 @@ Compatibility launchers and import aliases are intentionally retained. Generated
 - Source work, document reviews and browser pages can contain untrusted content. Review outputs before acting.
 - This project is a local bridge, **not ChatGPT Work**, a tax-compliance service or an autonomous account administrator.
 
-**Documentation:** [Architecture](ARCHITECTURE.md) · [Accounting Work Tools](docs/accounting-worktools.md) · [Example configuration](udb.example.toml) · [MCP example](MCP_CONFIGURATION.example.json) · [Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases)
+**Documentation:** [Desktop GUI](docs/gui-user-guide.md) · [Enterprise GUI roadmap](docs/gui-enterprise-roadmap.md) · [Architecture](ARCHITECTURE.md) · [Accounting Work Tools](docs/accounting-worktools.md) · [Example configuration](udb.example.toml) · [MCP example](MCP_CONFIGURATION.example.json) · [Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases)
 
 **License:** [MIT](LICENSE). Third-party components retain their own licenses.
 

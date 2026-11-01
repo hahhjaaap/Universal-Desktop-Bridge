@@ -95,3 +95,23 @@ def test_live_qt_theme_switch_updates_palette_and_badges():
         badge.close()
         button.close()
         apply_theme(app, "dark")
+
+
+def test_system_color_event_never_overrides_forced_theme():
+    import pytest
+
+    pytest.importorskip("PySide6")
+    from udb.manager import make_app
+    from udb.ui_theme import apply_theme, current_theme
+
+    app = make_app()
+    apply_theme(app, "dark")
+    callback = getattr(app, "_udb_color_scheme_callback", None)
+    if callback is not None:
+        callback()
+    assert current_theme().name == "dark"
+    apply_theme(app, "system")
+    if callback is not None:
+        callback()
+    assert app.property("udb_theme_preference") == "system"
+    apply_theme(app, "dark")

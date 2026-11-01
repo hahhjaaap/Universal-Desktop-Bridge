@@ -80,6 +80,9 @@ checks; never route an unavailable remote command to the local machine.
   pause and background-session controls.
 - `udb.manager_dialogs`: local source browser, connection settings, and
   owner-only approval dialogs; no remote approval API.
+- `udb.ui_jobs`: bounded, purely local task metadata filtering and
+  fail-closed status grouping. Search excludes scripts, logs and document text;
+  filtering never changes stored jobs or permissions.
 - `udb.ui_connection`: pure fail-closed read-only Agent/Tunnel/ChatGPT health
   viewmodels. Only explicit local and tunnel signals can be marked ready;
   the GUI cannot assert ChatGPT tool discovery without a real invocation.
@@ -181,8 +184,8 @@ indicator is not end-to-end proof that ChatGPT has discovered UDB's tools.
 
 The 200 px/72 px navigation preference is per window and not persisted.
 The theme preference is persisted to bounded local `gui.json`, applying
-the Qt/Windows system color scheme at launch or when reselected.
-The code does not continuously listen for every Windows color-scheme event;
+the Qt/Windows system color scheme at launch and when supported Qt system
+color-scheme change events arrive. Unavailable signal backends use startup detection;
 the remaining system-theme and accessibility QA is documented in
 [Desktop GUI guide](docs/gui-user-guide.md).
 

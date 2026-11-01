@@ -124,6 +124,7 @@ QWidget { color:$text; font-family:"Segoe UI"; font-size:14px; }
 QMainWindow, QDialog { background:$bg; }
 QWidget#Root, QWidget#Page, QWidget#PageHeader, QStackedWidget { background:$bg; }
 QFrame#Sidebar { background:$panel; border-right:1px solid $line; }
+QFrame#AppHeader { background:$panel; border-bottom:1px solid $line; }
 QFrame#Panel { background:$panel; border:1px solid $line; border-radius:14px; }
 QFrame#Hero { background:$hero; border:1px solid $hero_line; border-radius:14px; }
 QFrame#Footer { background:$bg; border-top:1px solid $line; }
@@ -224,6 +225,26 @@ def apply_theme(app, preference: object = "system") -> Theme:
         p.setColor(role, QColor(color))
     app.setPalette(p)
     app.setStyleSheet(stylesheet(theme))
+    if not getattr(app, "_udb_theme_hook_installed", False):
+        try:
+
+            def on_color_scheme_changed(*_):
+                if app.property("udb_theme_preference") != "system":
+                    return
+                apply_theme(app, "system")
+                for window in app.topLevelWidgets():
+                    refresh_titlebar = getattr(window, "_update_window_chrome", None)
+                    if callable(refresh_titlebar):
+                        refresh_titlebar()
+
+            QGuiApplication.styleHints().colorSchemeChanged.connect(
+                on_color_scheme_changed
+            )
+            app._udb_theme_hook_installed = True
+            app._udb_color_scheme_callback = on_color_scheme_changed
+        except (AttributeError, RuntimeError):
+            # Older/unavailable native platforms still use startup detection.
+            pass
     # Custom painted buttons, badges and status components use the same palette.
     for widget in app.allWidgets():
         refresh = getattr(widget, "refresh_theme", None)

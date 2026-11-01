@@ -442,3 +442,177 @@ def test_security_inventory_fails_closed_without_changing_owner_permissions(
     assert "không đọc được" in window.footer_status.text()
     assert window.desktop_pause_button.isEnabled()
     assert not (window.agent.state / "computer-access.dpapi").exists()
+
+
+def test_activity_filters_update_without_touching_job_contents(manager):
+    import json
+
+    window, _ = manager
+    with window.agent.connect() as db:
+        for jid, status, project in (
+            ("1" * 32, "running", "alpha"),
+            ("2" * 32, "failed", "beta"),
+            ("3" * 32, "completed", "gamma"),
+        ):
+            db.execute(
+                "INSERT INTO jobs VALUES (?,?,?)",
+                (
+                    jid,
+                    status,
+                    json.dumps(
+                        {"project": project, "language": "python", "script": "SECRET"}
+                    ),
+                ),
+            )
+    window._refresh_jobs()
+    assert window.jobs.topLevelItemCount() == 3
+    window.job_group_filter.setCurrentText("Cần chú ý")
+    assert window.jobs.topLevelItemCount() == 1
+    assert window.jobs.topLevelItem(0).text(0) == "beta"
+    window.job_search.setText("alpha")
+    assert window.jobs.topLevelItemCount() == 0
+    assert "0/3" in window.job_filter_feedback.text()
+    window.job_search.setText("")
+    assert window.jobs.topLevelItemCount() == 1
+    window.job_group_filter.setCurrentText("Tất cả")
+    assert window.jobs.topLevelItemCount() == 3
+    assert window.agent.connect is not None
+    assert not (window.agent.state / "computer-access.dpapi").exists()
+
+
+def test_copy_safe_diagnostics_command_and_keyboard_shortcuts(manager):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QApplication
+
+    window, _ = manager
+    assert "Ctrl+3" not in window.controller.settings()
+    window.navigate(4)
+    button = next(
+        child
+        for child in window.stack.currentWidget().findChildren(
+            __import__("udb.manager_widgets", fromlist=["MotionButton"]).MotionButton
+        )
+        if child.accessibleName() == "Sao chép lệnh udb doctor --json"
+    )
+    button.click()
+    assert QApplication.clipboard().text() == "udb doctor --json"
+    window.navigate(5)
+    QTest.keyClick(window, Qt.Key.Key_3, Qt.KeyboardModifier.ControlModifier)
+    QApplication.processEvents()
+    assert window.stack.currentIndex() == 2
+    assert window.job_search.accessibleName() == "Tìm công việc theo thông tin"
+
+
+def test_activity_timeline_uses_only_presented_metadata(manager, monkeypatch):
+    window, _ = manager
+    events = [
+        {
+            "seq": 1,
+            "kind": "result",
+            "tool": "computer_files",
+            "status": "PASS",
+            "at": 0,
+            "details": {
+                "action": "read",
+                "content": "PRIVATE SECRET FROM FILE",
+            },
+        }
+    ]
+    monkeypatch.setattr(window.activity_feed, "poll", lambda: events)
+    window._refresh_activity()
+    assert window.activity_timeline.topLevelItemCount() == 1
+    row = window.activity_timeline.topLevelItem(0)
+    displayed = " ".join(row.text(i) for i in range(3))
+    assert "Tệp trên máy" in displayed
+    assert "Đã trả kết quả" in displayed
+    assert "PRIVATE SECRET" not in displayed
+    window._refresh_activity()
+    assert window.activity_timeline.topLevelItemCount() == 1
+    events[:] = []
+    window._refresh_activity()
+    assert window.activity_timeline.topLevelItemCount() == 0
+
+
+def test_persistent_app_header_tracks_navigation_not_remote_authorization(manager):
+    from PySide6.QtWidgets import QApplication
+
+    window, _ = manager
+    window.navigate(1)
+    assert window.header_title.text() == "Quyền AI"
+    window.navigate(2)
+    assert window.header_title.text() == "Tiến trình"
+    assert "ChatGPT" in window.header_connection.toolTip()
+    for width, height in ((940, 640), (1220, 820)):
+        window.resize(width, height)
+        QApplication.processEvents()
+        assert window.header_title.isVisible()
+        assert window.header_connection.isVisible()
+        assert window.header_connection.text().startswith("●  Tunnel:")
+    assert not (window.agent.state / "computer-access.dpapi").exists()
+
+
+def test_audit_export_never_contains_raw_payload_or_ids(manager, monkeypatch, tmp_path):
+    import json
+
+    from PySide6.QtWidgets import QFileDialog, QMessageBox
+
+    window, _ = manager
+    secret = "SENSITIVE_PAYLOAD"
+    event = {
+        "seq": 9,
+        "kind": "result",
+        "status": "PASS",
+        "tool": "computer_files",
+        "call_id": "SECRET_CALL_ID",
+        "at": 0,
+        "details": {"content": secret, "action": "read"},
+    }
+    monkeypatch.setattr(window.activity_feed, "poll", lambda: [event])
+    target = tmp_path / "owner-export.json"
+    monkeypatch.setattr(
+        QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Yes
+    )
+    monkeypatch.setattr(
+        QFileDialog, "getSaveFileName", lambda *a: (str(target), "JSON")
+    )
+    monkeypatch.setattr(QMessageBox, "information", lambda *a: None)
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a: None)
+    window.export_activity()
+    data = target.read_text(encoding="utf-8")
+    records = json.loads(data)
+    assert len(records) == 1
+    assert set(records[0]) == {"time", "tool", "state"}
+    assert records[0]["tool"].startswith("Tệp trên máy")
+    assert secret not in data
+    assert "SECRET_CALL_ID" not in data
+    # Exclusive creation must not overwrite an existing owner file.
+    target.write_text("OWNER KEEP", encoding="utf-8")
+    window.export_activity()
+    assert target.read_text(encoding="utf-8") == "OWNER KEEP"
+
+
+def test_mcp_activity_tab_stays_available_with_no_sandbox_jobs(manager, monkeypatch):
+    window, _ = manager
+    assert window.jobs.topLevelItemCount() == 0
+    monkeypatch.setattr(
+        window.activity_feed,
+        "poll",
+        lambda: [
+            {
+                "seq": 1,
+                "kind": "result",
+                "tool": "host_browser",
+                "status": "PASS",
+                "at": 0,
+                "details": {},
+            }
+        ],
+    )
+    window._refresh_activity()
+    window._refresh_jobs()
+    assert window.job_tabs.isVisible() is False  # Jobs page isn't active.
+    window.navigate(2)
+    assert window.job_tabs.isVisible()
+    assert window.activity_timeline.topLevelItemCount() == 1
+    assert not window.jobs_empty.isVisible()

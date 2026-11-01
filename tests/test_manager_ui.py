@@ -740,9 +740,7 @@ def test_reduced_motion_save_error_restores_previous_state(manager, monkeypatch)
     monkeypatch.setattr(
         window.controller, "save_settings", lambda *_: (_ for _ in ()).throw(OSError())
     )
-    monkeypatch.setattr(
-        QMessageBox, "warning", lambda *args: warnings.append(args[2])
-    )
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args: warnings.append(args[2]))
     window.reduce_motion.setChecked(True)
     assert not window.reduce_motion.isChecked()
     assert app.property("motion") == previous

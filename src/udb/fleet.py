@@ -23,6 +23,9 @@ from urllib.request import (
 
 ID_PATTERN = re.compile(r"[a-z][a-z0-9-]{1,31}")
 MAX_RESPONSE = 8 * 1024 * 1024
+# Fleet agents can wait up to 60 seconds for a backend reply. The hub must
+# allow more than that duration to avoid false timeouts during valid commands.
+REMOTE_TIMEOUT_SECONDS = 75
 READ_ONLY_TOOLS = frozenset(
     {
         "bridge_status",
@@ -208,7 +211,7 @@ class FleetRouter:
             HTTPSHandler(context=ssl.create_default_context()),
         )
         try:
-            with client.open(req, timeout=15) as response:
+            with client.open(req, timeout=REMOTE_TIMEOUT_SECONDS) as response:
                 if response.status != 200:
                     raise RuntimeError("Remote UDB unavailable")
                 raw = response.read(MAX_RESPONSE + 1)

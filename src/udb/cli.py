@@ -469,7 +469,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise ValueError("Fleet agent does not change owner access")
             from .fleet_agent import run_agent
 
-            return run_agent(settings.home, args.device_id, args.port, args.allow_control)
+            return run_agent(
+                settings.home, args.device_id, args.port, args.allow_control
+            )
         if action == "serve":
             if args.access:
                 raise ValueError("Owner activation is not an MCP operation")

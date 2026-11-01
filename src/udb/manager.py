@@ -152,7 +152,29 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         nav.addWidget(self.sidebar_version)
         body.addWidget(sidebar)
         self.stack = QStackedWidget()
-        body.addWidget(self.stack, 1)
+        content_column = QVBoxLayout()
+        content_column.setContentsMargins(0, 0, 0, 0)
+        content_column.setSpacing(0)
+        header = QFrame()
+        header.setObjectName("AppHeader")
+        header_row = QHBoxLayout(header)
+        header_row.setContentsMargins(26, 10, 26, 10)
+        header_row.setSpacing(14)
+        self.header_title = label("Máy tính", "H2")
+        self.header_title.setAccessibleName("Trang đang xem")
+        header_row.addWidget(self.header_title)
+        header_row.addStretch()
+        self.header_connection = StatusPill("Tunnel chưa kiểm tra", "neutral")
+        self.header_connection.setAccessibleDescription(
+            "Chỉ là trạng thái tunnel, không xác minh công cụ ChatGPT."
+        )
+        self.header_connection.setToolTip(
+            "Kết nối tunnel không xác minh ChatGPT đã gọi được công cụ."
+        )
+        header_row.addWidget(self.header_connection)
+        content_column.addWidget(header)
+        content_column.addWidget(self.stack, 1)
+        body.addLayout(content_column, 1)
         self.dashboard = self.build_dashboard()
         self.stack.addWidget(self.dashboard)
         self.stack.addWidget(self.build_approvals())
@@ -682,6 +704,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
 
     def navigate(self, index):
         self.stack.setCurrentIndex(index)
+        self.header_title.setText(self.nav_names[index])
         for i, btn in enumerate(self.nav_buttons):
             btn.selected(i == index)
         self.stack.currentWidget().updateGeometry()

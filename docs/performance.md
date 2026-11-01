@@ -78,3 +78,21 @@ per-scan time on an empty disposable directory. It is diagnostic, not a CI
 speed threshold: Windows filesystems, antivirus, actual MCP tunnel latency,
 and real application workloads must be measured separately. CI also continues
 to run the existing stdio RPC benchmark and full regression suite.
+
+## Per-request MCP response bookkeeping
+
+Each UDB subprocess RPC has one pending response slot. The transport now uses
+`queue.SimpleQueue` instead of the heavier bounded `queue.Queue(maxsize=1)`
+for this **single-delivery** slot. The reader removes the slot from its map
+before delivering a response, and both timeout and write failure still remove
+it. This changes neither the number of concurrent RPCs nor error/permission
+handling. The consolidated public tool names are also cached as a frozenset
+when discovery completes, avoiding a temporary set for virtual aliases such
+as `file_transfer` on each call.
+
+`tools/benchmark_hotpaths.py` now measures the two Python queue types
+side-by-side, in addition to the existing synthetic startup and inbox scans.
+The waiter microbenchmark excludes JSON parsing, network, subprocess I/O and
+backend processing. **Do not extrapolate queue-only speedups to UDB tool
+latency.** CI performance figures remain informational rather than speed
+thresholds; integration and permission regressions are required to pass.

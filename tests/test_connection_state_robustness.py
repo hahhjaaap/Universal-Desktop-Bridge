@@ -77,6 +77,7 @@ def test_gui_save_is_atomic_and_booleans_only(tmp_path):
 def test_new_connection_defaults_to_empty_mapping(tmp_path):
     assert desktop.DesktopController.config(controller_for(tmp_path)) == {}
 
+
 def test_symlinked_connection_never_changes_credentials(tmp_path, monkeypatch):
     real = tmp_path / "target.json"
     real.write_text('{"tunnel_id":"tunnel_' + "a" * 32 + '"}')

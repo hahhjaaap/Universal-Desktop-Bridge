@@ -96,6 +96,7 @@ def test_symlinked_connection_never_changes_credentials(tmp_path, monkeypatch):
             controller_for(tmp_path), "tunnel_" + "b" * 32, "SYNTHETIC_ONLY"
         )
 
+
 def test_legacy_manager_uses_same_bounded_tunnel_parser(tmp_path):
     pytest.importorskip("tkinter")
     from udb.manager_legacy import read_tunnel_config
@@ -105,4 +106,3 @@ def test_legacy_manager_uses_same_bounded_tunnel_parser(tmp_path):
     path.write_text(json.dumps({"tunnel_id": "a" * 5000}), encoding="utf-8")
     with pytest.raises(CommandError, match="size limit"):
         read_tunnel_config(tmp_path)
-

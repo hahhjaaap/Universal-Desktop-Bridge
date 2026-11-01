@@ -467,7 +467,17 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         )
         self.activity_timeline.setColumnWidth(0, 85)
         self.activity_timeline.setColumnWidth(1, 210)
-        self.job_tabs.addTab(self.activity_timeline, "Hoạt động MCP")
+        activity_panel = QWidget()
+        activity_layout = QVBoxLayout(activity_panel)
+        activity_layout.setContentsMargins(8, 8, 8, 8)
+        activity_layout.setSpacing(8)
+        activity_layout.addWidget(self.activity_timeline, 1)
+        self.activity_export_button = MotionButton(
+            "Xuất metadata đã ẩn thông tin nhạy cảm", "file"
+        )
+        self.activity_export_button.clicked.connect(self.export_activity)
+        activity_layout.addLayout(row(None, self.activity_export_button))
+        self.job_tabs.addTab(activity_panel, "Hoạt động MCP")
         lay.addWidget(self.job_tabs, 1)
         self.jobs_empty = empty_state(
             "Chưa có tác vụ",
@@ -701,6 +711,63 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.navigate(2)
         self.job_search.setFocus()
         self.job_search.selectAll()
+
+    def export_activity(self):
+        # Explicit local-only export: no raw log contents, script, paths or IDs.
+        from .activity_presenter import describe, event_state
+
+        try:
+            events = self.activity_feed.poll()
+        except (OSError, ValueError):
+            QMessageBox.warning(
+                self, "Chưa xuất được", "Không đọc được metadata hoạt động."
+            )
+            return
+        if not events:
+            QMessageBox.information(
+                self, "Không có dữ liệu", "Chưa có hoạt động nào để xuất."
+            )
+            return
+        consent = QMessageBox.question(
+            self,
+            "Xác nhận xuất nhật ký",
+            "Chỉ xuất tối đa 40 bản ghi: thời gian, tên công cụ và trạng thái. "
+            "Không xuất nội dung file, script, khóa hay ID phiên. Tiếp tục?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if consent != QMessageBox.StandardButton.Yes:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, "Lưu nhật ký UDB (metadata)", "udb-activity-redacted.json",
+            "JSON (*.json)"
+        )
+        if not destination:
+            return
+        records = [
+            {
+                "time": (
+                    time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(event["at"]))
+                    if event.get("at") and event["at"] > 0
+                    else "unknown"
+                ),
+                "tool": describe(event),
+                "state": event_state(event),
+            }
+            for event in events[:40]
+        ]
+        try:
+            with Path(destination).open("x", encoding="utf-8") as stream:
+                json.dump(records, stream, ensure_ascii=False, indent=2)
+                stream.write("\n")
+        except OSError:
+            QMessageBox.warning(
+                self, "Chưa xuất được", "Không thể tạo tệp mới hoặc tệp đã tồn tại."
+            )
+            return
+        QMessageBox.information(
+            self, "Đã tạo bản xuất", "Đã lưu metadata hoạt động đã lược bỏ dữ liệu."
+        )
 
     def navigate(self, index):
         self.stack.setCurrentIndex(index)

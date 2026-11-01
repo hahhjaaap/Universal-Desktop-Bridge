@@ -150,3 +150,36 @@ def test_agent_loopback_only_and_owner_control_denied():
         finally:
             server.shutdown()
             thread.join(timeout=5)
+
+def test_hub_timeout_exceeds_remote_backend_deadline(tmp_path, monkeypatch):
+    from udb import fleet as fleet_module
+
+    recorded = {}
+
+    class Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self, size):
+            assert size > 0
+            return json.dumps(
+                {"device_id": "pc-office", "result": {"content": []}}
+            ).encode("utf-8")
+
+    class Opener:
+        def open(self, request, timeout):
+            recorded["timeout"] = timeout
+            recorded["url"] = request.full_url
+            return Response()
+
+    monkeypatch.setattr(fleet_module, "build_opener", lambda *handlers: Opener())
+    controller = FleetRouter.from_home(make_home(tmp_path))
+    result = controller.invoke("pc-office", "bridge_status", {})
+    assert result == {"content": []}
+    assert recorded["timeout"] > 60
+    assert recorded["url"] == "https://pc-office.example.ts.net/v1/call"

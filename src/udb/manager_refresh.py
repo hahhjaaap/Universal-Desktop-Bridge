@@ -8,6 +8,7 @@ import time
 from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import QTreeWidgetItem
 
+from .activity_presenter import describe, event_state
 from .manager_job_refresh import should_reload_job_details
 from .manager_widgets import icon
 from .ui_jobs import job_metadata, visible_jobs
@@ -26,6 +27,7 @@ class ManagerRefreshMixin:
             ("Máy tính", self._refresh_host),
             ("Quyền AI", self._refresh_requests),
             ("Tiến trình", self._refresh_jobs),
+            ("Hoạt động", self._refresh_activity),
             ("Bảo mật", self._refresh_security),
         ):
             try:
@@ -426,6 +428,40 @@ class ManagerRefreshMixin:
             )
             if should_reload_job_details(jobs_changed, selected_status):
                 self.show_job()
+
+    def _refresh_activity(self):
+        try:
+            events = self.activity_feed.poll()
+        except (OSError, ValueError):
+            self.activity_timeline.clear()
+            self.activity_signature = None
+            return
+        signature = tuple(
+            (
+                row.get("seq"),
+                row.get("kind"),
+                row.get("status"),
+                row.get("tool"),
+            )
+            for row in events
+        )
+        if signature == self.activity_signature:
+            return
+        self.activity_signature = signature
+        with QSignalBlocker(self.activity_timeline):
+            self.activity_timeline.clear()
+            for event in events:
+                stamp = event.get("at")
+                clock = (
+                    time.strftime("%H:%M:%S", time.localtime(stamp))
+                    if isinstance(stamp, (int, float)) and stamp > 0
+                    else "—"
+                )
+                self.activity_timeline.addTopLevelItem(
+                    QTreeWidgetItem(
+                        [clock, describe(event), event_state(event)]
+                    )
+                )
 
     def _refresh_connection(self, source_auto_projects):
         status = self.controller.status()

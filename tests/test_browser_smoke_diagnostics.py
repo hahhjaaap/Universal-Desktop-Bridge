@@ -55,7 +55,9 @@ def test_diagnostics_resist_missing_or_invalid_observations():
 
         tabs = None
 
-    report = browser_smoke_failure(Broken(), stage="malicious-url", elapsed_ms=float("nan"))
+    report = browser_smoke_failure(
+        Broken(), stage="malicious-url", elapsed_ms=float("nan")
+    )
     assert report["stage"] == "unknown"
     assert report["elapsed_ms"] == 0
     assert report["owned_process_alive"] is None

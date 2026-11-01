@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import queue
 import statistics
 import tempfile
 import time
@@ -39,6 +40,22 @@ class DelayedBackend:
                 }
             }
         raise AssertionError("Unexpected synthetic RPC")
+
+
+def waiter_roundtrip_microbenchmark(iterations=20000):
+    """Measure only Python waiter bookkeeping; excludes pipe and tunnel I/O."""
+    results = {}
+    for name, cls in (("bounded", queue.Queue), ("simple", queue.SimpleQueue)):
+        samples = []
+        for _ in range(3):
+            started = time.perf_counter()
+            for _ in range(iterations):
+                waiter = cls(maxsize=1) if name == "bounded" else cls()
+                waiter.put(None)
+                assert waiter.get(timeout=1) is None
+            samples.append((time.perf_counter() - started) * 1_000_000 / iterations)
+        results[name] = round(statistics.median(samples), 5)
+    return results
 
 
 def run(samples=15, backend_delay_ms=15):
@@ -73,6 +90,7 @@ def run(samples=15, backend_delay_ms=15):
         glob_ms = measure(lambda: sorted(folder.glob("*.json")))
         listdir_ms = measure(lambda: pending_inbox_commands(folder))
     a, b = statistics.median(sequential_ms), statistics.median(parallel_ms)
+    waiter = waiter_roundtrip_microbenchmark()
     return {
         "scope": "synthetic, no network/ChatGPT latency",
         "samples": samples,
@@ -82,6 +100,8 @@ def run(samples=15, backend_delay_ms=15):
         "tool_discovery_ratio": round(a / max(b, 0.000001), 3),
         "empty_inbox_glob_ms_per_scan": round(glob_ms, 5),
         "empty_inbox_listdir_ms_per_scan": round(listdir_ms, 5),
+        "rpc_waiter_bounded_queue_us_per_roundtrip": waiter["bounded"],
+        "rpc_waiter_simple_queue_us_per_roundtrip": waiter["simple"],
         "os": os.name,
     }
 

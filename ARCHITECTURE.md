@@ -39,6 +39,23 @@ names that lack a handler, unexpected handlers and duplicate schemas.
 `udb.proxy` owns backend routing, concurrency and response normalization.
 Keep this separate from file permissions and owner approvals.
 
+## Connection identity and Multi-PC status
+
+The released source's `udb.desktop` starts a tunnel client using one locally
+configured `tunnel_id`. That identifies an MCP endpoint, **not** an arbitrary
+set of Windows agents. `udb.proxy` routes tool calls to its own machine's
+core and companion workers; it has no built-in per-call `computer_id` router
+on `main`. A ChatGPT account using two computers does not by itself alter
+that routing boundary.
+
+The independent [draft Multi-PC PR #34](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/34)
+prototypes a hub, explicit device IDs, loopback-only agents and private
+Tailscale transport. It must remain a separate, opt-in review item until
+Windows CI, secure deployment and a two-network end-to-end test are verified.
+Do not claim that a feature on a draft branch is installed with the latest
+published release. Preserve existing per-host owner grants and protected-path
+checks; never route an unavailable remote command to the local machine.
+
 ## Core policy and approval queues
 
 - `udb.core.Agent`: stable public entry point for project registration, path

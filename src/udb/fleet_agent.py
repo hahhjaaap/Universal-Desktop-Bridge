@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import hmac
 import json
-import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 

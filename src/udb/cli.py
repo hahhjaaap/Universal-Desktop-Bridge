@@ -95,6 +95,7 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         "gui",
         "runtime",
         "serve",
+        "fleet-agent",
         "status",
         "logs",
         "stop",
@@ -193,6 +194,10 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
             command.add_argument(
                 "--assets", help="Inventoried public runtime helper directory"
             )
+        if name == "fleet-agent":
+            command.add_argument("--device-id", required=True)
+            command.add_argument("--port", type=int, default=18743)
+            command.add_argument("--allow-control", action="store_true")
         if name == "serve":
             command.add_argument(
                 "--stdio", action="store_true", help="stdio is the default transport"
@@ -459,6 +464,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             from .source_access import command
 
             return command(settings.home, args.path, revoke=action == "revoke-source")
+        if action == "fleet-agent":
+            if args.access:
+                raise ValueError("Fleet agent does not change owner access")
+            from .fleet_agent import run_agent
+
+            return run_agent(settings.home, args.device_id, args.port, args.allow_control)
         if action == "serve":
             if args.access:
                 raise ValueError("Owner activation is not an MCP operation")

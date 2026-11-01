@@ -75,3 +75,21 @@ def test_gui_save_is_atomic_and_booleans_only(tmp_path):
 
 def test_new_connection_defaults_to_empty_mapping(tmp_path):
     assert desktop.DesktopController.config(controller_for(tmp_path)) == {}
+
+def test_symlinked_connection_never_changes_credentials(tmp_path, monkeypatch):
+    real = tmp_path / "target.json"
+    real.write_text('{"tunnel_id":"tunnel_' + "a" * 32 + '"}')
+    link = tmp_path / "connection.json"
+    try:
+        link.symlink_to(real)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlink creation unavailable")
+    monkeypatch.setattr(
+        desktop,
+        "save_key",
+        lambda *_args: pytest.fail("Credentials changed before state validation"),
+    )
+    with pytest.raises(Exception):
+        desktop.DesktopController.configure(
+            controller_for(tmp_path), "tunnel_" + "b" * 32, "SYNTHETIC_ONLY"
+        )

@@ -2,7 +2,6 @@
 
 import os
 import threading
-from pathlib import Path
 
 from udb.host_service import pending_inbox_commands
 from udb.proxy import UnifiedProxy

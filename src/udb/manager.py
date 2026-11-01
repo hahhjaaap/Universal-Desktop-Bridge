@@ -596,6 +596,47 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             "Kết nối & cài đặt",
             "Kết nối ChatGPT Chat qua tunnel riêng. API key không xuất hiện trong giao diện hay log.",
         )
+        setup = panel()
+        setup_layout = QVBoxLayout(setup)
+        setup_layout.setContentsMargins(23, 20, 23, 20)
+        setup_layout.setSpacing(10)
+        setup_layout.addWidget(label("Bắt đầu với UDB · 3 bước", "H2"))
+        setup_layout.addWidget(
+            label(
+                "Đây là trạng thái từng bước, không phải một nút cấp quyền AI. "
+                "Chỉ chủ máy mới có thể phê duyệt thao tác cần quyền.",
+                "Muted",
+                True,
+            )
+        )
+        self.setup_agent_health = StatusPill("Chưa kiểm tra", "neutral")
+        self.setup_tunnel_health = StatusPill("Chưa kiểm tra", "neutral")
+        self.setup_chatgpt_health = StatusPill("Chưa xác minh", "neutral")
+        for heading, description, pill in (
+            (
+                "1 · Tác nhân trên Windows",
+                "Mở UDB trên máy này; trạng thái được đọc từ worker cục bộ.",
+                self.setup_agent_health,
+            ),
+            (
+                "2 · Kết nối Tunnel",
+                "Dùng Kết nối bên dưới. Tunnel xanh chưa chứng minh ChatGPT gọi được.",
+                self.setup_tunnel_health,
+            ),
+            (
+                "3 · Xác minh tại ChatGPT",
+                "Chọn plugin UDB trong ChatGPT và gọi công cụ trạng thái chỉ đọc. "
+                "Giao diện không thể tự xác minh bước này.",
+                self.setup_chatgpt_health,
+            ),
+        ):
+            heading_label = label(heading, "Fine")
+            heading_label.setToolTip(description)
+            pill.setToolTip(description)
+            pill.setAccessibleDescription(description)
+            setup_layout.addLayout(row(heading_label, None, pill))
+            setup_layout.addWidget(label(description, "Muted", True))
+        lay.addWidget(setup)
         card = panel()
         cl = QVBoxLayout(card)
         cl.setContentsMargins(23, 23, 23, 23)

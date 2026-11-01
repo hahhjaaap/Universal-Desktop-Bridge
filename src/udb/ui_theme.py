@@ -108,6 +108,7 @@ def _linear(rgb: int) -> float:
 
 def contrast_ratio(foreground: str, background: str) -> float:
     """WCAG relative luminance ratio, used as a regression check."""
+
     def lum(hex_color: str) -> float:
         channels = [_linear(int(hex_color[i : i + 2], 16)) for i in (1, 3, 5)]
         return sum(

@@ -71,6 +71,22 @@ The pause latch protects real desktop input, but **does not automatically stop
 all background browser/terminal/Sandbox operations**. Use the appropriate
 session/job controls when necessary.
 
+## Overview: three separate connection checks
+
+The top of **Dự án** displays three compact indicators:
+
+| Indicator | What it verifies | What it does not verify |
+| --- | --- | --- |
+| **Agent** | Host worker reported a local readiness heartbeat | Authorized computer access or ChatGPT RPC |
+| **Tunnel** | Local tunnel health/transport is running and ready | Whether ChatGPT discovered any tools |
+| **ChatGPT** | Always **Chưa xác minh** (unverified) in this GUI release | No GUI-side network test is invented |
+
+On a failed status refresh, the corresponding Agent or Tunnel indicator falls
+back to **Chưa xác định** rather than displaying its previous green value.
+Status is read-only; this feature sends no remote probe, stores no credential
+and grants no access. To verify end-to-end ChatGPT connectivity, run an actual
+**read-only** UDB tool in ChatGPT.
+
 ## Connection status is not authorization
 
 - **Local agent:** the worker is reachable on this PC.

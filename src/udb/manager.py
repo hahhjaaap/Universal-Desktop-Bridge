@@ -569,9 +569,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             pill.setAccessibleDescription(description)
             heading_label = label(heading, "Fine")
             posture_layout.addLayout(row(heading_label, None, pill))
-        self.security_observed = label(
-            "Chưa có trạng thái vừa xác minh.", "Fine", True
-        )
+        self.security_observed = label("Chưa có trạng thái vừa xác minh.", "Fine", True)
         posture_layout.addWidget(self.security_observed)
         lay.addWidget(posture)
         self.protected = self.tree(["Đường dẫn bị chặn trong phạm vi dự án"])

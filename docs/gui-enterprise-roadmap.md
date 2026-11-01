@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | Architecture/roadmap | Merged PR #41 | Planning document and security requirements |
 | Appearance foundation | Merged PR #42 | Strict `system`/`light`/`dark` palette, allow-listed local persistence, visual/contrast regressions |
-| Collapsible navigation | Implemented in the navigation follow-up, pending integration/verification in this document's baseline | 200 px/72 px sidebar, six existing routes and accessible labels |
+| Collapsible navigation | Merged PR #44 (supersedes #43) | 200 px/72 px sidebar, six existing routes and accessible labels |
 | New dashboard / complete enterprise shell | Not implemented | No claimed task percentages or multi-machine router |
 | Advanced security center and signed release | Not implemented | Existing owner-only approvals retained; supply-chain work remains separate |
 

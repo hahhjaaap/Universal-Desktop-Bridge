@@ -11,8 +11,8 @@ from PySide6.QtWidgets import QTreeWidgetItem
 from .activity_presenter import describe, event_state
 from .manager_job_refresh import should_reload_job_details
 from .manager_widgets import icon
-from .ui_jobs import job_metadata, visible_jobs
 from .ui_connection import tunnel_indicator, unknown_indicator, worker_indicator
+from .ui_jobs import job_metadata, visible_jobs
 from .ui_theme import current_theme
 
 

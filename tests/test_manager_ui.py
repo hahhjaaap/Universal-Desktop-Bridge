@@ -573,7 +573,9 @@ def test_audit_export_never_contains_raw_payload_or_ids(manager, monkeypatch, tm
     monkeypatch.setattr(
         QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Yes
     )
-    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a: (str(target), "JSON"))
+    monkeypatch.setattr(
+        QFileDialog, "getSaveFileName", lambda *a: (str(target), "JSON")
+    )
     monkeypatch.setattr(QMessageBox, "information", lambda *a: None)
     monkeypatch.setattr(QMessageBox, "warning", lambda *a: None)
     window.export_activity()

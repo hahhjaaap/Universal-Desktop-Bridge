@@ -225,6 +225,25 @@ def apply_theme(app, preference: object = "system") -> Theme:
         p.setColor(role, QColor(color))
     app.setPalette(p)
     app.setStyleSheet(stylesheet(theme))
+    if not getattr(app, "_udb_theme_hook_installed", False):
+        try:
+            def on_color_scheme_changed(*_):
+                if app.property("udb_theme_preference") != "system":
+                    return
+                apply_theme(app, "system")
+                for window in app.topLevelWidgets():
+                    refresh_titlebar = getattr(window, "_update_window_chrome", None)
+                    if callable(refresh_titlebar):
+                        refresh_titlebar()
+
+            QGuiApplication.styleHints().colorSchemeChanged.connect(
+                on_color_scheme_changed
+            )
+            app._udb_theme_hook_installed = True
+            app._udb_color_scheme_callback = on_color_scheme_changed
+        except (AttributeError, RuntimeError):
+            # Older/unavailable native platforms still use startup detection.
+            pass
     # Custom painted buttons, badges and status components use the same palette.
     for widget in app.allWidgets():
         refresh = getattr(widget, "refresh_theme", None)

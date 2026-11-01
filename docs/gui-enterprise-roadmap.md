@@ -11,11 +11,12 @@
 | Architecture/roadmap | Merged PR #41 | Planning document and security requirements |
 | Appearance foundation | Merged PR #42 | Strict `system`/`light`/`dark` palette, allow-listed local persistence, visual/contrast regressions |
 | Collapsible navigation | Merged PR #44 (supersedes #43) | 200 px/72 px sidebar, six existing routes and accessible labels |
-| Connection health strip (Phase 3 partial) | Implemented in source (follow-up after #45) | Separate Agent/Tunnel/ChatGPT badges; errors revert to unknown; still no authenticated ChatGPT invocation proof |
-| Task filters / audit timeline / approval impact (Phases 4/5 partial) | Implemented on follow-up GUI branch | Local metadata search, read-only MCP activity timeline, explicit consent and no-overwrite audit export, keyboard navigation, operation-specific approval review and connection diagnostics |
+| Connection health strip (Phase 3 partial) | Merged PR #46 | Separate Agent/Tunnel/ChatGPT badges; errors revert to unknown; still no authenticated ChatGPT invocation proof |
+| Task filters / audit timeline / approval impact (Phases 4/5 partial) | Merged PR #51 | Local metadata search, read-only MCP activity timeline, explicit consent and no-overwrite audit export, keyboard navigation, operation-specific approval review and connection diagnostics |
 | New full dashboard / complete enterprise shell | Not implemented | No claimed task percentages or multi-machine router |
-| Security privilege disclosure (Phase 5 partial) | Implemented in source follow-up | Read-only broad Windows grant status and explicit unsandboxed warning; no owner grant setter exposed |
-| Advanced security center and signed release | Not implemented | Existing owner-only approvals retained; supply-chain work remains separate |
+| Security privilege disclosure (Phase 5 partial) | Merged PR #48 | Read-only broad Windows grant status and explicit unsandboxed warning; no owner grant setter exposed |
+| Release signature verifier (Phase 7 partial) | Merged PR #50 | Windows-only Authenticode signer-pin checker; **no certificate or signed installer** |
+| Advanced security center and signed release | Not implemented | Existing owner-only approvals retained; supply-chain work, independent security audit and actual signing remain separate |
 
 See [Desktop GUI user guide](gui-user-guide.md) for current behavior and
 [Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases)

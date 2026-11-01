@@ -1,4 +1,5 @@
 """Multi-PC regression tests: targeting, config validation, and authorization."""
+
 import json
 from pathlib import Path
 
@@ -14,11 +15,16 @@ def make_home(tmp_path):
     (state / "fleet-secrets").mkdir()
     (state / "fleet-secrets" / "pc-office.token").write_text("a" * 64, encoding="ascii")
     (state / "fleet.json").write_text(
-        json.dumps({
-            "schema": 1,
-            "local_id": "pc-home",
-            "remotes": [{"id": "pc-office", "url": "https://pc-office.example.ts.net"}],
-        }), encoding="utf-8",
+        json.dumps(
+            {
+                "schema": 1,
+                "local_id": "pc-home",
+                "remotes": [
+                    {"id": "pc-office", "url": "https://pc-office.example.ts.net"}
+                ],
+            }
+        ),
+        encoding="utf-8",
     )
     return tmp_path
 
@@ -55,13 +61,18 @@ def test_reject_unsafe_origins(url):
 
 def test_reject_duplicate_device_ids(tmp_path):
     home = make_home(tmp_path)
-    (home / "state" / "fleet.json").write_text(json.dumps({
-        "schema": 1, "local_id": "pc-home",
-        "remotes": [
-            {"id": "pc-office", "url": "https://a.example.ts.net"},
-            {"id": "pc-office", "url": "https://b.example.ts.net"},
-        ]
-    }))
+    (home / "state" / "fleet.json").write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "local_id": "pc-home",
+                "remotes": [
+                    {"id": "pc-office", "url": "https://a.example.ts.net"},
+                    {"id": "pc-office", "url": "https://b.example.ts.net"},
+                ],
+            }
+        )
+    )
     with pytest.raises(ValueError, match="Duplicate"):
         FleetRouter.from_home(home)
 
@@ -96,9 +107,13 @@ def test_agent_loopback_only_and_owner_control_denied():
 
     backend = FakeBackend()
     with FleetHTTPServer(
-        ("127.0.0.1", 0), FleetHandler,
-        token="a" * 64, device_id="pc-office", backend=backend,
-        tool_names={"bridge_status", "computer_desktop"}, allow_control=False,
+        ("127.0.0.1", 0),
+        FleetHandler,
+        token="a" * 64,
+        device_id="pc-office",
+        backend=backend,
+        tool_names={"bridge_status", "computer_desktop"},
+        allow_control=False,
     ) as server:
         assert server.server_address[0] == "127.0.0.1"
         thread = threading.Thread(target=server.serve_forever, daemon=True)

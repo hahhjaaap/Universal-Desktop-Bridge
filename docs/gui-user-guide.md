@@ -57,6 +57,9 @@ Choose **Tất cả**, **Đang chạy**, **Cần chú ý** or **Đã xong**. Fil
 read only bounded task metadata and never search script or log contents.
 A failed/unknown task does not automatically become **Đã xong**. Changing
 filters clears hidden stale task details; no job state changes.
+The separate **Hoạt động MCP** tab shows a bounded read-only timeline of
+sanitized tool names, status and timestamps. It never displays request
+payloads, raw scripts or file bodies and cannot be used to re-run commands.
 
 Keyboard shortcuts in the full manager: `Ctrl+1` through `Ctrl+6`
 navigate the six pages; `Ctrl+Shift+F` opens and focuses task search.

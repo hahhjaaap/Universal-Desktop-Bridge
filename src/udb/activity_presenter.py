@@ -58,7 +58,13 @@ def describe(row):
     tool = row.get("tool", "")
     details = row.get("details")
     details = details if isinstance(details, dict) else {}
-    name = TOOL_LABELS.get(tool, clean(tool, 60) or "Công cụ UDB")
+    # Unknown tool identifiers are untrusted metadata: never export/display
+    # their raw content, which could contain a file name or other secret.
+    name = (
+        TOOL_LABELS.get(tool, "Công cụ UDB khác")
+        if isinstance(tool, str)
+        else "Công cụ UDB khác"
+    )
     action_value = details.get("action")
     action = ACTION_LABELS.get(action_value) if isinstance(action_value, str) else None
     return name + (" · " + action if action else "")

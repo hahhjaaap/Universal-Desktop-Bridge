@@ -502,3 +502,33 @@ def test_copy_safe_diagnostics_command_and_keyboard_shortcuts(manager):
     QApplication.processEvents()
     assert window.stack.currentIndex() == 2
     assert window.job_search.accessibleName() == "Tìm công việc theo thông tin"
+
+
+def test_activity_timeline_uses_only_presented_metadata(manager, monkeypatch):
+    window, _ = manager
+    events = [
+        {
+            "seq": 1,
+            "kind": "result",
+            "tool": "computer_files",
+            "status": "PASS",
+            "at": 0,
+            "details": {
+                "action": "read",
+                "content": "PRIVATE SECRET FROM FILE",
+            },
+        }
+    ]
+    monkeypatch.setattr(window.activity_feed, "poll", lambda: events)
+    window._refresh_activity()
+    assert window.activity_timeline.topLevelItemCount() == 1
+    row = window.activity_timeline.topLevelItem(0)
+    displayed = " ".join(row.text(i) for i in range(3))
+    assert "Tệp trên máy" in displayed
+    assert "Đã trả kết quả" in displayed
+    assert "PRIVATE SECRET" not in displayed
+    window._refresh_activity()
+    assert window.activity_timeline.topLevelItemCount() == 1
+    events[:] = []
+    window._refresh_activity()
+    assert window.activity_timeline.topLevelItemCount() == 0

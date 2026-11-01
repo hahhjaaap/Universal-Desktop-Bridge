@@ -58,8 +58,8 @@ class ManagerRefreshMixin:
                 "Tunnel: " + indicator.text, indicator.tone
             )
             self.header_connection.setToolTip(
-            indicator.detail + " ChatGPT chưa được xác minh bằng lời gọi công cụ."
-        )
+                indicator.detail + " ChatGPT chưa được xác minh bằng lời gọi công cụ."
+            )
             self._connection_ready = False
             self.status_label.setText("●  Không đọc được tunnel")
             theme = current_theme()

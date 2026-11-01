@@ -11,8 +11,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import tempfile
+import time
 from pathlib import Path
+
+from browser_smoke_diagnostics import browser_smoke_failure
 
 
 def main():
@@ -117,7 +121,20 @@ def main():
         browser = Browser(Path(folder) / "browser")
         try:
             tab = next(iter(browser.tabs))
-            assert len(browser.screenshot(tab)) > 100
+            screenshot_started = time.monotonic()
+            try:
+                screenshot = browser.screenshot(tab)
+            except Exception:
+                # Collect only bounded metadata. Never print URLs, target IDs,
+                # screenshot bytes, raw CDP payloads, process IDs or secrets.
+                diagnostic = browser_smoke_failure(
+                    browser,
+                    stage="initial_screenshot",
+                    elapsed_ms=(time.monotonic() - screenshot_started) * 1000,
+                )
+                print(json.dumps(diagnostic, sort_keys=True), file=sys.stderr)
+                raise  # An uncertain browser result is never replayed.
+            assert len(screenshot) > 100
             report["owned_browser_screenshot"] = "PASS"
             if args.visible_browser:
                 old_tabs = set(browser.tabs)

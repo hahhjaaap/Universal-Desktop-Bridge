@@ -1,10 +1,10 @@
 # Universal Desktop Bridge (UDB)
 
-**Windows-first MCP bridge for ChatGPT and other supported MCP clients.** UDB provides one Python package, one `udb` CLI and **59 public tools** for guarded local computer work. Its source of truth is `src/udb/`; the root-level `bridge.py` and `udb_*.py` files are compatibility launchers, not separate implementations.
+**Windows-first MCP bridge for ChatGPT and other supported MCP clients.** UDB provides one Python package, one `udb` CLI and a derived public tool catalog (`udb tools` reports the actual count) for guarded local computer work. Its source of truth is `src/udb/`; the root-level `bridge.py` and `udb_*.py` files are compatibility launchers, not separate implementations.
 
 **Tiếng Việt:** UDB kết nối trợ lý AI với máy tính Windows theo quyền do chủ máy cấp. Hỗ trợ thao tác tệp, terminal, ứng dụng, trình duyệt riêng biệt và rà soát hóa đơn Excel. **Không tự cấp quyền, không tự kê khai thuế, không tự sửa dữ liệu kế toán gốc.**
 
-> **Release status (2026-10-27):** The `main` source version is **0.10.1**. The latest published stable Windows release is **v0.10.0** until a newer release is built and verified. The installer below installs the *latest published release*, not automatically the newest `main` commit. Check [Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases) before updating a working installation.
+> **Release status (verified 2026-11-01):** The `main` source version is **0.10.1**, while the latest published stable Windows installer is **v0.10.0**. Source branches and draft pull requests are **not** installed by the release installer. Always check [Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases) and the intended commit before updating. Tool counts are derived at runtime; do not infer a tool count from a README snapshot.
 
 ## What UDB does
 
@@ -45,6 +45,8 @@ udb stop
 To connect a supported ChatGPT workspace, run `udb setup` in your own terminal and follow the displayed tunnel/account instructions. A working local agent is **not** proof that a ChatGPT workspace is connected. Connection secrets are entered in hidden local prompts, not CLI arguments; owner grants are separate from connection settings.
 
 For use from a second device, or when a ChatGPT plugin claims to be Connected but a tool returns `Session terminated`, see [Remote-device diagnostics](docs/remote-device-troubleshooting.md). Check the local tunnel and the ChatGPT session independently; never blindly replay a timed-out mutation.
+
+**Multiple Windows computers:** Logging into the same ChatGPT account does not make an existing MCP connection select a different PC automatically. For two live PCs, use separate tunnel IDs and distinguishable MCP connections until an explicit device router is installed and verified. **Experimental one-plugin Multi-PC routing** is being developed separately in [draft PR #34](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/34) for owner-managed Tailscale connections across different Wi-Fi networks. It is **not part of the published v0.10.0 installer or current `main`**, and has not been verified end-to-end across two real networks.
 
 ### When ChatGPT cannot call UDB tools
 

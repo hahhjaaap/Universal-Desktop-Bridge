@@ -94,15 +94,33 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         body.setSpacing(0)
         outer.addLayout(body, 1)
         sidebar = QFrame()
+        self.sidebar = sidebar
+        self._sidebar_compact = False
         sidebar.setObjectName("Sidebar")
         sidebar.setFixedWidth(200)
         nav = QVBoxLayout(sidebar)
+        self.sidebar_nav = nav
         nav.setContentsMargins(16, 26, 16, 20)
         nav.setSpacing(9)
-        nav.addWidget(label("UDB", "Brand"))
-        nav.addWidget(label("TRỢ LÝ TRÊN MÁY", "Eyebrow"))
-        nav.addSpacing(26)
+        self.brand_label = label("UDB", "Brand")
+        self.brand_caption = label("DESKTOP WORKSPACE", "Eyebrow")
+        nav.addWidget(self.brand_label)
+        nav.addWidget(self.brand_caption)
+        self.sidebar_toggle = MotionButton("Thu gọn menu", "cursor")
+        self.sidebar_toggle.setToolTip("Thu gọn thanh điều hướng")
+        self.sidebar_toggle.setAccessibleName("Thu gọn thanh điều hướng")
+        self.sidebar_toggle.clicked.connect(self.toggle_sidebar)
+        nav.addWidget(self.sidebar_toggle)
+        nav.addSpacing(12)
         self.nav_buttons = []
+        self.nav_names = (
+            "Dự án",
+            "Quyền AI",
+            "Tiến trình",
+            "Bảo vệ",
+            "Kết nối",
+            "Máy tính",
+        )
         for i, (text, glyph) in enumerate(
             (
                 ("Dự án", "projects"),
@@ -115,15 +133,19 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         ):
             btn = MotionButton(text, glyph, "nav")
             btn.setMinimumHeight(44)
+            btn.setToolTip(text)
+            btn.setAccessibleName(text)
             btn.clicked.connect(lambda checked=False, index=i: self.navigate(index))
             nav.addWidget(btn)
             self.nav_buttons.append(btn)
         nav.addStretch()
-        protected = label("Bạn quyết định\nAI được làm gì", "Muted", True)
-        nav.addWidget(protected)
+        self.protected_caption = label("Bạn quyết định\nAI được làm gì", "Muted", True)
+        nav.addWidget(self.protected_caption)
         nav.addSpacing(12)
-        nav.addWidget(label("DESKTOP BRIDGE", "Eyebrow"))
-        nav.addWidget(label("Agent " + __version__, "Fine"))
+        self.sidebar_footer = label("DESKTOP BRIDGE", "Eyebrow")
+        nav.addWidget(self.sidebar_footer)
+        self.sidebar_version = label("Agent " + __version__, "Fine")
+        nav.addWidget(self.sidebar_version)
         body.addWidget(sidebar)
         self.stack = QStackedWidget()
         body.addWidget(self.stack, 1)
@@ -502,6 +524,40 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         apply_theme(QApplication.instance(), choice)
         self._update_window_chrome()
         self.refresh()
+
+    def toggle_sidebar(self):
+        self._sidebar_compact = not self._sidebar_compact
+        compact = self._sidebar_compact
+        self.sidebar.setFixedWidth(72 if compact else 200)
+        self.sidebar_nav.setSpacing(6 if compact else 9)
+        self.sidebar_toggle.setMaximumWidth(56 if compact else 10000)
+        for button in self.nav_buttons:
+            button.setMaximumWidth(56 if compact else 10000)
+        self.sidebar_nav.setContentsMargins(
+            8 if compact else 16,
+            20 if compact else 26,
+            8 if compact else 16,
+            18 if compact else 20,
+        )
+        self.brand_label.setText("U" if compact else "UDB")
+        for item in (
+            self.brand_caption,
+            self.protected_caption,
+            self.sidebar_footer,
+            self.sidebar_version,
+        ):
+            item.setVisible(not compact)
+        self.sidebar_toggle.setText("" if compact else "Thu gọn menu")
+        self.sidebar_toggle.setAccessibleName(
+            "Mở rộng thanh điều hướng" if compact else "Thu gọn thanh điều hướng"
+        )
+        self.sidebar_toggle.setToolTip(self.sidebar_toggle.accessibleName())
+        for index, button in enumerate(self.nav_buttons):
+            name = self.nav_names[index]
+            button.setText("" if compact else name)
+            button.setAccessibleName(name)
+            button.setToolTip(name)
+        self._refresh_requests()
 
     def navigate(self, index):
         self.stack.setCurrentIndex(index)

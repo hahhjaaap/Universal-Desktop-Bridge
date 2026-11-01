@@ -179,7 +179,9 @@ class UnifiedProxy:
         This is only for initialization/discovery. Tool calls with side effects
         are never parallelized, retried or re-ordered by this helper.
         """
-        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="udb-mcp-read") as pool:
+        with ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix="udb-mcp-read"
+        ) as pool:
             if params is None:
                 first = pool.submit(self.primary.request, method)
                 second = pool.submit(self.companion.request, method)

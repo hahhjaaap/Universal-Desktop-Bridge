@@ -46,7 +46,7 @@ class StdioChild:
         self.lock = threading.Lock()
         self.write_lock = threading.Lock()
         self.seq = itertools.count(1)
-        self.waiters: dict[int, queue.Queue] = {}
+        self.waiters: dict[int, queue.SimpleQueue] = {}
         self.terminated = threading.Event()
         self.stderr_tail: list[str] = []
 
@@ -157,7 +157,7 @@ class StdioChild:
         timeout: float = MAX_WAIT,
     ) -> dict[str, Any]:
         ident = next(self.seq)
-        waiter: queue.Queue = queue.Queue(maxsize=1)
+        waiter: queue.SimpleQueue = queue.SimpleQueue()
         with self.lock:
             self.waiters[ident] = waiter
         try:

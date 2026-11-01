@@ -12,7 +12,7 @@
 | Appearance foundation | Merged PR #42 | Strict `system`/`light`/`dark` palette, allow-listed local persistence, visual/contrast regressions |
 | Collapsible navigation | Merged PR #44 (supersedes #43) | 200 px/72 px sidebar, six existing routes and accessible labels |
 | Connection health strip (Phase 3 partial) | Implemented in source (follow-up after #45) | Separate Agent/Tunnel/ChatGPT badges; errors revert to unknown; still no authenticated ChatGPT invocation proof |
-| Task metadata filters + approval impact (Phases 4/5 partial) | Implemented on follow-up GUI branch | Local job filtering, keyboard navigation, operation-specific approval review, connection diagnosis command copy |
+| Task filters / audit timeline / approval impact (Phases 4/5 partial) | Implemented on follow-up GUI branch | Local metadata search, read-only MCP activity timeline, explicit consent and no-overwrite audit export, keyboard navigation, operation-specific approval review and connection diagnostics |
 | New full dashboard / complete enterprise shell | Not implemented | No claimed task percentages or multi-machine router |
 | Security privilege disclosure (Phase 5 partial) | Implemented in source follow-up | Read-only broad Windows grant status and explicit unsandboxed warning; no owner grant setter exposed |
 | Advanced security center and signed release | Not implemented | Existing owner-only approvals retained; supply-chain work remains separate |

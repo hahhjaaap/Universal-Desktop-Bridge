@@ -14,8 +14,8 @@ has a collapsible **200 px → 72 px** left sidebar with stable accessible route
 names and tooltips. Under **Kết nối → Giao diện ứng dụng**, choose
 **Theo hệ thống Windows**, **Sáng**, or **Tối**. The choice is a local
 appearance preference; no permissions or tunnel credentials are changed.
-The Windows system color scheme is checked at application startup or when
-the preference is applied, not continuously monitored. See the
+The Windows system color scheme is checked at startup and when Qt reports
+a color-scheme change; unsupported platforms retain startup detection. See the
 [Desktop GUI guide](gui-user-guide.md) for details.
 
 ## What each action does

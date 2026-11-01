@@ -105,20 +105,29 @@ class DesktopController:
             self.host_service = HostService(self.agent)
 
     def config(self):
-        p = self.agent.state / "connection.json"
-        return json.loads(p.read_text("utf-8-sig")) if p.exists() else {}
+        # The connection file is local state, not an unbounded JSON input.
+        # Reject linked paths and oversized/corrupted objects before use.
+        from .owner_command import read_object
+
+        try:
+            return read_object(self.agent.state / "connection.json", 4096)
+        except FileNotFoundError:
+            return {}
 
     def settings(self):
-        p = self.agent.state / "gui.json"
+        from .owner_command import CommandError, read_object
+
         try:
-            return json.loads(p.read_text("utf-8-sig")) if p.exists() else {}
-        except (ValueError, OSError):
+            return read_object(self.agent.state / "gui.json", 4096)
+        except (FileNotFoundError, ValueError, OSError, CommandError):
             return {}
 
     def save_settings(self, settings):
+        from .host_client import atomic_json
+
         # Only presentation/launch preferences; never credentials.
         safe = {k: bool(settings.get(k)) for k in ("motion", "autoconnect")}
-        (self.agent.state / "gui.json").write_text(json.dumps(safe), encoding="utf-8")
+        atomic_json(self.agent.state / "gui.json", safe)
 
     def configure(self, tunnel_id, key=""):
         try:
@@ -129,9 +138,10 @@ class DesktopController:
             save_key(key)
         elif not self.config().get("tunnel_id"):
             raise PolicyError("Cần nhập runtime API key khi cấu hình lần đầu.")
-        (self.agent.state / "connection.json").write_text(
-            json.dumps({"tunnel_id": tunnel_id}), encoding="utf-8"
-        )
+        from .host_client import atomic_json
+
+        # Never expose a partially written tunnel identifier to the watchdog.
+        atomic_json(self.agent.state / "connection.json", {"tunnel_id": tunnel_id})
 
     def alive(self, name):
         with self.lock:

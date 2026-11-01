@@ -16,7 +16,8 @@
 | New full dashboard / complete enterprise shell | Not implemented | No claimed task percentages or multi-machine router |
 | Security privilege disclosure (Phase 5 partial) | Merged PR #48 | Read-only broad Windows grant status and explicit unsandboxed warning; no owner grant setter exposed |
 | Release signature verifier (Phase 7 partial) | Merged PR #50 | Windows-only Authenticode signer-pin checker; **no certificate or signed installer** |
-| Local security posture overview (Phase 5 partial) | Under review in follow-up PR | Pending owner approvals, Windows input pause, scoped auto-source grants; independently fail-closed, no new access methods |
+| Local security posture overview (Phase 5 partial) | Merged PR #52 | Pending owner approvals, Windows input pause, scoped auto-source grants; independently fail-closed, no new access methods |
+| Audit metadata redaction | Merged PR #53 | Unknown MCP tool names use a generic label; untrusted identifiers are not displayed or exported |
 | Advanced security center and signed release | Not implemented | Existing owner-only approvals retained; supply-chain work, independent security audit and actual signing remain separate |
 
 See [Desktop GUI user guide](gui-user-guide.md) for current behavior and

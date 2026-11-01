@@ -532,3 +532,21 @@ def test_activity_timeline_uses_only_presented_metadata(manager, monkeypatch):
     events[:] = []
     window._refresh_activity()
     assert window.activity_timeline.topLevelItemCount() == 0
+
+
+def test_persistent_app_header_tracks_navigation_not_remote_authorization(manager):
+    from PySide6.QtWidgets import QApplication
+
+    window, _ = manager
+    window.navigate(1)
+    assert window.header_title.text() == "Quyền AI"
+    window.navigate(2)
+    assert window.header_title.text() == "Tiến trình"
+    assert "ChatGPT" in window.header_connection.toolTip()
+    for width, height in ((940, 640), (1220, 820)):
+        window.resize(width, height)
+        QApplication.processEvents()
+        assert window.header_title.isVisible()
+        assert window.header_connection.isVisible()
+        assert window.header_connection.text().startswith("●  Tunnel:")
+    assert not (window.agent.state / "computer-access.dpapi").exists()

@@ -11,7 +11,8 @@
 | Architecture/roadmap | Merged PR #41 | Planning document and security requirements |
 | Appearance foundation | Merged PR #42 | Strict `system`/`light`/`dark` palette, allow-listed local persistence, visual/contrast regressions |
 | Collapsible navigation | Merged PR #44 (supersedes #43) | 200 px/72 px sidebar, six existing routes and accessible labels |
-| New dashboard / complete enterprise shell | Not implemented | No claimed task percentages or multi-machine router |
+| Connection health strip (Phase 3 partial) | Implemented in source (follow-up after #45) | Separate Agent/Tunnel/ChatGPT badges; errors revert to unknown; still no authenticated ChatGPT invocation proof |
+| New full dashboard / complete enterprise shell | Not implemented | No claimed task percentages or multi-machine router |
 | Advanced security center and signed release | Not implemented | Existing owner-only approvals retained; supply-chain work remains separate |
 
 See [Desktop GUI user guide](gui-user-guide.md) for current behavior and

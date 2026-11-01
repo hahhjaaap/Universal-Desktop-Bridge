@@ -101,6 +101,19 @@ The pause latch protects real desktop input, but **does not automatically stop
 all background browser/terminal/Sandbox operations**. Use the appropriate
 session/job controls when necessary.
 
+## First-run onboarding in Connection settings
+
+The **Kết nối** page displays a three-step status guide: **Agent trên
+Windows** (local worker heartbeat), **Kết nối Tunnel** (transport state),
+and **Xác minh tại ChatGPT** (requires a separate read-only UDB tool call
+from ChatGPT). The first two indicators track actual local status and switch
+to unknown if their sources fail. The third deliberately remains
+**Chưa xác minh** because tunnel health cannot authenticate a ChatGPT
+invocation. The guide does not store a password, test a remote endpoint,
+start a browser, approve an operation or grant computer permissions.
+The existing **Sao chép lệnh kiểm tra** control only copies the local
+diagnostics command.
+
 ## Overview: three separate connection checks
 
 The top of **Dự án** displays three compact indicators:

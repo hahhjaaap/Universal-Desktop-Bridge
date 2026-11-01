@@ -50,3 +50,31 @@ Regression tests check memory bounds, copy conflicts, oversized/growing files,
 idle polling counts, SQLite reader/writer contention, GUI state updates and
 extension operation ordering. Time measurements are informational; CI does
 not enforce machine-dependent speed ratios.
+
+## MCP startup and idle mailbox optimization (experimental PR)
+
+Run the additional synthetic benchmark from a development checkout:
+
+```sh
+python tools/benchmark_hotpaths.py --samples 20 --backend-delay-ms 15
+```
+
+The unified MCP proxy can issue `initialize` and `tools/list` requests to its
+**independent** core and companion subprocesses concurrently. It still
+combines their results in the previous deterministic order, checks for
+missing/duplicate tool definitions, and caches a defensive copy of the public
+catalog. Only these two read/setup RPCs are parallelized; permission checks,
+side-effecting tool calls, and recovery semantics are unchanged. Startup
+latency depends on real backend work, not only these RPCs.
+
+The idle host mailbox uses one `os.listdir` to obtain candidate command names
+instead of a `pathlib.Path.glob` iterator, then retains the same sorted order
+and individual path validation/atomic claim before execution. This primarily
+reduces scan overhead when the inbox is empty; it does **not** change its
+maximum 250 ms idle polling interval, command expiry, or owner permissions.
+
+The benchmark reports median latency for two synthetic delayed backends and
+per-scan time on an empty disposable directory. It is diagnostic, not a CI
+speed threshold: Windows filesystems, antivirus, actual MCP tunnel latency,
+and real application workloads must be measured separately. CI also continues
+to run the existing stdio RPC benchmark and full regression suite.

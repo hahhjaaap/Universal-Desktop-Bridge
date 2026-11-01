@@ -38,6 +38,8 @@ jobs:
         run: dbus-run-session -- python -m pytest --junitxml="${{ runner.temp }}/udb-tests.xml"
       - name: Benchmark local MCP stdio routing (informational)
         run: python tools/benchmark_rpc.py --calls 100 --parallel 4
+      - name: Benchmark MCP startup and mailbox scans (informational)
+        run: python tools/benchmark_hotpaths.py --samples 12 --backend-delay-ms 15
       - name: Upload regression scenario report
         if: always()
         continue-on-error: true

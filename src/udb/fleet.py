@@ -23,12 +23,25 @@ from urllib.request import (
 
 ID_PATTERN = re.compile(r"[a-z][a-z0-9-]{1,31}")
 MAX_RESPONSE = 8 * 1024 * 1024
-READ_ONLY_TOOLS = frozenset({
-    "bridge_status", "computer_status", "host_status", "list_projects",
-    "list_files", "read_file", "search_files", "check_python_syntax",
-    "file_list", "file_read", "file_stat", "file_search", "file_read_lines",
-    "system_process_list", "terminal_list",
-})
+READ_ONLY_TOOLS = frozenset(
+    {
+        "bridge_status",
+        "computer_status",
+        "host_status",
+        "list_projects",
+        "list_files",
+        "read_file",
+        "search_files",
+        "check_python_syntax",
+        "file_list",
+        "file_read",
+        "file_stat",
+        "file_search",
+        "file_read_lines",
+        "system_process_list",
+        "terminal_list",
+    }
+)
 
 
 def valid_device_id(value: Any) -> bool:
@@ -44,14 +57,18 @@ def validate_url(value: Any) -> str:
         hostname = u.hostname or ""
         if (
             u.scheme != "https"
-            or u.username or u.password
+            or u.username
+            or u.password
             or u.port not in (None, 443)
             or u.path not in ("", "/")
-            or u.query or u.fragment
+            or u.query
+            or u.fragment
             or not hostname.endswith(".ts.net")
             or len(hostname) <= len(".ts.net")
-            or any(not re.fullmatch(r"[a-zA-Z0-9-]{1,63}", part)
-                   for part in hostname.split(".")[:-2])
+            or any(
+                not re.fullmatch(r"[a-zA-Z0-9-]{1,63}", part)
+                for part in hostname.split(".")[:-2]
+            )
         ):
             raise ValueError("Invalid remote URL")
     except (ValueError, AttributeError):
@@ -123,7 +140,11 @@ class FleetRouter:
                     "List the configured local and remote UDB machines. "
                     "A configured remote is not necessarily online."
                 ),
-                "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
                 "annotations": {"readOnlyHint": True, "destructiveHint": False},
             },
             {
@@ -151,8 +172,10 @@ class FleetRouter:
         return {
             "computers": [
                 {"id": self.local_id, "kind": "local"},
-                *[{"id": x, "kind": "remote", "endpoint": self.remotes[x]}
-                  for x in sorted(self.remotes)],
+                *[
+                    {"id": x, "kind": "remote", "endpoint": self.remotes[x]}
+                    for x in sorted(self.remotes)
+                ],
             ],
             "note": "Remote entries are configured, not verified online.",
         }
@@ -179,7 +202,11 @@ class FleetRouter:
             },
         )
         # Never use a proxy from the environment for local tailnet addresses.
-        client = build_opener(ProxyHandler({}), NoRedirect(), HTTPSHandler(context=ssl.create_default_context()))
+        client = build_opener(
+            ProxyHandler({}),
+            NoRedirect(),
+            HTTPSHandler(context=ssl.create_default_context()),
+        )
         try:
             with client.open(req, timeout=15) as response:
                 if response.status != 200:

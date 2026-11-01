@@ -442,3 +442,63 @@ def test_security_inventory_fails_closed_without_changing_owner_permissions(
     assert "không đọc được" in window.footer_status.text()
     assert window.desktop_pause_button.isEnabled()
     assert not (window.agent.state / "computer-access.dpapi").exists()
+
+
+def test_activity_filters_update_without_touching_job_contents(manager):
+    import json
+
+    window, _ = manager
+    with window.agent.connect() as db:
+        for jid, status, project in (
+            ("1" * 32, "running", "alpha"),
+            ("2" * 32, "failed", "beta"),
+            ("3" * 32, "completed", "gamma"),
+        ):
+            db.execute(
+                "INSERT INTO jobs VALUES (?,?,?)",
+                (
+                    jid,
+                    status,
+                    json.dumps(
+                        {"project": project, "language": "python", "script": "SECRET"}
+                    ),
+                ),
+            )
+    window._refresh_jobs()
+    assert window.jobs.topLevelItemCount() == 3
+    window.job_group_filter.setCurrentText("Cần chú ý")
+    assert window.jobs.topLevelItemCount() == 1
+    assert window.jobs.topLevelItem(0).text(0) == "beta"
+    window.job_search.setText("alpha")
+    assert window.jobs.topLevelItemCount() == 0
+    assert "0/3" in window.job_filter_feedback.text()
+    window.job_search.setText("")
+    assert window.jobs.topLevelItemCount() == 1
+    window.job_group_filter.setCurrentText("Tất cả")
+    assert window.jobs.topLevelItemCount() == 3
+    assert window.agent.connect is not None
+    assert not (window.agent.state / "computer-access.dpapi").exists()
+
+
+def test_copy_safe_diagnostics_command_and_keyboard_shortcuts(manager):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QApplication
+
+    window, _ = manager
+    assert "Ctrl+3" not in window.controller.settings()
+    window.navigate(4)
+    button = next(
+        child
+        for child in window.stack.currentWidget().findChildren(
+            __import__("udb.manager_widgets", fromlist=["MotionButton"]).MotionButton
+        )
+        if child.accessibleName() == "Sao chép lệnh udb doctor --json"
+    )
+    button.click()
+    assert QApplication.clipboard().text() == "udb doctor --json"
+    window.navigate(5)
+    QTest.keyClick(window, Qt.Key.Key_3, Qt.KeyboardModifier.ControlModifier)
+    QApplication.processEvents()
+    assert window.stack.currentIndex() == 2
+    assert window.job_search.accessibleName() == "Tìm công việc theo thông tin"

@@ -235,6 +235,15 @@ For native Windows pointer preview use
 Passing CI and screenshots does not replace real Windows accessibility or
 security assessment. The published v0.10.0 installer is still the old release.
 
+The **Tiến trình** page now supports metadata-only search and group filters
+(Đang chạy/Cần chú ý/Đã xong), shows matching counts and clears stale
+details when no result matches. Ctrl+1..6 changes full-manager pages;
+Ctrl+Shift+F focuses job search. The **Kết nối** page includes a
+local-only button that copies `udb doctor --json` without executing it.
+Owner approval dialogs now state an explicit operation-specific impact
+before the existing full review and local confirmation. No filtering of
+log bodies or secret content is performed.
+
 The **Bảo vệ** page now shows a read-only indicator of optional full Windows
 computer access. If enabled, it warns that this privilege is **unsandboxed**
 and can reach files protected only against project-scoped tools. The GUI

@@ -3,6 +3,7 @@
 The machine owner must start this process in an attended local terminal.
 Existing UDB owner grants are checked by the normal local MCP backend.
 """
+
 from __future__ import annotations
 
 import hmac
@@ -81,7 +82,12 @@ class FleetHandler(BaseHTTPRequestHandler):
             if reply.get("error"):
                 result = {
                     "isError": True,
-                    "content": [{"type": "text", "text": "ERROR | Remote UDB rejected tool call"}],
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "ERROR | Remote UDB rejected tool call",
+                        }
+                    ],
                 }
             else:
                 result = reply.get("result", {})
@@ -94,15 +100,18 @@ class FleetHandler(BaseHTTPRequestHandler):
         except (TypeError, ValueError, KeyError):
             self.respond(400, {"error": "Invalid fleet request"})
         except (OSError, RuntimeError, TimeoutError):
-            self.respond(502, {"error": "Remote operation unavailable; outcome unknown"})
+            self.respond(
+                502, {"error": "Remote operation unavailable; outcome unknown"}
+            )
 
 
 class FleetHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     request_queue_size = 4
 
-    def __init__(self, address, handler, *, token, device_id, backend,
-                 tool_names, allow_control):
+    def __init__(
+        self, address, handler, *, token, device_id, backend, tool_names, allow_control
+    ):
         super().__init__(address, handler)
         self.token = token
         self.device_id = device_id
@@ -111,8 +120,9 @@ class FleetHTTPServer(ThreadingHTTPServer):
         self.allow_control = allow_control
 
 
-def run_agent(home: Path, device_id: str, port: int = 18743,
-              allow_control: bool = False) -> int:
+def run_agent(
+    home: Path, device_id: str, port: int = 18743, allow_control: bool = False
+) -> int:
     if not valid_device_id(device_id) or not (1024 <= port <= 65535):
         raise ValueError("Invalid fleet device ID or port")
     if not attended_console():
@@ -130,11 +140,15 @@ def run_agent(home: Path, device_id: str, port: int = 18743,
     )
     backend.start()
     try:
-        init = backend.request("initialize", {
-            "protocolVersion": "2025-03-26",
-            "capabilities": {},
-            "clientInfo": {"name": "udb-fleet-agent", "version": "0.1"},
-        }, timeout=30)
+        init = backend.request(
+            "initialize",
+            {
+                "protocolVersion": "2025-03-26",
+                "capabilities": {},
+                "clientInfo": {"name": "udb-fleet-agent", "version": "0.1"},
+            },
+            timeout=30,
+        )
         if init.get("error"):
             raise RuntimeError("Fleet local MCP initialization failed")
         backend.notification({"jsonrpc": "2.0", "method": "notifications/initialized"})
@@ -145,13 +159,18 @@ def run_agent(home: Path, device_id: str, port: int = 18743,
         if not isinstance(tools, list):
             raise RuntimeError("Fleet local tool catalog invalid")
         tool_names = [
-            row["name"] for row in tools
+            row["name"]
+            for row in tools
             if isinstance(row, dict) and isinstance(row.get("name"), str)
         ]
         with FleetHTTPServer(
-            ("127.0.0.1", port), FleetHandler, token=token,
-            device_id=device_id, backend=backend,
-            tool_names=tool_names, allow_control=allow_control,
+            ("127.0.0.1", port),
+            FleetHandler,
+            token=token,
+            device_id=device_id,
+            backend=backend,
+            tool_names=tool_names,
+            allow_control=allow_control,
         ) as server:
             print(
                 f"UDB fleet agent {device_id} listens on 127.0.0.1:{port}. "

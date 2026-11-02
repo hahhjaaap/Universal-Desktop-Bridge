@@ -97,6 +97,7 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         "serve",
         "cloud-agent",
         "cloud-pair",
+        "fleet-agent",
         "status",
         "logs",
         "stop",
@@ -195,6 +196,10 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
             command.add_argument(
                 "--assets", help="Inventoried public runtime helper directory"
             )
+        if name == "fleet-agent":
+            command.add_argument("--device-id", required=True)
+            command.add_argument("--port", type=int, default=18743)
+            command.add_argument("--allow-control", action="store_true")
         if name == "serve":
             command.add_argument(
                 "--stdio", action="store_true", help="stdio is the default transport"
@@ -473,6 +478,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             from .cloud_pair import run as run_cloud_pair
 
             return run_cloud_pair(settings)
+        if action == "fleet-agent":
+            if args.access:
+                raise ValueError("Fleet agent does not change owner access")
+            from .fleet_agent import run_agent
+
+            return run_agent(
+                settings.home, args.device_id, args.port, args.allow_control
+            )
         if action == "serve":
             if args.access:
                 raise ValueError("Owner activation is not an MCP operation")

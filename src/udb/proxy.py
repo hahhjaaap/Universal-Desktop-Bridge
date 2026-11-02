@@ -19,6 +19,7 @@ from typing import Any
 from udb._version import VERSION
 from udb.catalog import public_catalog, resolve_call
 from udb.concurrency import MAX_CONCURRENT
+from udb.fleet import FleetRouter, text_result
 from udb.outcomes import ERROR_PREFIXES, native_status, report_from_text, report_outcome
 from udb.recovery import RecoveringChild
 from udb.resources import fresh
@@ -110,7 +111,9 @@ def normalized_output(tool: str, result: dict[str, Any]) -> dict[str, Any]:
 
 
 class UnifiedProxy:
-    def __init__(self, primary: StdioChild, companion: StdioChild, activity=None):
+    def __init__(
+        self, primary: StdioChild, companion: StdioChild, activity=None, fleet=None
+    ):
         self.primary = primary
         self.companion = companion
         self.send_lock = threading.Lock()
@@ -123,6 +126,7 @@ class UnifiedProxy:
         self.active_limit = threading.BoundedSemaphore(MAX_CONCURRENT)
         self.initialization_lock = threading.Lock()
         self.activity = activity
+        self.fleet = fleet
         self._pointer_presence_started = False
         self._pointer_retry_after = 0.0
 
@@ -296,6 +300,8 @@ class UnifiedProxy:
                     routes[name] = backend
                     result.append(tool)
             catalog = public_catalog(result, routes)
+            if self.fleet is not None:
+                catalog.extend(self.fleet.tools())
             self.tool_routes = routes
             self.tool_cache = catalog
             self.public_tool_names = frozenset(tool["name"] for tool in catalog)
@@ -309,6 +315,28 @@ class UnifiedProxy:
         arguments = params.get("arguments", {})
         if not isinstance(arguments, dict):
             raise ValueError("Tool arguments must be an object")
+        if self.fleet is not None and name == "fleet_list_computers":
+            if arguments:
+                raise ValueError("fleet_list_computers accepts no arguments")
+            from .protocol import annotate
+
+            return annotate(text_result(self.fleet.list_computers()))
+        if self.fleet is not None and name == "fleet_call":
+            if set(arguments) != {"computer_id", "tool", "arguments"}:
+                raise ValueError("fleet_call needs computer_id, tool and arguments")
+            machine, tool, a = (
+                arguments[x] for x in ("computer_id", "tool", "arguments")
+            )
+            if not isinstance(tool, str) or not tool or tool.startswith("fleet_"):
+                raise ValueError("Invalid fleet tool")
+            if not isinstance(a, dict):
+                raise ValueError("Fleet arguments must be an object")
+            if machine == self.fleet.local_id:
+                return self.call_tool({"name": tool, "arguments": a})
+            remote_result = self.fleet.invoke(machine, tool, a)
+            from .protocol import annotate
+
+            return annotate(normalized_output(tool, remote_result))
         # Refresh tool routing on first invocation. Do not retry side effects.
         if not self.tool_routes:
             self.tools_list()
@@ -610,7 +638,9 @@ def run(settings) -> int:
     )
     from .activity import Activity
 
-    proxy = UnifiedProxy(original, companion, Activity(home))
+    proxy = UnifiedProxy(
+        original, companion, Activity(home), FleetRouter.from_home(home)
+    )
     try:
         original.start()
         companion.start()

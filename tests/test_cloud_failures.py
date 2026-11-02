@@ -121,7 +121,10 @@ def test_pairing_network_timeout_never_writes_local_credentials(tmp_path):
 
     with pytest.raises(RuntimeError, match="outcome unknown"):
         claim_device(
-            tmp_path, "https://example.workers.dev", "a" * 32, "b" * 64,
+            tmp_path,
+            "https://example.workers.dev",
+            "a" * 32,
+            "b" * 64,
             opener=Offline(),
         )
     assert not (tmp_path / "cloud-pairing.json").exists()

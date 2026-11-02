@@ -1,6 +1,7 @@
 // UDB Cloudflare private relay prototype. NOT a public MCP server.
 // The desktop retains all UDB owner-grant and tool policy enforcement.
-import { DEVICE_ID, HASH, bearer, adminAuthorized, digest, readJson, validRpc } from "./auth.js";
+import { DEVICE_ID, HASH, bearer, adminAuthorized, digest, readJson, validRpc, fixedEqual } from "./auth.js";
+import { newPairing, PAIRING_TTL_MS } from "./pairing.js";
 
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store",
@@ -13,6 +14,34 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/health" && request.method === "GET")
       return json({ status: "ok", kind: "private-relay-prototype" });
+    if (url.pathname === "/v1/admin/pairings" && request.method === "POST") {
+      if (!adminAuthorized(request, env)) return failure(401, "admin_auth_required");
+      const { device_id, pairing_code, pairing_token_sha256 } = await newPairing();
+      const expires_at = Date.now() + PAIRING_TTL_MS;
+      const stub = env.DEVICES.get(env.DEVICES.idFromName(device_id));
+      const issued = await stub.fetch(new Request("https://internal/pair/issue", {
+        method: "POST", body: JSON.stringify({ pairing_token_sha256, expires_at }),
+      }));
+      if (!issued.ok) return failure(503, "pairing_unavailable");
+      return json({ device_id, pairing_code, expires_in_seconds: PAIRING_TTL_MS / 1000 }, 201);
+    }
+    const claimMatch = /^\/v1\/devices\/([a-f0-9]{32})\/claim$/.exec(url.pathname);
+    if (claimMatch && request.method === "POST") {
+      const pairingCode = bearer(request);
+      if (!pairingCode || !HASH.test(pairingCode)) return failure(401, "pairing_auth_required");
+      try {
+        const body = await readJson(request);
+        if (!HASH.test(body.device_token_sha256)) return failure(400, "invalid_token_hash");
+        const stub = env.DEVICES.get(env.DEVICES.idFromName(claimMatch[1]));
+        return stub.fetch(new Request("https://internal/pair/claim", {
+          method: "POST",
+          headers: { Authorization: "Bearer " + pairingCode },
+          body: JSON.stringify({ device_token_sha256: body.device_token_sha256 }),
+        }));
+      } catch {
+        return failure(400, "invalid_request");
+      }
+    }
     const agentMatch = /^\/v1\/devices\/([a-f0-9]{32})\/connect$/.exec(url.pathname);
     if (agentMatch && request.method === "GET") {
       if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket")
@@ -27,6 +56,9 @@ export default {
     const id = env.DEVICES.idFromName(adminMatch[1]);
     const stub = env.DEVICES.get(id);
     try {
+      if (!adminMatch[2] && request.method === "DELETE") {
+        return stub.fetch(new Request("https://internal/revoke", { method: "DELETE" }));
+      }
       if (!adminMatch[2] && request.method === "PUT") {
         const body = await readJson(request);
         if (!HASH.test(body.device_token_sha256)) return failure(400, "invalid_token_hash");
@@ -63,6 +95,57 @@ export class DeviceRelay {
 
   async fetch(request) {
     const path = new URL(request.url).pathname;
+    if (path === "/pair/issue" && request.method === "POST") {
+      const body = await readJson(request);
+      if (!HASH.test(body.pairing_token_sha256) ||
+          !Number.isSafeInteger(body.expires_at) ||
+          body.expires_at <= Date.now() ||
+          body.expires_at > Date.now() + PAIRING_TTL_MS + 1000) {
+        return failure(400, "invalid_pairing");
+      }
+      if (await this.ctx.storage.get("device_token_sha256")) {
+        return failure(409, "already_registered");
+      }
+      await this.ctx.storage.put({
+        pairing_token_sha256: body.pairing_token_sha256,
+        pairing_expires_at: body.expires_at,
+        pairing_attempts: 0,
+      });
+      return json({ issued: true });
+    }
+    if (path === "/pair/claim" && request.method === "POST") {
+      const code = bearer(request);
+      if (!code || !HASH.test(code)) return failure(401, "pairing_auth_required");
+      const body = await readJson(request);
+      if (!HASH.test(body.device_token_sha256)) return failure(400, "invalid_token_hash");
+      const codeHash = await digest(code);
+      const result = await this.ctx.storage.transaction(async (txn) => {
+        if (await txn.get("device_token_sha256")) return "already_registered";
+        const expiry = await txn.get("pairing_expires_at");
+        const expected = await txn.get("pairing_token_sha256");
+        const attempts = await txn.get("pairing_attempts") || 0;
+        if (!expected || !expiry || Date.now() >= expiry) return "pairing_expired";
+        if (attempts >= 5) return "pairing_locked";
+        if (!fixedEqual(expected, codeHash)) {
+          await txn.put("pairing_attempts", attempts + 1);
+          return "pairing_rejected";
+        }
+        await txn.put("device_token_sha256", body.device_token_sha256);
+        await txn.delete(["pairing_token_sha256", "pairing_expires_at", "pairing_attempts"]);
+        return "registered";
+      });
+      if (result === "registered") return json({ registered: true }, 201);
+      if (result === "already_registered") return failure(409, result);
+      return failure(403, "pairing_failed");
+    }
+    if (path === "/revoke" && request.method === "DELETE") {
+      await this.ctx.storage.delete([
+        "device_token_sha256", "pairing_token_sha256",
+        "pairing_expires_at", "pairing_attempts",
+      ]);
+      for (const ws of this.ctx.getWebSockets("device")) ws.close(4001, "device revoked");
+      return json({ revoked: true });
+    }
     if (path === "/register" && request.method === "PUT") {
       const body = await readJson(request);
       if (!HASH.test(body.device_token_sha256)) return failure(400, "invalid_token_hash");

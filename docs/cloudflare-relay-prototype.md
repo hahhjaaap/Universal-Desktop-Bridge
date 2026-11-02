@@ -7,7 +7,7 @@ This is the initial private Cloudflare Worker + Durable Object relay for 2–3 d
 - Cloudflare Worker HTTP routing with a private administrator API and per-device routing.
 - A hibernatable Durable Object WebSocket per device, with independent device token hashes.
 - The Windows `udb cloud-agent` command. It connects outbound using TLS and forwards allowed MCP JSON-RPC requests to the existing local `udb serve` proxy.
-- Random device tokens registered by SHA-256 digest; local credentials are not passed through command-line arguments.
+- Random device tokens registered by SHA-256 digest; local credentials are not passed through command-line arguments. A second, owner-attended invitation flow now supports enrollment without sharing the global admin key.
 - Bounded frame size, maximum four pending calls, conservative timeouts and no retries of uncertain mutations.
 - Node and Python unit tests with a CI validation workflow.
 
@@ -20,6 +20,20 @@ This is the initial private Cloudflare Worker + Durable Object relay for 2–3 d
 - This prototype's single admin key can contact all enrolled devices. **Do not deploy it for unrelated users or sensitive desktop work.** The production design needs explicit user-to-device authorization and OAuth consent.
 - The UDB local proxy continues enforcing its own scoped project permissions and owner grants. The cloud cannot activate local owner permissions.
 - The prototype does not expose a public MCP endpoint; ChatGPT cannot simply install this as a plugin yet.
+
+## Short-lived pairing (second prototype milestone)
+
+A new opt-in owner-attended flow avoids giving the shared cloud admin secret to every Windows user. This is **not yet OAuth or a one-click GUI**.
+
+1. From a trusted developer terminal with the private Wrangler administrator key, create an invitation by issuing `POST /v1/admin/pairings` with an admin Bearer token. The response contains `device_id`, a random 256-bit `pairing_code` and `expires_in_seconds: 600`. Do not publish these values; the one-time code is a credential.
+2. On the Windows device, install this branch's UDB source build and run `udb cloud-pair` from a local attended terminal. Enter the Worker HTTPS origin and the device ID, then paste the pairing code into the hidden prompt. No shared administrator key is required on this device.
+3. The client generates an independent random device token, sends **only its SHA-256 digest** to `POST /v1/devices/{device_id}/claim` with the one-time invitation credential, and stores the device token locally after the server confirms the claim.
+4. The one-time invitation expires after 10 minutes, locks after five bad attempts and cannot be replayed. The administrator can revoke it using the private authenticated `DELETE /v1/admin/devices/{device_id}` endpoint. Revocation closes the existing device WebSocket.
+5. The Windows owner may run `udb cloud-agent` for a private development connection. None of these steps changes UDB owner permissions.
+
+The device token is protected by the current Windows account's filesystem ACLs, **not yet DPAPI**. After a successful remote claim followed by a local disk failure, the server registration must be revoked administratively before pairing again. The prototype owner must safeguard invitation codes and the global admin secret; the cloud is not encrypted end-to-end.
+
+**Security limitation:** Until the ChatGPT MCP resource server authenticates per-user OAuth tokens and enforces user-to-device ownership, this developer-only relay must not be exposed to unrelated users or sensitive PCs.
 
 ## Developer-only validation
 
@@ -45,7 +59,7 @@ Keep the owner secret and pairing files out of git, chat transcripts and release
 ## Unit tests
 
 - `cd cloudflare && npm test` (Node 22).
-- `python -m pytest -q tests/test_cloud_agent.py`.
+- `python -m pytest -q tests/test_cloud_agent.py tests/test_cloud_pair.py`.
 - `python -m ruff check src/udb/cloud_agent.py tests/test_cloud_agent.py tools/cloud_enroll.py`.
 
 References: Cloudflare WebSocket Hibernation and Cloudflare MCP OAuth documentation.

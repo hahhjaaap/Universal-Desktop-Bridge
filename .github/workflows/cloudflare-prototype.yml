@@ -7,6 +7,8 @@ on:
       - "render.yaml"
       - "docs/render-observer.md"
       - "src/udb/cloud_agent.py"
+      - "src/udb/cloud_pair.py"
+      - "tests/test_cloud_pair.py"
       - "tests/test_cloud_agent.py"
       - "tools/cloud_enroll.py"
       - ".github/workflows/cloudflare-prototype.yml"
@@ -29,5 +31,5 @@ jobs:
       - name: UDB Python client tests
         run: |
           python -m pip install -e ".[dev]"
-          python -m pytest -q tests/test_cloud_agent.py
-          python -m ruff check src/udb/cloud_agent.py tests/test_cloud_agent.py tools/cloud_enroll.py
+          python -m pytest -q tests/test_cloud_agent.py tests/test_cloud_pair.py
+          python -m ruff check src/udb/cloud_agent.py src/udb/cloud_pair.py tests/test_cloud_agent.py tests/test_cloud_pair.py tools/cloud_enroll.py

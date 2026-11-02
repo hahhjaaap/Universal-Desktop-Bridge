@@ -96,6 +96,7 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         "runtime",
         "serve",
         "cloud-agent",
+        "cloud-pair",
         "status",
         "logs",
         "stop",
@@ -466,6 +467,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             from .cloud_agent import run as run_cloud_agent
 
             return run_cloud_agent(settings)
+        if action == "cloud-pair":
+            if args.access:
+                raise ValueError("Cloud pairing does not grant owner access")
+            from .cloud_pair import run as run_cloud_pair
+
+            return run_cloud_pair(settings)
         if action == "serve":
             if args.access:
                 raise ValueError("Owner activation is not an MCP operation")

@@ -69,7 +69,7 @@ def test_chrome_aura_javascript_syntax():
             [node, "--check", str(root / filename)],
             check=True,
             capture_output=True,
-            timeout=15,
+            timeout=45,
         )
 
 

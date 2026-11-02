@@ -334,6 +334,13 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         ll.addWidget(self.project_path)
         self.project_access = label("Chọn dự án để xem quyền truy cập.", "Fine", True)
         ll.addWidget(self.project_access)
+        self.common_room_button = MotionButton("Mở Common Room", "activity")
+        self.common_room_button.setToolTip(
+            "Đọc/gửi tin và theo dõi công việc từ SQLite của dự án đã đăng ký."
+        )
+        self.common_room_button.clicked.connect(self.open_common_room)
+        self.common_room_button.setEnabled(False)
+        ll.addWidget(self.common_room_button)
         self.sandbox_auto = QCheckBox("AI tự làm việc trong Sandbox")
         self.sandbox_auto.setToolTip(
             "Cho dự án này tự mở desktop và chạy script trong VM. Không cấp quyền ghi file gốc hoặc điều khiển host. Bỏ chọn để thu hồi và dừng phiên tự động."
@@ -976,12 +983,29 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         if not self.busy:
             ConnectionDialog(self.controller, self).exec()
 
+    def open_common_room(self):
+        """Open the real, existing room of the selected registered project."""
+        if not self.selected_project:
+            QMessageBox.information(
+                self, "Common Room", "Hãy chọn dự án chứa chatgpt-workspace."
+            )
+            return
+        try:
+            _, root = self.agent.project(self.selected_project["id"])
+            from .common_room_gui import CommonRoomDialog
+
+            dialog = CommonRoomDialog(root, self)
+            dialog.exec()
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "Common Room", str(exc))
+
     def project_selected(self):
         self._last_project_auth_check = time.monotonic()
         selected = self.projects.selectedItems()
         self.selected_project = (
             selected[0].data(0, Qt.ItemDataRole.UserRole) if selected else None
         )
+        self.common_room_button.setEnabled(bool(self.selected_project))
         self.sandbox_auto.blockSignals(True)
         self.sandbox_auto.setEnabled(bool(self.selected_project))
         automatic = bool(

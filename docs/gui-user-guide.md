@@ -91,6 +91,23 @@ or Sandbox script execution. Existing full diff/script tabs, request hash,
 expiry, explicit review checkbox and secondary local confirmation remain
 mandatory. Untrusted request/file strings are rendered as plain text.
 
+## Common Room (source-only integration)
+
+On **Dự án**, select a registered project containing an existing
+`chatgpt-workspace/workspace.sqlite3` or
+`examples/chatgpt-workspace/workspace.sqlite3` (source checkout), or register
+the `chatgpt-workspace` folder itself. Then click **Mở Common Room**. A
+native Qt window opens the existing version-3 SQLite database (no migration or
+duplicate room creation), with tabs for discussion, tasks and the checked
+browser-cache preview. Use **Tham gia** before posting, **Làm mới** to see
+updates from other chats, and check task revisions before modifying state.
+
+The Common Room panel does not run scripts from the registered project, start a
+browser worker, grant desktop control or authenticate chat identities. Its
+status labels distinguish cache freshness from live connectivity. It opens
+only after the local owner chooses a project. It is not included in the old
+published v0.10.0 installer.
+
 ## Navigation and quick controls
 
 The manager retains its six pages: **Dự án**, **Quyền AI**,

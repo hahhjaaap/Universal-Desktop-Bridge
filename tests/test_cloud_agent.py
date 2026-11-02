@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from udb.cloud_agent import device_url, read_device_token, valid_remote_rpc, load_pairing
+from udb.cloud_agent import device_url, load_pairing, read_device_token, valid_remote_rpc
 
 
 def test_device_url_tls_only():

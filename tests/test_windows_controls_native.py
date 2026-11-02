@@ -66,7 +66,7 @@ def test_native_control_patterns_on_one_owned_window(tmp_path, monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", trace)
     try:
-        deadline = time.monotonic() + 20
+        deadline = time.monotonic() + (45 if os.environ.get("GITHUB_ACTIONS") else 20)
         while not ready.exists() and time.monotonic() < deadline:
             error = ready.with_name(ready.name + ".error")
             assert process.alive(), (

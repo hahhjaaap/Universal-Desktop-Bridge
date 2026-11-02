@@ -302,6 +302,10 @@ def test_binary_archive_excludes_source_credentials_and_build_logs(
     destination.mkdir()
     (base / "LICENSE").write_text("test license")
     (base / "install.ps1").write_text("# synthetic public installer")
+    (base / "tools").mkdir()
+    (base / "tools" / "create_start_shortcut.ps1").write_text(
+        "# synthetic public Start Menu helper"
+    )
     (destination / "udb.exe").write_bytes(b"synthetic executable")
     (destination / "BUILD.log").write_text("PRIVATE-SENTINEL")
     (destination / "state").mkdir()
@@ -313,6 +317,7 @@ def test_binary_archive_excludes_source_credentials_and_build_logs(
         assert "UDB/udb.exe" in package.namelist()
         assert "UDB/LICENSE" in package.namelist()
         assert "UDB/install.ps1" in package.namelist()
+        assert "UDB/tools/create_start_shortcut.ps1" in package.namelist()
         assert all(
             not name.endswith((".py", ".log", ".dpapi")) for name in package.namelist()
         )

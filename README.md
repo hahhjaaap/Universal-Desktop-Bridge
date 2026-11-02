@@ -34,6 +34,31 @@ It is **not** a second MCP server, instant failover, or a replacement for owner
 permissions. See [Render observer](docs/render-observer.md) and the root
 [Render Blueprint](render.yaml). Neither platform is deployed automatically.
 
+## Common Room in the desktop GUI (source feature)
+
+Choose a **registered source project** containing an existing
+`chatgpt-workspace/workspace.sqlite3` or
+`examples/chatgpt-workspace/workspace.sqlite3` database, then click
+**Mở Common Room** on **Dự án**. The Qt dialog uses the *same* Common Room v2
+SQLite database as `examples/chatgpt-workspace/workspace.py` and `chain.py`:
+read/search discussions, join and post messages, view/create/update tasks with
+revision checks, and view verified browser-cache previews.
+
+- No second chat database is created; an absent/outdated database shows guidance.
+- No project Python script, local browser or AI process is started by this dialog.
+- Chat participants are self-declared labels, not authenticated identities.
+- Messages and tasks are user-initiated local edits; `done` is not execution proof.
+- Browser images are cached previews, not live tool permissions or browser control.
+- This source feature is **not available in the older published v0.10.0 installer**.
+
+Windows Start/Search is populated by a **per-user Start Menu shortcut**, not by
+extracting a portable ZIP. The managed installer creates/updates a UDB-owned
+shortcut on successful install/rollback (opt out with `-NoStartMenu`). For
+an existing portable EXE, open an attended PowerShell terminal in the
+extracted UDB folder and run `.\tools\create_start_shortcut.ps1 -Exe .\udb.exe`
+from the bundled portable helper (or use it from a trusted source checkout). The shortcut opens the UDB GUI; it never grants access or
+starts an online session by itself. Windows Search indexing may take time.
+
 ## Windows x64: install and start
 
 Review the installer and [published release](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases/latest) before executing downloaded code. In your own PowerShell terminal:

@@ -6,6 +6,7 @@ param(
     [string]$DataHome = (Join-Path $env:LOCALAPPDATA 'UniversalDesktopBridge'),
     [switch]$NoStart,
     [switch]$NoPath,
+    [switch]$NoStartMenu,
     [switch]$Rollback,
     [switch]$AllowLocalFeed
 )
@@ -135,6 +136,29 @@ function Set-ActiveRelease($Record,$Old) {
         throw 'Activation failed; previous installation retained. Run udb doctor.'
     }
 }
+function Register-UdbStartMenu([string]$Image,[string]$DataDirectory) {
+    # Per-user application search shortcut; no elevation, startup task or grant.
+    # Never overwrite a link that was not originally created by UDB.
+    if (!$env:APPDATA) { throw 'APPDATA is not configured.' }
+    $folder = Assert-LocalPath (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs')
+    [IO.Directory]::CreateDirectory($folder) | Out-Null
+    $link = Assert-LocalPath (Join-Path $folder 'UDB - Universal Desktop Bridge.lnk')
+    $shell = New-Object -ComObject WScript.Shell
+    $shortcut = $shell.CreateShortcut($link)
+    if ((Test-Path -LiteralPath $link) -and $shortcut.Description -ne 'UDB-managed Start Menu shortcut') {
+        throw 'Existing shortcut belongs to another application; preserved.'
+    }
+    $shortcut.TargetPath = (Assert-LocalPath $Image)
+    $shortcut.Arguments = '--home "' + $DataDirectory + '" gui'
+    $shortcut.WorkingDirectory = [IO.Path]::GetDirectoryName($Image)
+    $shortcut.IconLocation = $Image + ',0'
+    $shortcut.Description = 'UDB-managed Start Menu shortcut'
+    $shortcut.Save()
+    $verified = $shell.CreateShortcut($link)
+    if ($verified.TargetPath -ine $Image -or $verified.Description -ne 'UDB-managed Start Menu shortcut') {
+        throw 'Start Menu shortcut verification failed.'
+    }
+}
 function Get-Download([string]$Url,[string]$Destination,[int]$Timeout) {
     for ($attempt=0; $attempt -lt 3; $attempt++) {
         try { Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Destination -TimeoutSec $Timeout; return }
@@ -176,6 +200,10 @@ try {
         $target = $previous.previous
         $record = @{product='UniversalDesktopBridge';schema=1;version=$target.version;exe=$target.exe;home=$target.home;archive_sha256=$target.archive_sha256;previous=@{product=$previous.product;schema=$previous.schema;version=$previous.version;exe=$previous.exe;home=$previous.home;archive_sha256=$previous.archive_sha256}}
         Set-ActiveRelease $record $previous
+        if (!$NoStartMenu) {
+            try { Register-UdbStartMenu $record.exe $DataHome }
+            catch { Write-Warning ('Start Menu shortcut unavailable: ' + $_.Exception.Message) }
+        }
         Write-Host ('UDB rolled back to ' + $target.version + '. Settings preserved.')
         return
     }
@@ -281,6 +309,10 @@ try {
         else { $record.previous = @{product=$previous.product;schema=$previous.schema;version=$previous.version;exe=$previous.exe;home=$previous.home;archive_sha256=$previous.archive_sha256} }
     }
     Set-ActiveRelease $record $previous
+    if (!$NoStartMenu) {
+        try { Register-UdbStartMenu $record.exe $DataHome }
+        catch { Write-Warning ('Start Menu shortcut unavailable: ' + $_.Exception.Message) }
+    }
     if (!$NoPath) {
         $oldPath = [Environment]::GetEnvironmentVariable('Path','User')
         $parts = @($oldPath -split ';' | Where-Object { $_ -and $_.TrimEnd('\') -ine $bin.TrimEnd('\') })

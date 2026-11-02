@@ -129,7 +129,9 @@ def main():
                 or str(exc) != "Private browser startup timed out"
             ):
                 raise
-            print("CI transient browser startup timeout; retrying once", file=sys.stderr)
+            print(
+                "CI transient browser startup timeout; retrying once", file=sys.stderr
+            )
             browser = Browser(Path(folder) / "browser-ci-retry")
         try:
             tab = next(iter(browser.tabs))

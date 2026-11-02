@@ -6,6 +6,7 @@ shell, script, HWND or browser endpoint is accepted from an MCP caller.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import threading
@@ -19,6 +20,22 @@ from .resources import LIMITS, Governor, WindowsSampler, require_capacity
 
 _IDLE_POLL_SECONDS = 0.25
 _REPLY_CLEANUP_SECONDS = 5.0
+
+
+def pending_inbox_commands(folder):
+    """List mailbox JSON paths with one directory read.
+
+    On the idle path this avoids Path.glob's iterator/selector overhead. The
+    worker still validates each path and claims commands atomically.
+    """
+    names = os.listdir(folder)
+    if os.name == "nt":
+        return [
+            folder / n
+            for n in sorted(names, key=os.path.normcase)
+            if n.lower().endswith(".json")
+        ]
+    return [folder / n for n in sorted(names) if n.endswith(".json")]
 
 
 class HostService:
@@ -450,7 +467,7 @@ class HostService:
                     with self.lock:
                         self.maintenance.clear()
                         self._maintain()
-                for p in sorted((self.folder / "inbox").glob("*.json")):
+                for p in pending_inbox_commands(self.folder / "inbox"):
                     if self.stop_event.is_set():
                         break
                     try:

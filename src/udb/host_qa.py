@@ -10,11 +10,42 @@ from .core import Agent, PolicyError
 from .host_client import atomic_json
 from .host_service import HostService
 
+# Only this disposable acceptance worker uses the larger CI cold-browser
+# budget. Production browser command timeouts and the no-replay rule stay put.
+QA_SETUP_BUDGET_SECONDS = 30
+QA_COMMAND_TIMEOUT_SECONDS = 20
+
 FIXTURE = """<!doctype html><meta charset="utf-8"><title>UDB owned fixture</title>
 <h1>Private UDB acceptance fixture</h1><input id="name"><button id="confirm"
 onclick="document.querySelector('#result').innerText=document.querySelector('#name').value">Confirm</button><p id="result"></p>
 <select id="choice"><option value="">Choose</option><option value="VN">Vietnam</option></select>
 <input id="disabled" disabled><input id="readonly" readonly value="locked">"""
+
+
+def prepare_fixture(browser, tab, html=FIXTURE):
+    """Prepare an owned, disposable browser tab with one bounded CDP call per action.
+
+    The old 10-second *shared* fixture budget could expire under loaded Windows
+    runners even if Chrome had launched. Do not retry a timed-out CDP action,
+    especially the document write: its outcome might already have occurred.
+    """
+    previous_deadline = browser.deadline
+    browser.deadline = time.monotonic() + QA_SETUP_BUDGET_SECONDS
+    try:
+        session = browser.sid(tab)
+        tree = browser.call(
+            "Page.getFrameTree", session=session, timeout=QA_COMMAND_TIMEOUT_SECONDS
+        )
+        frame = tree["frameTree"]["frame"]["id"]
+        browser.call(
+            "Page.setDocumentContent",
+            dict(frameId=frame, html=html),
+            session,
+            timeout=QA_COMMAND_TIMEOUT_SECONDS,
+        )
+    finally:
+        # No fixture-specific deadline leaks into later host mailbox actions.
+        browser.deadline = previous_deadline
 
 
 def run(home):
@@ -48,15 +79,7 @@ def run(home):
             )
             obj = service.sessions[result["session_id"]]["object"]
             tab = result["tabs"][0]["tab_id"]
-            obj.deadline = time.monotonic() + 10
-            frame = obj.call("Page.getFrameTree", session=obj.sid(tab))["frameTree"][
-                "frame"
-            ]["id"]
-            obj.call(
-                "Page.setDocumentContent",
-                dict(frameId=frame, html=FIXTURE),
-                obj.sid(tab),
-            )
+            prepare_fixture(obj, tab)
             service.publish()
             atomic_json(
                 home / "fixture-ready.json",

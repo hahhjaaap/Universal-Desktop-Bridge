@@ -105,33 +105,50 @@ class DesktopController:
             self.host_service = HostService(self.agent)
 
     def config(self):
-        p = self.agent.state / "connection.json"
-        return json.loads(p.read_text("utf-8-sig")) if p.exists() else {}
+        # The connection file is local state, not an unbounded JSON input.
+        # Reject linked paths and oversized/corrupted objects before use.
+        from .owner_command import read_object
+
+        try:
+            return read_object(self.agent.state / "connection.json", 4096)
+        except FileNotFoundError:
+            return {}
 
     def settings(self):
-        p = self.agent.state / "gui.json"
+        from .owner_command import CommandError, read_object
+
         try:
-            return json.loads(p.read_text("utf-8-sig")) if p.exists() else {}
-        except (ValueError, OSError):
+            return read_object(self.agent.state / "gui.json", 4096)
+        except (FileNotFoundError, ValueError, OSError, CommandError):
             return {}
 
     def save_settings(self, settings):
-        # Only presentation/launch preferences; never credentials.
+        from .host_client import atomic_json
+        from .ui_theme import normalize_preference
+
+        # Only allow-listed presentation/launch preferences; never credentials.
         safe = {k: bool(settings.get(k)) for k in ("motion", "autoconnect")}
-        (self.agent.state / "gui.json").write_text(json.dumps(safe), encoding="utf-8")
+        if "theme" in settings:
+            safe["theme"] = normalize_preference(settings["theme"])
+        atomic_json(self.agent.state / "gui.json", safe)
 
     def configure(self, tunnel_id, key=""):
         try:
             tunnel_id = normalize_tunnel_id(tunnel_id)
         except ValueError as exc:
             raise PolicyError(str(exc)) from None
+        from .host_client import atomic_json
+
+        # Reject linked/reparse-point destinations before changing credentials.
+        target = self.agent.state / "connection.json"
+        reject_links(target)
         if key:
             save_key(key)
         elif not self.config().get("tunnel_id"):
             raise PolicyError("Cần nhập runtime API key khi cấu hình lần đầu.")
-        (self.agent.state / "connection.json").write_text(
-            json.dumps({"tunnel_id": tunnel_id}), encoding="utf-8"
-        )
+
+        # Never expose a partially written tunnel identifier to the watchdog.
+        atomic_json(target, {"tunnel_id": tunnel_id})
 
     def alive(self, name):
         with self.lock:
@@ -288,6 +305,19 @@ class DesktopController:
 
     def start_local(self):
         self.start_process("mcp", command(self.home, "--serve"))
+
+    def start_cloud(self):
+        """Owner-initiated remote session. Never auto-start or create grants."""
+        from .cloud_agent import load_pairing
+        from .cloud_secrets import load_device_token
+        from .launcher import command as cli_command
+
+        _relay, device_id, _token_file = load_pairing(self.agent.home)
+        load_device_token(self.agent.home, device_id)
+        self.start_process(
+            "cloud",
+            cli_command(["cloud-agent", "--home", str(self.agent.home)]),
+        )
 
     def stop_process(self, name):
         with self.lock:
@@ -447,6 +477,7 @@ class DesktopController:
             "recovery_count": self._recovery_count,
             "last_recovery": self._last_recovery,
             "local_running": self.alive("mcp"),
+            "cloud_running": self.alive("cloud"),
             "sandbox": available(),
         }
 

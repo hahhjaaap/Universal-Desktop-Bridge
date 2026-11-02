@@ -13,6 +13,7 @@ import sys
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from udb._version import VERSION
@@ -118,6 +119,7 @@ class UnifiedProxy:
         self.send_lock = threading.Lock()
         self.tool_routes: dict[str, StdioChild] = {}
         self.tool_cache: list[dict[str, Any]] | None = None
+        self.public_tool_names: frozenset[str] = frozenset()
         self.route_lock = threading.Lock()
         self.startup_ok = False
         self.closed = threading.Event()
@@ -176,10 +178,26 @@ class UnifiedProxy:
             sys.stdout.buffer.write(data)
             sys.stdout.buffer.flush()
 
+    def _backend_read_pair(self, method, params=None):
+        """Read two independent MCP backends concurrently, in stable order.
+
+        This is only for initialization/discovery. Tool calls with side effects
+        are never parallelized, retried or re-ordered by this helper.
+        """
+        with ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix="udb-mcp-read"
+        ) as pool:
+            if params is None:
+                first = pool.submit(self.primary.request, method)
+                second = pool.submit(self.companion.request, method)
+            else:
+                first = pool.submit(self.primary.request, method, params)
+                second = pool.submit(self.companion.request, method, params)
+            return first.result(), second.result()
+
     def initialize(self, params: dict[str, Any]) -> dict[str, Any]:
         with self.initialization_lock:
-            p = self.primary.request("initialize", params)
-            c = self.companion.request("initialize", params)
+            p, c = self._backend_read_pair("initialize", params)
             if p.get("error") or c.get("error"):
                 raise RuntimeError("Backend MCP initialization rejected")
             base = copy.deepcopy(p.get("result", {}))
@@ -266,8 +284,10 @@ class UnifiedProxy:
                 return {"tools": copy.deepcopy(self.tool_cache)}
             result: list[dict[str, Any]] = []
             routes: dict[str, StdioChild] = {}
-            for backend in (self.primary, self.companion):
-                response = backend.request("tools/list")
+            responses = self._backend_read_pair("tools/list")
+            for backend, response in zip(
+                (self.primary, self.companion), responses, strict=True
+            ):
                 if response.get("error"):
                     raise RuntimeError(f"Cannot discover {backend.name} MCP tools")
                 tools = response.get("result", {}).get("tools")
@@ -284,6 +304,7 @@ class UnifiedProxy:
                 catalog.extend(self.fleet.tools())
             self.tool_routes = routes
             self.tool_cache = catalog
+            self.public_tool_names = frozenset(tool["name"] for tool in catalog)
             return {"tools": copy.deepcopy(self.tool_cache)}
 
     def call_tool(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -319,9 +340,7 @@ class UnifiedProxy:
         # Refresh tool routing on first invocation. Do not retry side effects.
         if not self.tool_routes:
             self.tools_list()
-        if name not in self.tool_routes and name not in {
-            t["name"] for t in self.tool_cache or []
-        }:
+        if name not in self.tool_routes and name not in self.public_tool_names:
             raise ValueError("Unknown MCP tool")
         name, arguments = resolve_call(name, arguments)
         params = {**params, "name": name, "arguments": arguments}

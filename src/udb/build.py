@@ -168,10 +168,22 @@ def standalone_package(base, destination, asset_root, components):
         "tools/enable_chrome_aura.ps1 in an attended PowerShell window and confirm the extension ID. "
         "The extension requests HTTP(S) site access only to draw labels on explicitly marked AI tabs; "
         "it is never silently installed.\n\n"
+        "Portable Start/Search shortcut (opt-in): run tools/create_start_shortcut.ps1 "
+        "-Exe .\\udb.exe from this folder in a trusted, attended PowerShell session. "
+        "The shortcut opens the GUI and does not start an online session or grant access.\n\n"
         "SHA256 detects accidental corruption, not publisher identity. This build is not code-signed.\n",
         encoding="utf-8",
     )
     files.append(readme)
+    # Ship the optional per-user Start/Search shortcut helper in portable ZIPs.
+    # It is never executed by extraction or installation.
+    shortcut_helper = base / "tools" / "create_start_shortcut.ps1"
+    if not shortcut_helper.is_file() or shortcut_helper.is_symlink():
+        raise ValueError("Portable Start Menu helper is missing or redirected")
+    shortcut_target = destination / "tools" / "create_start_shortcut.ps1"
+    shortcut_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(shortcut_helper, shortcut_target)
+    files.append(shortcut_target)
     # Optional Chrome Aura extension is shipped as unpacked browser resources.
     # It is never installed into the owner's Chrome profile automatically.
     aura_root = base / "chrome-extension" / "udb-aura"

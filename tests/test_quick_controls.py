@@ -116,8 +116,9 @@ def test_activity_reads_off_thread_and_never_marks_a_connection_as_work(quick):
         QTest.qWait(20)
         time.sleep(0.005)
     item = panel.history.topLevelItem(0)
-    assert item.text(0) == "<b>untrusted</b>"
-    assert "&lt;b&gt;" in item.toolTip(0) and "<b>" not in item.toolTip(0)
+    assert item.text(0) == "Công cụ UDB khác"
+    assert "untrusted" not in item.toolTip(0)
+    assert "<b>" not in item.toolTip(0)
 
 
 def test_activity_failure_preserves_emergency_controls(quick):

@@ -8,7 +8,17 @@ import time
 from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import QTreeWidgetItem
 
-from .manager_widgets import ACCENT, MUTED, RAISED, WARNING, icon
+from .activity_presenter import describe, event_state
+from .manager_job_refresh import should_reload_job_details
+from .manager_widgets import icon
+from .ui_connection import tunnel_indicator, unknown_indicator, worker_indicator
+from .ui_jobs import job_metadata, visible_jobs
+from .ui_security import (
+    approval_indicator,
+    input_pause_indicator,
+    source_autonomy_indicator,
+)
+from .ui_theme import current_theme
 
 
 class ManagerRefreshMixin:
@@ -22,17 +32,68 @@ class ManagerRefreshMixin:
             ("Máy tính", self._refresh_host),
             ("Quyền AI", self._refresh_requests),
             ("Tiến trình", self._refresh_jobs),
+            ("Hoạt động", self._refresh_activity),
+            ("Bảo mật", self._refresh_security),
         ):
             try:
                 result = refresh()
                 if name == "Dự án":
                     source_auto_projects = result
             except Exception as exc:
-                errors.append(name + ": " + str(exc))
+                if name == "Bảo mật":
+                    errors.append("Bảo mật: không đọc được trạng thái")
+                    self.computer_grant_pill.set_status("Chưa xác minh", "neutral")
+                    self.header_privilege.set_status(
+                        "Quyền máy: chưa xác minh", "neutral"
+                    )
+                    self.header_privilege.setToolTip(
+                        "Không thể đọc trạng thái quyền Windows toàn diện cục bộ."
+                    )
+                    self.computer_grant_detail.setText(
+                        "Không xác minh được quyền Windows; xem kiểm tra cục bộ."
+                    )
+                    self.security_observed.setText(
+                        "Kiểm tra quyền Windows thất bại · Chưa xác minh."
+                    )
+                else:
+                    errors.append(name + ": " + str(exc))
+                if name == "Máy tính":
+                    indicator = unknown_indicator()
+                    self.local_health.set_status(indicator.text, indicator.tone)
+                    self.local_health.setToolTip(indicator.detail)
+                    self.setup_agent_health.set_status(indicator.text, indicator.tone)
+                    self.setup_agent_health.setToolTip(indicator.detail)
+                    self.security_pause_status.set_status("Chưa xác minh", "neutral")
+                elif name == "Dự án":
+                    self.security_autonomy_status.set_status("Chưa xác minh", "neutral")
+                elif name == "Quyền AI":
+                    self.security_approval_status.set_status("Chưa xác minh", "neutral")
         try:
             self._refresh_connection(source_auto_projects)
         except Exception as exc:
             errors.append("Kết nối: " + str(exc))
+            indicator = unknown_indicator()
+            self.tunnel_health.set_status(indicator.text, indicator.tone)
+            self.tunnel_health.setToolTip(indicator.detail)
+            self.setup_tunnel_health.set_status(indicator.text, indicator.tone)
+            self.setup_tunnel_health.setToolTip(indicator.detail)
+            self.header_connection.set_status(
+                "Tunnel: " + indicator.text, indicator.tone
+            )
+            self.header_connection.setToolTip(
+                indicator.detail + " ChatGPT chưa được xác minh bằng lời gọi công cụ."
+            )
+            self._connection_ready = False
+            self.status_label.setText("●  Không đọc được tunnel")
+            theme = current_theme()
+            self.status_label.setStyleSheet(
+                f"color:{theme.muted}; background:{theme.raised};"
+                " border-radius:9px; padding:4px 10px;"
+            )
+            self.connect_button.setEnabled(False)
+            self.connection_hint.setText(
+                "Chưa xác minh kết nối mới; thử kiểm tra lại từ ChatGPT."
+            )
         if errors:
             self.footer_status.setText(
                 "Không tải được trạng thái · " + " · ".join(errors)
@@ -47,6 +108,9 @@ class ManagerRefreshMixin:
     def _refresh_projects(self):
         projects = self.agent.projects()
         source_auto_projects = set(self.agent.source_autonomy_projects())
+        auto = source_autonomy_indicator(len(source_auto_projects))
+        self.security_autonomy_status.set_status(auto.text, auto.tone)
+        self.security_autonomy_status.setToolTip(auto.detail)
         signature = tuple(
             (p["id"], p["root"], p["writable"], p["id"] in source_auto_projects)
             for p in projects
@@ -67,7 +131,7 @@ class ManagerRefreshMixin:
                             else "Chỉ đọc",
                         ]
                     )
-                    item.setIcon(0, icon("folder", MUTED))
+                    item.setIcon(0, icon("folder", current_theme().muted))
                     item.setData(0, Qt.ItemDataRole.UserRole, proj)
                     item.setToolTip(0, proj["root"])
                     self.projects.addTopLevelItem(item)
@@ -87,6 +151,9 @@ class ManagerRefreshMixin:
         hs = host_status(self.agent)
         rs = hs["resources"]
         is_paused = paused(self.agent)
+        pause_state = input_pause_indicator(is_paused)
+        self.security_pause_status.set_status(pause_state.text, pause_state.tone)
+        self.security_pause_status.setToolTip(pause_state.detail)
         sessions = hs.get("sessions", [])
         handed_off = any(x.get("presentation") == "visible" for x in sessions)
         self._browser_handed_off = handed_off
@@ -209,19 +276,31 @@ class ManagerRefreshMixin:
                         str(session.get("tabs", 0)) if browser else "—",
                     ]
                 )
-                item.setIcon(0, icon("browser" if browser else "file", ACCENT))
+                item.setIcon(
+                    0, icon("browser" if browser else "file", current_theme().accent)
+                )
                 item.setToolTip(
                     0, session.get("task", "") + "\n" + session["session_id"]
                 )
                 self.host_sessions.addTopLevelItem(item)
         self.host_sessions.setVisible(bool(sessions))
         self.host_sessions_empty.setVisible(not sessions)
+        indicator = worker_indicator(hs.get("worker_ready"))
+        self.local_health.set_status(indicator.text, indicator.tone)
+        self.local_health.setToolTip(indicator.detail)
+        self.setup_agent_health.set_status(indicator.text, indicator.tone)
+        self.setup_agent_health.setToolTip(indicator.detail)
 
     def _refresh_requests(self):
         self.media_auto.blockSignals(True)
         self.media_auto.setChecked(self.agent.media_autonomy())
         self.media_auto.blockSignals(False)
         rows = self.agent.pending_local()
+        approval_state = approval_indicator(len(rows))
+        self.security_approval_status.set_status(
+            approval_state.text, approval_state.tone
+        )
+        self.security_approval_status.setToolTip(approval_state.detail)
         self.pending_rows = {r["id"]: r for r in rows}
         signature = tuple((r["id"], r["kind"], r["payload"]) for r in rows)
         if signature != self.last_pending:
@@ -286,7 +365,56 @@ class ManagerRefreshMixin:
         self.approval_empty.setVisible(not rows)
         self.approval_review.setEnabled(bool(rows))
         self.review_button.setEnabled(bool(rows))
-        self.nav_buttons[1].setText("Quyền AI" + (f"  {len(rows)}" if rows else ""))
+        permission_text = "Quyền AI" + (f"  {len(rows)}" if rows else "")
+        permission_nav = self.nav_buttons[1]
+        permission_nav.setText(
+            "" if getattr(self, "_sidebar_compact", False) else permission_text
+        )
+        permission_nav.setAccessibleName(permission_text)
+        permission_nav.setToolTip(permission_text)
+
+    def _refresh_security(self):
+        from .computer_access import summary
+
+        state = summary(self.agent)
+        self.security_observed.setText(
+            "Lần kiểm tra trên máy: "
+            + time.strftime("%H:%M:%S", time.localtime())
+            + " · Trạng thái chưa đọc được hiển thị riêng."
+        )
+        if state.get("enabled") is True:
+            self.computer_grant_pill.set_status("Đã bật · không sandbox", "paused")
+            self.header_privilege.set_status("Windows: không sandbox", "paused")
+            self.header_privilege.setToolTip(
+                "Quyền máy rộng đang bật; AI có thể truy cập dữ liệu của tài khoản "
+                "Windows. Các hạn chế theo dự án không áp dụng cho quyền này."
+            )
+            self.computer_grant_detail.setText(
+                "Quyền điều khiển Windows toàn diện đang được cấp. "
+                "AI có thể thao tác tệp, chạy chương trình và dùng chuột/phím "
+                "trong phạm vi tài khoản Windows, kể cả dữ liệu được chặn "
+                "đối với dự án. Thu hồi cục bộ: udb revoke-access."
+            )
+        elif state.get("enabled") is False:
+            self.computer_grant_pill.set_status("Không khả dụng", "neutral")
+            self.header_privilege.set_status("Quyền máy: không bật", "neutral")
+            self.header_privilege.setToolTip(
+                "Không có quyền máy rộng được xác minh. Quyền dự án và Sandbox "
+                "vẫn được quản lý riêng."
+            )
+            self.computer_grant_detail.setText(
+                "Quyền máy Windows toàn diện không khả dụng. "
+                "Quyền dự án và Windows Sandbox được quản lý riêng."
+            )
+        else:
+            self.computer_grant_pill.set_status("Chưa xác minh", "neutral")
+            self.header_privilege.set_status("Quyền máy: chưa xác minh", "neutral")
+            self.header_privilege.setToolTip(
+                "Không có bằng chứng mới để xác minh quyền máy Windows."
+            )
+            self.computer_grant_detail.setText(
+                "Chưa có bằng chứng xác minh trạng thái quyền máy."
+            )
 
     def _refresh_jobs(self):
         with self.agent.connect() as c:
@@ -297,6 +425,13 @@ class ManagerRefreshMixin:
                 dict(r)
                 for r in c.execute("SELECT * FROM jobs ORDER BY rowid DESC LIMIT 30")
             ]
+        all_jobs = jobs
+        jobs = visible_jobs(
+            all_jobs, self.job_search.text(), self.job_group_filter.currentText()
+        )
+        self.job_filter_feedback.setText(
+            f"Hiển thị {len(jobs)}/{len(all_jobs)} công việc"
+        )
         protected_signature = tuple(protected)
         if protected_signature != getattr(self, "_protected_signature", None):
             self._protected_signature = protected_signature
@@ -304,14 +439,15 @@ class ManagerRefreshMixin:
             for path in protected:
                 self.protected.addTopLevelItem(QTreeWidgetItem([path]))
         job_sig = tuple((j["id"], j["status"], j["info"]) for j in jobs)
-        if job_sig != self.last_job_signature:
+        jobs_changed = job_sig != self.last_job_signature
+        if jobs_changed:
             self.last_job_signature = job_sig
             current = self.jobs.currentItem()
             old = current.data(0, Qt.ItemDataRole.UserRole) if current else None
             with QSignalBlocker(self.jobs):
                 self.jobs.clear()
                 for j in jobs:
-                    info = json.loads(j["info"])
+                    info = job_metadata(j)
                     status_text = {
                         "running": "Đang chạy",
                         "reviewing": "Đã xong · đang xem",
@@ -340,14 +476,69 @@ class ManagerRefreshMixin:
                 if jobs and not self.jobs.selectedItems():
                     self.jobs.setCurrentItem(self.jobs.topLevelItem(0))
         self.jobs.setVisible(bool(jobs))
-        self.job_tabs.setVisible(bool(jobs))
-        self.jobs_empty.setVisible(not jobs)
-        if self.jobs.selectedItems():
-            self.show_job()
+        # MCP activity exists independently of Sandbox/background job records.
+        self.job_tabs.setVisible(True)
+        self.jobs_empty.setVisible(
+            not jobs and self.activity_timeline.topLevelItemCount() == 0
+        )
+        if not jobs:
+            self.job_output.clear()
+            self.job_script.clear()
+        selected = self.jobs.selectedItems()
+        if selected:
+            selected_id = selected[0].data(0, Qt.ItemDataRole.UserRole)
+            selected_status = next(
+                (j["status"] for j in jobs if j["id"] == selected_id), None
+            )
+            if should_reload_job_details(jobs_changed, selected_status):
+                self.show_job()
+
+    def _refresh_activity(self):
+        try:
+            events = self.activity_feed.poll()
+        except (OSError, ValueError):
+            self.activity_timeline.clear()
+            self.activity_signature = None
+            self.jobs_empty.setVisible(self.jobs.topLevelItemCount() == 0)
+            return
+        signature = tuple(
+            (
+                row.get("seq"),
+                row.get("kind"),
+                row.get("status"),
+                row.get("tool"),
+            )
+            for row in events
+        )
+        if signature == self.activity_signature:
+            return
+        self.activity_signature = signature
+        self.jobs_empty.setVisible(self.jobs.topLevelItemCount() == 0 and not events)
+        with QSignalBlocker(self.activity_timeline):
+            self.activity_timeline.clear()
+            for event in events:
+                stamp = event.get("at")
+                clock = (
+                    time.strftime("%H:%M:%S", time.localtime(stamp))
+                    if isinstance(stamp, (int, float)) and stamp > 0
+                    else "—"
+                )
+                self.activity_timeline.addTopLevelItem(
+                    QTreeWidgetItem([clock, describe(event), event_state(event)])
+                )
 
     def _refresh_connection(self, source_auto_projects):
         status = self.controller.status()
-        ready = status["ready"]
+        indicator = tunnel_indicator(status)
+        self.tunnel_health.set_status(indicator.text, indicator.tone)
+        self.tunnel_health.setToolTip(indicator.detail)
+        self.setup_tunnel_health.set_status(indicator.text, indicator.tone)
+        self.setup_tunnel_health.setToolTip(indicator.detail)
+        self.header_connection.set_status("Tunnel: " + indicator.text, indicator.tone)
+        self.header_connection.setToolTip(
+            indicator.detail + " ChatGPT chưa được xác minh bằng lời gọi công cụ."
+        )
+        ready = status["ready"] is True and status["tunnel_running"] is True
         self._connection_ready = ready
         alive = status["tunnel_running"]
         wanted = status["tunnel_wanted"]
@@ -364,11 +555,12 @@ class ManagerRefreshMixin:
         )
         if not self.busy:
             self.status_label.setText("●  " + text)
+        theme = current_theme()
         self.status_label.setStyleSheet(
             "color:"
-            + (ACCENT if ready else WARNING if alive else MUTED)
+            + (theme.accent if ready else theme.warning if alive else theme.muted)
             + "; background:"
-            + RAISED
+            + theme.raised
             + "; border-radius:9px; padding:4px 10px;"
         )
         self.connect_button.setText("Ngắt kết nối" if wanted else "Kết nối")
@@ -377,10 +569,21 @@ class ManagerRefreshMixin:
         self.local_button.setText(
             "Tắt MCP cục bộ" if status["local_running"] else "Bật MCP cục bộ"
         )
+        if hasattr(self, "cloud_session_button"):
+            cloud_running = status.get("cloud_running", False)
+            self.cloud_session_button.setEnabled(not self.busy)
+            self.cloud_session_button.setText(
+                "Tắt Cloud Agent" if cloud_running else "Bật Cloud Agent"
+            )
+            self.cloud_session_status.setText(
+                "Cloud Agent đang chạy · chưa xác minh plugin ChatGPT hoặc WebSocket."
+                if cloud_running
+                else "Cloud Agent đã tắt. Ghép nối không tự tạo phiên điều khiển."
+            )
         self.connection_hint.setText(
-            "Tunnel hoạt động; hãy kiểm tra ChatGPT có thấy và gọi được công cụ UDB."
+            "Tunnel sẵn sàng trên máy này; ChatGPT chưa được xác minh."
             if ready
-            else "Private MCP tunnel · không mở cổng công khai"
+            else "Tunnel là bước cục bộ; ChatGPT cần kiểm tra công cụ riêng."
         )
         self.detail_status.setText(
             "Tunnel: "

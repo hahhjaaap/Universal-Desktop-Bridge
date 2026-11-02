@@ -14,15 +14,12 @@ from PySide6.QtCore import (
     QThreadPool,
     QTimer,
 )
-from PySide6.QtGui import (
-    QColor,
-    QFont,
-    QPalette,
-)
+from PySide6.QtGui import QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -42,6 +39,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import __version__
+from .activity_presenter import ActivityFeed
 from .core import reject_links
 from .desktop import DesktopController
 from .manager_dialogs import ApprovalDialog, ConnectionDialog, SourceDialog
@@ -49,13 +47,10 @@ from .manager_host import ManagerHostMixin
 from .manager_refresh import ManagerRefreshMixin
 from .manager_widgets import (
     ACCENT,
-    BG,
-    PANEL,
-    STYLE,
-    TEXT,
     DiffHighlighter,
     MotionButton,
     StatusBand,
+    StatusPill,
     Worker,
     empty_state,
     icon,
@@ -63,6 +58,7 @@ from .manager_widgets import (
     panel,
     row,
 )
+from .ui_theme import apply_theme, current_theme, normalize_preference
 
 PLUGIN_URL = (
     "https://chatgpt.com/plugins/plugin_asdk_app_6ad78a6c547c81919d4efa885507ead2"
@@ -83,6 +79,8 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.last_pending = None
         self.last_job_signature = None
         self.connection_signature = None
+        self.activity_feed = ActivityFeed(self.agent.home)
+        self.activity_signature = None
         self._closing = False
         self._last_project_auth_check = 0.0
         self.setWindowTitle("Universal Desktop Bridge · " + __version__)
@@ -100,15 +98,33 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         body.setSpacing(0)
         outer.addLayout(body, 1)
         sidebar = QFrame()
+        self.sidebar = sidebar
+        self._sidebar_compact = False
         sidebar.setObjectName("Sidebar")
         sidebar.setFixedWidth(200)
         nav = QVBoxLayout(sidebar)
+        self.sidebar_nav = nav
         nav.setContentsMargins(16, 26, 16, 20)
         nav.setSpacing(9)
-        nav.addWidget(label("UDB", "Brand"))
-        nav.addWidget(label("TRỢ LÝ TRÊN MÁY", "Eyebrow"))
-        nav.addSpacing(26)
+        self.brand_label = label("UDB", "Brand")
+        self.brand_caption = label("DESKTOP WORKSPACE", "Eyebrow")
+        nav.addWidget(self.brand_label)
+        nav.addWidget(self.brand_caption)
+        self.sidebar_toggle = MotionButton("Thu gọn menu", "cursor")
+        self.sidebar_toggle.setToolTip("Thu gọn thanh điều hướng")
+        self.sidebar_toggle.setAccessibleName("Thu gọn thanh điều hướng")
+        self.sidebar_toggle.clicked.connect(self.toggle_sidebar)
+        nav.addWidget(self.sidebar_toggle)
+        nav.addSpacing(12)
         self.nav_buttons = []
+        self.nav_names = (
+            "Dự án",
+            "Quyền AI",
+            "Tiến trình",
+            "Bảo vệ",
+            "Kết nối",
+            "Máy tính",
+        )
         for i, (text, glyph) in enumerate(
             (
                 ("Dự án", "projects"),
@@ -121,18 +137,52 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         ):
             btn = MotionButton(text, glyph, "nav")
             btn.setMinimumHeight(44)
+            btn.setToolTip(text)
+            btn.setAccessibleName(text)
             btn.clicked.connect(lambda checked=False, index=i: self.navigate(index))
             nav.addWidget(btn)
             self.nav_buttons.append(btn)
         nav.addStretch()
-        protected = label("Bạn quyết định\nAI được làm gì", "Muted", True)
-        nav.addWidget(protected)
+        self.protected_caption = label("Bạn quyết định\nAI được làm gì", "Muted", True)
+        nav.addWidget(self.protected_caption)
         nav.addSpacing(12)
-        nav.addWidget(label("DESKTOP BRIDGE", "Eyebrow"))
-        nav.addWidget(label("Agent " + __version__, "Fine"))
+        self.sidebar_footer = label("DESKTOP BRIDGE", "Eyebrow")
+        nav.addWidget(self.sidebar_footer)
+        self.sidebar_version = label("Agent " + __version__, "Fine")
+        nav.addWidget(self.sidebar_version)
         body.addWidget(sidebar)
         self.stack = QStackedWidget()
-        body.addWidget(self.stack, 1)
+        content_column = QVBoxLayout()
+        content_column.setContentsMargins(0, 0, 0, 0)
+        content_column.setSpacing(0)
+        header = QFrame()
+        header.setObjectName("AppHeader")
+        header_row = QHBoxLayout(header)
+        header_row.setContentsMargins(26, 10, 26, 10)
+        header_row.setSpacing(14)
+        self.header_title = label("Máy tính", "H2")
+        self.header_title.setAccessibleName("Trang đang xem")
+        header_row.addWidget(self.header_title)
+        header_row.addStretch()
+        self.header_connection = StatusPill("Tunnel chưa kiểm tra", "neutral")
+        self.header_connection.setAccessibleDescription(
+            "Chỉ là trạng thái tunnel, không xác minh công cụ ChatGPT."
+        )
+        self.header_connection.setToolTip(
+            "Kết nối tunnel không xác minh ChatGPT đã gọi được công cụ."
+        )
+        header_row.addWidget(self.header_connection)
+        self.header_privilege = StatusPill("Quyền máy: chưa xác minh", "neutral")
+        self.header_privilege.setAccessibleDescription(
+            "Cảnh báo quyền điều khiển Windows toàn diện, không phải quyền dự án."
+        )
+        self.header_privilege.setToolTip(
+            "Trạng thái quyền máy không sandbox, đọc từ tài khoản Windows cục bộ."
+        )
+        header_row.addWidget(self.header_privilege)
+        content_column.addWidget(header)
+        content_column.addWidget(self.stack, 1)
+        body.addLayout(content_column, 1)
         self.dashboard = self.build_dashboard()
         self.stack.addWidget(self.dashboard)
         self.stack.addWidget(self.build_approvals())
@@ -159,6 +209,14 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh)
         self.timer.start(1500)
+        self.navigation_shortcuts = []
+        for index in range(6):
+            shortcut = QShortcut(QKeySequence(f"Ctrl+{index + 1}"), self)
+            shortcut.activated.connect(lambda index=index: self.navigate(index))
+            self.navigation_shortcuts.append(shortcut)
+        job_search_shortcut = QShortcut(QKeySequence("Ctrl+Shift+F"), self)
+        job_search_shortcut.activated.connect(self.focus_job_search)
+        self.navigation_shortcuts.append(job_search_shortcut)
         self.navigate(5)
         self.refresh()
 
@@ -201,22 +259,56 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         top.addWidget(self.status_label)
         lay.insertLayout(0, top)
         self.band = StatusBand()
-        band = QHBoxLayout(self.band)
-        band.setContentsMargins(22, 20, 22, 20)
+        band = QVBoxLayout(self.band)
+        band.setContentsMargins(22, 15, 22, 15)
+        band.setSpacing(10)
+        heading = QHBoxLayout()
         info = QVBoxLayout()
-        info.setSpacing(6)
-        info.addWidget(label("Kết nối với ChatGPT Chat", "H2"))
+        info.setSpacing(4)
+        info.addWidget(label("Trạng thái kết nối UDB", "H2"))
         self.connection_hint = label(
-            "Private MCP tunnel · không mở cổng công khai", "Muted", True
+            "Tunnel và ChatGPT là hai bước xác minh riêng biệt.",
+            "Muted",
+            True,
         )
         info.addWidget(self.connection_hint)
-        band.addLayout(info, 1)
+        heading.addLayout(info, 1)
         self.configure_button = MotionButton("Cấu hình", "settings")
         self.configure_button.clicked.connect(self.configure)
-        band.addWidget(self.configure_button)
+        heading.addWidget(self.configure_button)
         self.connect_button = MotionButton("Kết nối", "power", "primary")
         self.connect_button.clicked.connect(self.toggle_tunnel)
-        band.addWidget(self.connect_button)
+        heading.addWidget(self.connect_button)
+        band.addLayout(heading)
+        health = QHBoxLayout()
+        health.setSpacing(8)
+        self.local_health = StatusPill("Chưa kiểm tra", "neutral")
+        self.tunnel_health = StatusPill("Chưa kiểm tra", "neutral")
+        self.chatgpt_health = StatusPill("Chưa xác minh", "neutral")
+        for title, pill, description in (
+            (
+                "Agent",
+                self.local_health,
+                "Trạng thái tác nhân UDB trên máy tính này.",
+            ),
+            (
+                "Tunnel",
+                self.tunnel_health,
+                "Tình trạng đường truyền MCP trên máy tính này.",
+            ),
+            (
+                "ChatGPT",
+                self.chatgpt_health,
+                "Không thể xác minh công cụ ChatGPT từ trạng thái tunnel.",
+            ),
+        ):
+            title_label = label(title, "Fine")
+            health.addWidget(title_label)
+            pill.setAccessibleDescription(description)
+            pill.setToolTip(description)
+            health.addWidget(pill)
+        health.addStretch()
+        band.addLayout(health)
         lay.addWidget(self.band)
         split = QSplitter()
         split.setChildrenCollapsible(False)
@@ -242,6 +334,13 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         ll.addWidget(self.project_path)
         self.project_access = label("Chọn dự án để xem quyền truy cập.", "Fine", True)
         ll.addWidget(self.project_access)
+        self.common_room_button = MotionButton("Mở Common Room", "activity")
+        self.common_room_button.setToolTip(
+            "Đọc/gửi tin và theo dõi công việc từ SQLite của dự án đã đăng ký."
+        )
+        self.common_room_button.clicked.connect(self.open_common_room)
+        self.common_room_button.setEnabled(False)
+        ll.addWidget(self.common_room_button)
         self.sandbox_auto = QCheckBox("AI tự làm việc trong Sandbox")
         self.sandbox_auto.setToolTip(
             "Cho dự án này tự mở desktop và chạy script trong VM. Không cấp quyền ghi file gốc hoặc điều khiển host. Bỏ chọn để thu hồi và dừng phiên tự động."
@@ -340,11 +439,30 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
                 create,
             )
         )
+        self.job_search = QLineEdit()
+        self.job_search.setPlaceholderText("Tìm dự án, trạng thái hoặc Job ID…")
+        self.job_search.setAccessibleName("Tìm công việc theo thông tin")
+        self.job_search.setClearButtonEnabled(True)
+        self.job_search.setToolTip(
+            "Chỉ tìm trong thông tin công việc; không tìm nội dung log hoặc script."
+        )
+        self.job_group_filter = QComboBox()
+        self.job_group_filter.setAccessibleName("Lọc trạng thái công việc")
+        for value in ("Tất cả", "Đang chạy", "Cần chú ý", "Đã xong"):
+            self.job_group_filter.addItem(value)
+        self.job_search.textChanged.connect(lambda *_: self._refresh_jobs())
+        self.job_group_filter.currentIndexChanged.connect(
+            lambda *_: self._refresh_jobs()
+        )
+        lay.addLayout(row(self.job_search, self.job_group_filter))
+        self.job_filter_feedback = label("Danh sách công việc UDB", "Fine")
+        lay.addWidget(self.job_filter_feedback)
         self.jobs = self.tree(["Dự án", "Ngôn ngữ", "Trạng thái", "Job ID"])
         self.jobs.setColumnWidth(0, 190)
         self.jobs.setColumnWidth(1, 100)
         self.jobs.setColumnWidth(2, 140)
         self.jobs.setMaximumHeight(220)
+        self.jobs.setAccessibleName("Danh sách công việc của UDB")
         self.jobs.itemSelectionChanged.connect(self.show_job)
         lay.addWidget(self.jobs)
         self.job_tabs = QTabWidget()
@@ -355,6 +473,26 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.job_script = QPlainTextEdit()
         self.job_script.setReadOnly(True)
         self.job_tabs.addTab(self.job_script, "Script đã duyệt")
+        self.activity_timeline = self.tree(["Lúc", "Công cụ", "Kết quả"])
+        self.activity_timeline.setAccessibleName(
+            "Lịch sử hoạt động MCP đã lược bỏ dữ liệu nhạy cảm"
+        )
+        self.activity_timeline.setToolTip(
+            "Tối đa 40 bản ghi metadata; không chứa log, script hoặc tài liệu gốc."
+        )
+        self.activity_timeline.setColumnWidth(0, 85)
+        self.activity_timeline.setColumnWidth(1, 210)
+        activity_panel = QWidget()
+        activity_layout = QVBoxLayout(activity_panel)
+        activity_layout.setContentsMargins(8, 8, 8, 8)
+        activity_layout.setSpacing(8)
+        activity_layout.addWidget(self.activity_timeline, 1)
+        self.activity_export_button = MotionButton(
+            "Xuất metadata đã ẩn thông tin nhạy cảm", "file"
+        )
+        self.activity_export_button.clicked.connect(self.export_activity)
+        activity_layout.addLayout(row(None, self.activity_export_button))
+        self.job_tabs.addTab(activity_panel, "Hoạt động MCP")
         lay.addWidget(self.job_tabs, 1)
         self.jobs_empty = empty_state(
             "Chưa có tác vụ",
@@ -380,10 +518,76 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
 
     def build_protection(self):
         p, lay = self.page(
-            "Vùng được bảo vệ",
-            "Thư mục, checkpoint, mô hình, dữ liệu và bí mật luôn nằm ngoài quyền truy cập tự động của AI.",
+            "Bảo vệ và quyền truy cập",
+            "Đường dẫn bảo vệ áp dụng cho thao tác giới hạn theo dự án, không phải quyền Windows toàn diện.",
         )
-        self.protected = self.tree(["Đường dẫn được chặn"])
+        computer = panel()
+        cl = QVBoxLayout(computer)
+        cl.setContentsMargins(20, 16, 20, 16)
+        cl.setSpacing(9)
+        self.computer_grant_pill = StatusPill("Đang kiểm tra", "neutral")
+        self.computer_grant_pill.setAccessibleDescription(
+            "Quyền máy rộng trên Windows hiện tại; không phải quyền Sandbox."
+        )
+        cl.addLayout(
+            row(label("Quyền Windows toàn diện", "H2"), None, self.computer_grant_pill)
+        )
+        self.computer_grant_detail = label(
+            "Đang kiểm tra quyền chủ máy. Không thể cấp quyền tại trang này.",
+            "Muted",
+            True,
+        )
+        cl.addWidget(self.computer_grant_detail)
+        cl.addWidget(
+            label(
+                "Chỉ chủ máy có thể cấp hoặc thu hồi qua terminal Windows cục bộ. "
+                "Quyền toàn diện không chạy trong Sandbox.",
+                "Fine",
+                True,
+            )
+        )
+        lay.addWidget(computer)
+        posture = panel()
+        posture_layout = QVBoxLayout(posture)
+        posture_layout.setContentsMargins(20, 16, 20, 16)
+        posture_layout.setSpacing(10)
+        posture_layout.addWidget(label("Tổng quan quyền và hoạt động", "H2"))
+        posture_layout.addWidget(
+            label(
+                "Chỉ hiển thị dữ liệu vừa đọc trên máy này. Không phải chứng nhận "
+                "an toàn hoặc quyền truy cập của ChatGPT.",
+                "Muted",
+                True,
+            )
+        )
+        self.security_approval_status = StatusPill("Chưa kiểm tra", "neutral")
+        self.security_pause_status = StatusPill("Chưa kiểm tra", "neutral")
+        self.security_autonomy_status = StatusPill("Chưa kiểm tra", "neutral")
+        for heading, pill, description in (
+            (
+                "Yêu cầu phê duyệt cục bộ",
+                self.security_approval_status,
+                "Số yêu cầu đang chờ chủ máy xem.",
+            ),
+            (
+                "Đầu vào Windows",
+                self.security_pause_status,
+                "Chỉ trạng thái tạm dừng chuột/phím host; không dừng tác vụ nền.",
+            ),
+            (
+                "Tự sửa mã nguồn",
+                self.security_autonomy_status,
+                "Số dự án đang bật quyền tự sửa mã nguồn theo phạm vi.",
+            ),
+        ):
+            pill.setToolTip(description)
+            pill.setAccessibleDescription(description)
+            heading_label = label(heading, "Fine")
+            posture_layout.addLayout(row(heading_label, None, pill))
+        self.security_observed = label("Chưa có trạng thái vừa xác minh.", "Fine", True)
+        posture_layout.addWidget(self.security_observed)
+        lay.addWidget(posture)
+        self.protected = self.tree(["Đường dẫn bị chặn trong phạm vi dự án"])
         lay.addWidget(self.protected, 1)
         note = panel()
         nl = QVBoxLayout(note)
@@ -391,7 +595,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         nl.addWidget(label("Bảo vệ nhiều lớp", "H2"))
         nl.addWidget(
             label(
-                "Chặn checkpoint, weights, datasets, credential và đường dẫn vượt dự án. Chặn symlink, junction và hardlink. Sửa mã nguồn đã cấp quyền sẽ tự động, kiểm tra hash và backup.",
+                "Trong chế độ giới hạn theo dự án: chặn checkpoint, weights, datasets, credential và đường dẫn ngoài dự án; kiểm tra symlink/junction/hardlink, hash và backup. Quyền máy rộng được cấp riêng có thể truy cập dữ liệu mà tài khoản Windows đọc được.",
                 "Muted",
                 True,
             )
@@ -407,11 +611,67 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             "Kết nối & cài đặt",
             "Kết nối ChatGPT Chat qua tunnel riêng. API key không xuất hiện trong giao diện hay log.",
         )
+        setup = panel()
+        setup_layout = QVBoxLayout(setup)
+        setup_layout.setContentsMargins(23, 20, 23, 20)
+        setup_layout.setSpacing(10)
+        setup_layout.addWidget(label("Bắt đầu với UDB · 3 bước", "H2"))
+        setup_layout.addWidget(
+            label(
+                "Đây là trạng thái từng bước, không phải một nút cấp quyền AI. "
+                "Chỉ chủ máy mới có thể phê duyệt thao tác cần quyền.",
+                "Muted",
+                True,
+            )
+        )
+        self.setup_agent_health = StatusPill("Chưa kiểm tra", "neutral")
+        self.setup_tunnel_health = StatusPill("Chưa kiểm tra", "neutral")
+        self.setup_chatgpt_health = StatusPill("Chưa xác minh", "neutral")
+        for heading, description, pill in (
+            (
+                "1 · Tác nhân trên Windows",
+                "Mở UDB trên máy này; trạng thái được đọc từ worker cục bộ.",
+                self.setup_agent_health,
+            ),
+            (
+                "2 · Kết nối Tunnel",
+                "Dùng Kết nối bên dưới. Tunnel xanh chưa chứng minh ChatGPT gọi được.",
+                self.setup_tunnel_health,
+            ),
+            (
+                "3 · Xác minh tại ChatGPT",
+                "Chọn plugin UDB trong ChatGPT và gọi công cụ trạng thái chỉ đọc. "
+                "Giao diện không thể tự xác minh bước này.",
+                self.setup_chatgpt_health,
+            ),
+        ):
+            heading_label = label(heading, "Fine")
+            heading_label.setToolTip(description)
+            pill.setToolTip(description)
+            pill.setAccessibleDescription(description)
+            setup_layout.addLayout(row(heading_label, None, pill))
+            setup_layout.addWidget(label(description, "Muted", True))
+        lay.addWidget(setup)
         card = panel()
         cl = QVBoxLayout(card)
         cl.setContentsMargins(23, 23, 23, 23)
         cl.setSpacing(15)
         cl.addWidget(label("Secure MCP Tunnel", "H2"))
+        cl.addWidget(
+            label(
+                "1. Kiểm tra tác nhân cục bộ → 2. Kiểm tra Tunnel → "
+                "3. Gọi một công cụ chỉ đọc trong ChatGPT. "
+                "Màu xanh ở Tunnel không chứng minh ChatGPT đã truy cập.",
+                "Muted",
+                True,
+            )
+        )
+        doctor = MotionButton("Sao chép lệnh kiểm tra", "file")
+        doctor.setAccessibleName("Sao chép lệnh udb doctor --json")
+        doctor.clicked.connect(
+            lambda: QApplication.clipboard().setText("udb doctor --json")
+        )
+        cl.addLayout(row(doctor, None))
         self.detail_status = label("", "Muted", True)
         cl.addWidget(self.detail_status)
         self.media_auto = QCheckBox(
@@ -428,6 +688,35 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         plugin.clicked.connect(lambda: self.open_url(PLUGIN_URL))
         cl.addLayout(row(config, plugin, None))
         lay.addWidget(card)
+        cloud_panel = panel()
+        cloud_layout = QVBoxLayout(cloud_panel)
+        cloud_layout.setContentsMargins(23, 20, 23, 20)
+        cloud_layout.setSpacing(12)
+        cloud_layout.addWidget(
+            label("Cloudflare · Ghép nối thiết bị (thử nghiệm)", "H2")
+        )
+        cloud_layout.addWidget(
+            label(
+                "Chỉ dùng với mã mời được chủ hệ thống cấp. Mã hết hạn sau 10 phút. "
+                "Ghép nối không cấp quyền điều khiển Windows và không tự cài plugin ChatGPT.",
+                "Muted",
+                True,
+            )
+        )
+        self.cloud_pair_button = MotionButton("Nhập mã mời Cloud", "settings")
+        self.cloud_pair_button.clicked.connect(self.cloud_pair)
+        self.cloud_session_button = MotionButton("Bật Cloud Agent", "power")
+        self.cloud_session_button.clicked.connect(self.toggle_cloud)
+        cloud_layout.addLayout(
+            row(self.cloud_pair_button, self.cloud_session_button, None)
+        )
+        self.cloud_session_status = label(
+            "Chưa bật Cloud Agent. Ghép nối không tự tạo phiên điều khiển.",
+            "Muted",
+            True,
+        )
+        cloud_layout.addWidget(self.cloud_session_status)
+        lay.addWidget(cloud_panel)
         local = panel()
         ll = QVBoxLayout(local)
         ll.setContentsMargins(23, 23, 23, 23)
@@ -450,11 +739,203 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             True,
         )
         lay.addWidget(help_text)
+        appearance = panel()
+        al = QVBoxLayout(appearance)
+        al.setContentsMargins(23, 20, 23, 20)
+        al.setSpacing(12)
+        al.addWidget(label("Giao diện ứng dụng", "H2"))
+        al.addWidget(
+            label(
+                "Chọn chế độ sáng, tối hoặc tự động theo Windows. "
+                "Tùy chọn này chỉ thay đổi cách hiển thị, không thay đổi quyền AI.",
+                "Muted",
+                True,
+            )
+        )
+        self.theme_picker = QComboBox()
+        self.theme_picker.setAccessibleName("Chế độ giao diện UDB")
+        for name, value in (
+            ("Theo hệ thống Windows", "system"),
+            ("Sáng", "light"),
+            ("Tối", "dark"),
+        ):
+            self.theme_picker.addItem(name, value)
+        choice = normalize_preference(self.controller.settings().get("theme"))
+        self.theme_picker.setCurrentIndex(self.theme_picker.findData(choice))
+        self.theme_picker.currentIndexChanged.connect(self.change_theme)
+        al.addWidget(self.theme_picker)
+        self.reduce_motion = QCheckBox("Giảm chuyển động trong giao diện")
+        self.reduce_motion.setAccessibleName("Giảm chuyển động giao diện UDB")
+        self.reduce_motion.setToolTip(
+            "Tắt hiệu ứng hover và chuyển cảnh không thiết yếu; không đổi quyền AI."
+        )
+        self.reduce_motion.setChecked(
+            self.controller.settings().get("motion", True) is False
+        )
+        self.reduce_motion.toggled.connect(self.change_motion)
+        al.addWidget(self.reduce_motion)
+        lay.addWidget(appearance)
         lay.addStretch()
         return p
 
+    def change_theme(self, index):
+        choice = self.theme_picker.itemData(index)
+        if choice not in ("system", "light", "dark"):
+            return
+        settings = self.controller.settings()
+        previous = normalize_preference(settings.get("theme"))
+        if choice == previous:
+            return
+        try:
+            self.controller.save_settings(
+                {
+                    "motion": settings.get("motion", True),
+                    "autoconnect": settings.get("autoconnect", False),
+                    "theme": choice,
+                }
+            )
+        except Exception:
+            self.theme_picker.blockSignals(True)
+            self.theme_picker.setCurrentIndex(self.theme_picker.findData(previous))
+            self.theme_picker.blockSignals(False)
+            QMessageBox.warning(
+                self,
+                "Không lưu được giao diện",
+                "Không thể lưu thay đổi giao diện. Cài đặt trước đó được giữ nguyên.",
+            )
+            return
+        apply_theme(QApplication.instance(), choice)
+        self._update_window_chrome()
+        self.refresh()
+
+    def change_motion(self, reduce_motion):
+        settings = self.controller.settings()
+        previous_motion = settings.get("motion", True) is not False
+        desired_motion = not bool(reduce_motion)
+        if desired_motion == previous_motion:
+            QApplication.instance().setProperty("motion", desired_motion)
+            return
+        try:
+            self.controller.save_settings(
+                {
+                    "motion": desired_motion,
+                    "autoconnect": settings.get("autoconnect", False),
+                    "theme": normalize_preference(settings.get("theme")),
+                }
+            )
+        except Exception:
+            self.reduce_motion.blockSignals(True)
+            self.reduce_motion.setChecked(not previous_motion)
+            self.reduce_motion.blockSignals(False)
+            QMessageBox.warning(
+                self,
+                "Không lưu được chuyển động",
+                "Cài đặt chuyển động trước đó được giữ nguyên.",
+            )
+            return
+        QApplication.instance().setProperty("motion", desired_motion)
+
+    def toggle_sidebar(self):
+        self._sidebar_compact = not self._sidebar_compact
+        compact = self._sidebar_compact
+        self.sidebar.setFixedWidth(72 if compact else 200)
+        self.sidebar_nav.setSpacing(6 if compact else 9)
+        self.sidebar_toggle.setMaximumWidth(56 if compact else 10000)
+        for button in self.nav_buttons:
+            button.setMaximumWidth(56 if compact else 10000)
+        self.sidebar_nav.setContentsMargins(
+            8 if compact else 16,
+            20 if compact else 26,
+            8 if compact else 16,
+            18 if compact else 20,
+        )
+        self.brand_label.setText("U" if compact else "UDB")
+        for item in (
+            self.brand_caption,
+            self.protected_caption,
+            self.sidebar_footer,
+            self.sidebar_version,
+        ):
+            item.setVisible(not compact)
+        self.sidebar_toggle.setText("" if compact else "Thu gọn menu")
+        self.sidebar_toggle.setAccessibleName(
+            "Mở rộng thanh điều hướng" if compact else "Thu gọn thanh điều hướng"
+        )
+        self.sidebar_toggle.setToolTip(self.sidebar_toggle.accessibleName())
+        for index, button in enumerate(self.nav_buttons):
+            name = self.nav_names[index]
+            button.setText("" if compact else name)
+            button.setAccessibleName(name)
+            button.setToolTip(name)
+        self._refresh_requests()
+
+    def focus_job_search(self):
+        self.navigate(2)
+        self.job_search.setFocus()
+        self.job_search.selectAll()
+
+    def export_activity(self):
+        # Explicit local-only export: no raw log contents, script, paths or IDs.
+        from .activity_presenter import describe, event_state
+
+        try:
+            events = self.activity_feed.poll()
+        except (OSError, ValueError):
+            QMessageBox.warning(
+                self, "Chưa xuất được", "Không đọc được metadata hoạt động."
+            )
+            return
+        if not events:
+            QMessageBox.information(
+                self, "Không có dữ liệu", "Chưa có hoạt động nào để xuất."
+            )
+            return
+        consent = QMessageBox.question(
+            self,
+            "Xác nhận xuất nhật ký",
+            "Chỉ xuất tối đa 40 bản ghi: thời gian, tên công cụ và trạng thái. "
+            "Không xuất nội dung file, script, khóa hay ID phiên. Tiếp tục?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if consent != QMessageBox.StandardButton.Yes:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self,
+            "Lưu nhật ký UDB (metadata)",
+            "udb-activity-redacted.json",
+            "JSON (*.json)",
+        )
+        if not destination:
+            return
+        records = [
+            {
+                "time": (
+                    time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(event["at"]))
+                    if event.get("at") and event["at"] > 0
+                    else "unknown"
+                ),
+                "tool": describe(event),
+                "state": event_state(event),
+            }
+            for event in events[:40]
+        ]
+        try:
+            with Path(destination).open("x", encoding="utf-8") as stream:
+                json.dump(records, stream, ensure_ascii=False, indent=2)
+                stream.write("\n")
+        except OSError:
+            QMessageBox.warning(
+                self, "Chưa xuất được", "Không thể tạo tệp mới hoặc tệp đã tồn tại."
+            )
+            return
+        QMessageBox.information(
+            self, "Đã tạo bản xuất", "Đã lưu metadata hoạt động đã lược bỏ dữ liệu."
+        )
+
     def navigate(self, index):
         self.stack.setCurrentIndex(index)
+        self.header_title.setText(self.nav_names[index])
         for i, btn in enumerate(self.nav_buttons):
             btn.selected(i == index)
         self.stack.currentWidget().updateGeometry()
@@ -531,12 +1012,112 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         if not self.busy:
             ConnectionDialog(self.controller, self).exec()
 
+    def toggle_cloud(self):
+        """Only a local GUI action may enable the experimental cloud session."""
+        if self.busy:
+            return
+        if self.controller.alive("cloud"):
+            self.run_background(lambda: self.controller.stop_process("cloud"))
+            return
+        answer = QMessageBox.question(
+            self,
+            "UDB Cloud · Bật phiên thử nghiệm",
+            "Bật phiên Cloud Agent ra Internet cho máy Windows này?\\n"
+            "Cloudflare có thể chuyển các yêu cầu được xác thực về UDB.\\n"
+            "Chỉ bật khi bạn tin tưởng chủ hệ thống và đã ghép nối máy.\\n"
+            "UDB vẫn kiểm tra quyền máy tính riêng và tự tắt phiên khi thoát ứng dụng.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self.run_background(self.controller.start_cloud)
+
+    def cloud_pair(self):
+        if self.busy:
+            return
+        relay, ok = QInputDialog.getText(
+            self,
+            "UDB Cloud · Ghép nối",
+            "Địa chỉ Cloudflare HTTPS (workers.dev):",
+        )
+        if not ok or not relay.strip():
+            return
+        device_id, ok = QInputDialog.getText(
+            self,
+            "UDB Cloud · Ghép nối",
+            "Mã thiết bị trong lời mời:",
+        )
+        if not ok or not device_id.strip():
+            return
+        invitation, ok = QInputDialog.getText(
+            self,
+            "UDB Cloud · Ghép nối",
+            "Mã mời một lần (ẩn):",
+            QLineEdit.EchoMode.Password,
+        )
+        if not ok or not invitation.strip():
+            return
+        answer = QMessageBox.question(
+            self,
+            "Xác nhận ghép nối Cloud",
+            "Đăng ký thiết bị Windows này với Cloudflare?\n"
+            "Thao tác không cấp thêm quyền máy tính cho AI.\n"
+            "Chỉ tiếp tục nếu bạn tin tưởng chủ hệ thống cấp mã mời.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        def pair_in_background():
+            from .cloud_pair import claim_device
+
+            claim_device(
+                Path(self.agent.home),
+                relay.strip(),
+                device_id.strip(),
+                invitation.strip(),
+            )
+            return True
+
+        self.run_background(
+            pair_in_background,
+            done=lambda success: (
+                QMessageBox.information(
+                    self,
+                    "UDB Cloud",
+                    "Đã ghép nối thiết bị. Chưa cấp quyền Windows hoặc plugin ChatGPT. "
+                    "Kết nối Cloud Agent vẫn là chức năng thử nghiệm.",
+                )
+                if success
+                else None
+            ),
+        )
+
+    def open_common_room(self):
+        """Open the real, existing room of the selected registered project."""
+        if not self.selected_project:
+            QMessageBox.information(
+                self, "Common Room", "Hãy chọn dự án chứa chatgpt-workspace."
+            )
+            return
+        try:
+            _, root = self.agent.project(self.selected_project["id"])
+            from .common_room_gui import CommonRoomDialog
+
+            dialog = CommonRoomDialog(root, self)
+            dialog.exec()
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "Common Room", str(exc))
+
     def project_selected(self):
         self._last_project_auth_check = time.monotonic()
         selected = self.projects.selectedItems()
         self.selected_project = (
             selected[0].data(0, Qt.ItemDataRole.UserRole) if selected else None
         )
+        self.common_room_button.setEnabled(bool(self.selected_project))
         self.sandbox_auto.blockSignals(True)
         self.sandbox_auto.setEnabled(bool(self.selected_project))
         automatic = bool(
@@ -833,18 +1414,21 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
 
         QDesktopServices.openUrl(QUrl(url))
 
-    def showEvent(self, event):
-        super().showEvent(event)
+    def _update_window_chrome(self):
         if os.name == "nt":
             try:
                 import ctypes
 
-                value = ctypes.c_int(1)
+                value = ctypes.c_int(1 if current_theme().name == "dark" else 0)
                 ctypes.windll.dwmapi.DwmSetWindowAttribute(
                     int(self.winId()), 20, ctypes.byref(value), ctypes.sizeof(value)
                 )
             except Exception:
-                pass  # DWM styling is cosmetic and may be unsupported.
+                pass  # DWM styling is cosmetic and must never block the UI.
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._update_window_chrome()
 
     def closeEvent(self, event):
         if getattr(self, "_keep_in_tray", False) and not getattr(
@@ -880,17 +1464,9 @@ def make_app():
     app.setOrganizationName("UniversalDesktopBridge")
     app.setStyle(QStyleFactory.create("Fusion"))
     app.setFont(QFont("Segoe UI", 10))
-    app.setStyleSheet(STYLE)
     app.setProperty("motion", True)
-    palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor(BG))
-    palette.setColor(QPalette.ColorRole.Base, QColor(BG))
-    palette.setColor(QPalette.ColorRole.Text, QColor(TEXT))
-    palette.setColor(QPalette.ColorRole.WindowText, QColor(TEXT))
-    palette.setColor(QPalette.ColorRole.Button, QColor(PANEL))
-    palette.setColor(QPalette.ColorRole.ButtonText, QColor(TEXT))
-    palette.setColor(QPalette.ColorRole.Highlight, QColor("#28483f"))
-    app.setPalette(palette)
+    # Deterministic default for synthetic Qt tests; run() applies user settings.
+    apply_theme(app, "dark")
     return app
 
 
@@ -920,6 +1496,7 @@ def run(home: Path, start_tunnel=False, screenshot=None):
     controller = DesktopController(home)
     settings = controller.settings()
     app.setProperty("motion", settings.get("motion", True))
+    apply_theme(app, settings.get("theme", "system"))
     controller.start_host()
     window = MainWindow(home, controller)
     # The full manager remains the fallback when a tray cannot be reached.

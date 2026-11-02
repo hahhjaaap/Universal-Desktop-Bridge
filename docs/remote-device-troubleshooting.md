@@ -23,6 +23,41 @@ ChatGPT plugin session can call its tools.**
    network first. A plugin UI badge alone is not sufficient evidence of
    connectivity.
 
+## When two computers use the same ChatGPT account
+
+The ChatGPT **account**, an MCP **plugin connection**, a **Tunnel ID**, and a
+Windows **host machine** are different identities. A green local UDB status on
+two computers does **not** establish that one ChatGPT connection can
+distinguish them.
+
+For the currently published UDB release, prefer this isolation test:
+
+1. On each PC, run `udb status --json` and `udb doctor --json` locally.
+   Confirm each machine's agent and local tunnel readiness separately.
+2. In the attended `udb setup --edit` connection settings, verify that each
+   intended machine has its **own** Tunnel ID. Do not paste any Tunnel ID or
+   API key into a public issue or chat.
+3. Create two distinguishable MCP connections in the appropriate ChatGPT
+   workspace, each pointing to its matching tunnel. Enable the intended
+   connection in the new conversation before discovery.
+4. Call `bridge_status` as a read-only test on *each connection*.
+   Confirm machine identity separately in local redacted UDB activity logs;
+   the current `bridge_status` payload does not guarantee a unique public
+   machine ID.
+5. If only PC A responds while PC B says `Session terminated`, check PC B's
+   tunnel, plugin binding and discovery. The symptom alone does **not**
+   establish a specific collision in OpenAI's infrastructure.
+
+Do not run two UDB installations with the same Tunnel ID and assume that ChatGPT
+will load-balance, switch or choose the intended machine. Do not turn off
+endpoint authentication or share credentials as a workaround.
+
+For a single plugin selecting machines on different Wi-Fi networks, see
+[experimental Multi-PC work in draft PR #34](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/34).
+Its Tailscale-based router is **not** in the published installer or current
+`main`; use only after separate Windows and two-host verification. Tailscale
+networking alone does not implement MCP routing.
+
 A computer that is powered off, asleep or disconnected from the Internet
 cannot serve remote requests. Network access from a second device is a
 separate test from accessing UDB across two devices on the same network.

@@ -1,10 +1,10 @@
 # Universal Desktop Bridge (UDB)
 
-**Windows-first MCP bridge for ChatGPT and other supported MCP clients.** UDB provides one Python package, one `udb` CLI and **59 public tools** for guarded local computer work. Its source of truth is `src/udb/`; the root-level `bridge.py` and `udb_*.py` files are compatibility launchers, not separate implementations.
+**Windows-first MCP bridge for ChatGPT and other supported MCP clients.** UDB provides one Python package, one `udb` CLI and a derived public tool catalog (`udb tools` reports the actual count) for guarded local computer work. Its source of truth is `src/udb/`; the root-level `bridge.py` and `udb_*.py` files are compatibility launchers, not separate implementations.
 
 **Tiếng Việt:** UDB kết nối trợ lý AI với máy tính Windows theo quyền do chủ máy cấp. Hỗ trợ thao tác tệp, terminal, ứng dụng, trình duyệt riêng biệt và rà soát hóa đơn Excel. **Không tự cấp quyền, không tự kê khai thuế, không tự sửa dữ liệu kế toán gốc.**
 
-> **Release status (2026-10-27):** The `main` source version is **0.10.1**. The latest published stable Windows release is **v0.10.0** until a newer release is built and verified. The installer below installs the *latest published release*, not automatically the newest `main` commit. Check [Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases) before updating a working installation.
+> **Source vs release (updated 2026-11-01):** The `main` source version is **0.10.1**, while the latest published stable Windows installer is **v0.10.0**. Source now includes a light/dark/system GUI appearance foundation and collapsible navigation, but **these changes are not part of the published v0.10.0 installer**. A merged PR is not a Windows release. Always inspect [Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases), the installed `udb --version`, and the intended commit before updating. Tool counts are derived at runtime, not from README snapshots.
 
 ## What UDB does
 
@@ -19,6 +19,46 @@
 
 The local HTTP MCP boundary requires authorization, accepts loopback clients only, rejects ambiguous authentication headers and bounds request bodies. These controls do not protect against a compromised Windows account or malicious authorized client. See [ARCHITECTURE.md](ARCHITECTURE.md) for ownership, dispatch and isolation.
 
+## Experimental Cloudflare relay (development branch only)
+
+A private Cloudflare Worker + Durable Object relay and an outbound Windows agent
+are in prototype development. This is **not** a one-click installer or usable
+ChatGPT plugin yet. OAuth and GUI pairing are still pending. See
+[Cloudflare relay prototype](docs/cloudflare-relay-prototype.md).
+
+### Optional Render observer (development branch only)
+
+An optional **read-only Render Free dashboard** can check the public Cloudflare
+relay health endpoint on demand, without device tokens or command access.
+It is **not** a second MCP server, instant failover, or a replacement for owner
+permissions. See [Render observer](docs/render-observer.md) and the root
+[Render Blueprint](render.yaml). Neither platform is deployed automatically.
+
+## Common Room in the desktop GUI (source feature)
+
+Choose a **registered source project** containing an existing
+`chatgpt-workspace/workspace.sqlite3` or
+`examples/chatgpt-workspace/workspace.sqlite3` database, then click
+**Mở Common Room** on **Dự án**. The Qt dialog uses the *same* Common Room v2
+SQLite database as `examples/chatgpt-workspace/workspace.py` and `chain.py`:
+read/search discussions, join and post messages, view/create/update tasks with
+revision checks, and view verified browser-cache previews.
+
+- No second chat database is created; an absent/outdated database shows guidance.
+- No project Python script, local browser or AI process is started by this dialog.
+- Chat participants are self-declared labels, not authenticated identities.
+- Messages and tasks are user-initiated local edits; `done` is not execution proof.
+- Browser images are cached previews, not live tool permissions or browser control.
+- This source feature is **not available in the older published v0.10.0 installer**.
+
+Windows Start/Search is populated by a **per-user Start Menu shortcut**, not by
+extracting a portable ZIP. The managed installer creates/updates a UDB-owned
+shortcut on successful install/rollback (opt out with `-NoStartMenu`). For
+an existing portable EXE, open an attended PowerShell terminal in the
+extracted UDB folder and run `.\tools\create_start_shortcut.ps1 -Exe .\udb.exe`
+from the bundled portable helper (or use it from a trusted source checkout). The shortcut opens the UDB GUI; it never grants access or
+starts an online session by itself. Windows Search indexing may take time.
+
 ## Windows x64: install and start
 
 Review the installer and [published release](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases/latest) before executing downloaded code. In your own PowerShell terminal:
@@ -30,7 +70,11 @@ udb doctor
 udb start
 ```
 
-The managed release bundles its Python runtime and workers: **Python, Node.js, Git and Desktop Commander are not required to run it**. It installs under the current user's LocalAppData and stores user state separately in `%LOCALAPPDATA%\UniversalDesktopBridge`. It does not need administrator access. The standalone ZIP is checksum-verified but **not code-signed**.
+The managed release bundles its Python runtime and workers: **Python, Node.js, Git and Desktop Commander are not required to run it**. It installs under the current user's LocalAppData and stores user state separately in `%LOCALAPPDATA%\UniversalDesktopBridge`. It does not need administrator access. The standalone ZIP is checksum-verified but **not code-signed**. A
+Windows-only candidate-release checker is available in
+[Release signing and verification](docs/release-security.md), but no
+publisher certificate has been provisioned and no signed installer is
+claimed.
 
 The first attended `udb start` can guide setup. Offline mode works without a ChatGPT connection:
 
@@ -45,6 +89,8 @@ udb stop
 To connect a supported ChatGPT workspace, run `udb setup` in your own terminal and follow the displayed tunnel/account instructions. A working local agent is **not** proof that a ChatGPT workspace is connected. Connection secrets are entered in hidden local prompts, not CLI arguments; owner grants are separate from connection settings.
 
 For use from a second device, or when a ChatGPT plugin claims to be Connected but a tool returns `Session terminated`, see [Remote-device diagnostics](docs/remote-device-troubleshooting.md). Check the local tunnel and the ChatGPT session independently; never blindly replay a timed-out mutation.
+
+**Multiple Windows computers:** Logging into the same ChatGPT account does not make an existing MCP connection select a different PC automatically. For two live PCs, use separate tunnel IDs and distinguishable MCP connections until an explicit device router is installed and verified. **Experimental one-plugin Multi-PC routing** is being developed separately in [draft PR #34](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/34) for owner-managed Tailscale connections across different Wi-Fi networks. It is **not part of the published v0.10.0 installer or current `main`**, and has not been verified end-to-end across two real networks.
 
 ### When ChatGPT cannot call UDB tools
 
@@ -180,27 +226,123 @@ Existing `virtual_pointer` move/click actions remain bounded Win32
 messages; compatibility depends on the application, and an independent
 visual cursor is **not** a second hardware/system mouse.
 
-## Interface and visual checks
+## Desktop interface — source GUI (2026-11-01)
 
-`udb gui` opens a compact control panel when a system tray is available. It keeps
-connection, Windows pause/resume, browser handoff and background-session closure
-together, with recent metadata-only tool activity. Closing its windows returns
-to the tray; use **Thoát UDB** in the tray menu to stop the GUI-owned runtime.
-Without a tray, the full manager stays reachable; **Thu gọn** opens the small
-panel and closing it returns to the manager. See [Compact controls](docs/compact-controls.md).
+`udb gui` opens a compact native control panel when a system tray is
+available. It offers connection, local Windows pause/resume, browser login
+handoff, background-session closure and recent metadata-only activity.
+Closing its windows returns to the tray; **Thoát UDB** in the tray menu
+explicitly stops the GUI-owned runtime. Without a tray the full manager is
+available. See [Compact controls](docs/compact-controls.md).
 
-The full manager opens on **Trợ lý trên máy**, with pinned pause/resume controls,
-separate browser/session cards and expandable resource details. Long content
-scrolls without hiding the pause controls. A connected client is not displayed
-as active work; the UI distinguishes readiness, local pause and owner handoff.
-Browser and native cursor decoration share a quiet mint/charcoal palette.
+The **full manager** retains six pages — **Dự án**, **Quyền AI**,
+**Tiến trình**, **Bảo vệ**, **Kết nối** and **Máy tính**. Its sidebar can be
+collapsed from 200 px to 72 px with **Thu gọn menu** and expanded again;
+tooltips and accessible route names remain available when compact. This
+selection is not persisted between launches.
 
-To render the actual Qt UI with disposable synthetic data:
-`python -c "from udb.manager import self_test; self_test('ui-previews')"`.
-For headless Linux, install `PySide6-Essentials==6.10.2` and set
-`QT_QPA_PLATFORM=offscreen`. To render and check the
-actual Windows pointer without capturing the user's desktop, run
-`python tools/check_windows_workflows.py --pointer-preview PATH.png` on Windows.
+Under **Kết nối → Giao diện ứng dụng**, select **Theo hệ thống Windows**,
+**Sáng**, or **Tối**. Appearance updates immediately in the Qt application and
+is saved to the user's local, allow-listed `gui.json` preferences; the
+Windows-derived choice is applied at startup and when Qt reports a system
+color-scheme change; unsupported platforms retain startup detection. Theme switching never
+changes computer permissions, credentials or MCP access. The desktop shell
+uses shared Qt theme tokens and visible keyboard focus states, but it has not
+yet completed all enterprise GUI / accessibility milestones.
+
+The Overview status strip separately reports the local **Agent**, **Tunnel**
+and **ChatGPT** verification levels. ChatGPT remains **Chưa xác minh**
+(unverified) until independently tested from the ChatGPT conversation. A
+failed local/tunnel status read becomes **Chưa xác định** rather than
+retaining a stale green indicator. The **Tunnel đã kết nối** indicator
+means the local tunnel is ready, **not** that ChatGPT has verified MCP
+tool discovery and invocation. The emergency
+Windows pause controls stay distinct from background browser and job lifecycle.
+For the complete user-facing behavior and security limitations, read
+[Desktop GUI guide](docs/gui-user-guide.md) and the
+[enterprise UI/security roadmap](docs/gui-enterprise-roadmap.md).
+
+Developer-only disposable visual review:
+
+```powershell
+python -m ruff check src tools tests
+python -m ruff format --check .
+python -m pytest tests/test_ui_theme.py tests/test_manager_ui.py tests/test_quick_controls.py
+python -c "from udb.manager import self_test; self_test('ui-previews')"
+```
+
+The GUI self-test captures six existing pages under light/dark palettes and
+does not approve any file mutations. For headless Linux install
+`PySide6-Essentials==6.10.2` and set `QT_QPA_PLATFORM=offscreen`.
+For native Windows pointer preview use
+`python tools/check_windows_workflows.py --pointer-preview PATH.png`.
+Passing CI and screenshots does not replace real Windows accessibility or
+security assessment. The published v0.10.0 installer is still the old release.
+
+The **Kết nối → Giao diện ứng dụng** settings now expose a local
+**Giảm chuyển động** option. This changes only animations and persists as
+the existing allow-listed `motion` preference in `gui.json`; it cannot
+change browser, project or computer permissions.
+
+The full manager also includes a persistent themed page header with an
+explicit **Tunnel** (not ChatGPT) indicator. The **Hoạt động MCP** tab
+displays a bounded, sanitized tool activity timeline. Owner-triggered audit
+export writes only timestamps, tool labels and statuses to a new JSON file,
+after confirmation, and never overwrites an existing file.
+
+The **Tiến trình** page now supports metadata-only search and group filters
+(Đang chạy/Cần chú ý/Đã xong), shows matching counts and clears stale
+details when no result matches. Ctrl+1..6 changes full-manager pages;
+Ctrl+Shift+F focuses job search. The **Kết nối** page includes a
+local-only button that copies `udb doctor --json` without executing it.
+Owner approval dialogs now state an explicit operation-specific impact
+before the existing full review and local confirmation. No filtering of
+log bodies or secret content is performed.
+
+The **Bảo vệ** page also displays read-only, locally observed status for
+pending owner approvals, host-input pause and source auto-edit grants. These
+signals do **not** represent ChatGPT authorization, a completed security
+assessment or the state of every background process. Failed reads show
+**Chưa xác minh** instead of retaining stale positive states.
+
+The **Kết nối** page now has a native three-step onboarding panel showing
+separately whether (1) the local Agent responds, (2) the local Tunnel is
+ready, and (3) ChatGPT has actually called an UDB tool. The third step stays
+**Chưa xác minh** until verified directly in ChatGPT; no remote grant or
+invented end-to-end success state is introduced. Failed local reads clear
+stale ready indicators.
+
+The app header now also carries an always-visible, read-only **Windows
+privilege** warning: an enabled broad unsandboxed computer grant is distinct
+from project permissions and Tunnel readiness. Unknown/unreadable grant
+states appear neutral, never as a verified safe or authorized result.
+
+The **Bảo vệ** page now shows a read-only indicator of optional full Windows
+computer access. If enabled, it warns that this privilege is **unsandboxed**
+and can reach files protected only against project-scoped tools. The GUI
+cannot enable or revoke this grant; use the attended local terminal
+(`udb revoke-access` to revoke).
+For the complete user-facing behavior and security limitations, read
+[Desktop GUI guide](docs/gui-user-guide.md) and the
+[enterprise UI/security roadmap](docs/gui-enterprise-roadmap.md).
+
+Developer-only disposable visual review:
+
+```powershell
+python -m ruff check src tools tests
+python -m ruff format --check .
+python -m pytest tests/test_ui_theme.py tests/test_manager_ui.py tests/test_quick_controls.py
+python -c "from udb.manager import self_test; self_test('ui-previews')"
+```
+
+The GUI self-test captures six existing pages under light/dark palettes and
+does not approve any file mutations. For headless Linux install
+`PySide6-Essentials==6.10.2` and set `QT_QPA_PLATFORM=offscreen`.
+For native Windows pointer preview use
+`python tools/check_windows_workflows.py --pointer-preview PATH.png`.
+Passing CI and screenshots does not replace real Windows accessibility or
+security assessment. The published v0.10.0 installer is still the old release.
+
 
 ## Build from source (developers)
 
@@ -271,7 +413,7 @@ Compatibility launchers and import aliases are intentionally retained. Generated
 - Source work, document reviews and browser pages can contain untrusted content. Review outputs before acting.
 - This project is a local bridge, **not ChatGPT Work**, a tax-compliance service or an autonomous account administrator.
 
-**Documentation:** [Architecture](ARCHITECTURE.md) · [Accounting Work Tools](docs/accounting-worktools.md) · [Example configuration](udb.example.toml) · [MCP example](MCP_CONFIGURATION.example.json) · [Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases)
+**Documentation:** [Desktop GUI](docs/gui-user-guide.md) · [Enterprise GUI roadmap](docs/gui-enterprise-roadmap.md) · [Architecture](ARCHITECTURE.md) · [Accounting Work Tools](docs/accounting-worktools.md) · [Example configuration](udb.example.toml) · [MCP example](MCP_CONFIGURATION.example.json) · [Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases)
 
 **License:** [MIT](LICENSE). Third-party components retain their own licenses.
 

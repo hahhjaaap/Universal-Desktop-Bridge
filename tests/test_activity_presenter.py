@@ -52,6 +52,19 @@ def test_malformed_metadata_is_literal_bounded_and_does_not_break_presentation(
     with sqlite3.connect(path) as db:
         db.execute("UPDATE activity SET at=?,details=?", (1e300, '{"action":[]}'))
     rows = feed.poll()
-    assert rows[0]["at"] == 0 and "untrusted" in describe(rows[0])
+    assert rows[0]["at"] == 0
+    assert describe(rows[0]) == "Công cụ UDB khác"
     assert summary(rows)[0] == "Chưa nhận được kết quả"
     assert "secret text" not in str(rows)
+
+
+def test_unknown_tool_identifiers_are_redacted_from_display_and_exports():
+    private_name = "SECRET-ACCOUNT-OR-PATH.txt"
+    assert describe({"tool": private_name, "details": {"action": "read"}}) == (
+        "Công cụ UDB khác · Đọc nội dung"
+    )
+    assert private_name not in describe({"tool": private_name})
+    assert describe({"tool": ["untrusted", "list"]}) == "Công cụ UDB khác"
+    assert describe({"tool": "host_browser", "details": {"action": "click"}}) == (
+        "Trình duyệt riêng · Nhấp trên trang"
+    )

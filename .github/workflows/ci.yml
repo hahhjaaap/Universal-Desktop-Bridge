@@ -24,25 +24,35 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -m pip install ".[office,dev]"
       - run: python -m ruff check src tools tests
+      - run: python -m ruff format --diff .
       - run: python -m ruff format --check .
       - run: python tools/audit_repository.py --strict
       - run: python tools/check_import_boundaries.py
       - name: Run regression tests
         if: runner.os != 'Linux'
+        env:
+          UDB_RUN_INTERACTIVE_WINDOWS_TESTS: '1'
         run: python -m pytest --junitxml="${{ runner.temp }}/udb-tests.xml"
       - name: Run Linux regressions with a session bus
         if: runner.os == 'Linux'
         # Chrome needs a live session bus, even with headless rendering.
         run: dbus-run-session -- python -m pytest --junitxml="${{ runner.temp }}/udb-tests.xml"
+      - name: Report simulated UDB subsystem coverage
+        if: success()
+        run: python tools/report_system_simulation.py --junitxml "${{ runner.temp }}/udb-tests.xml" --output "${{ runner.temp }}/udb-simulation.json"
       - name: Benchmark local MCP stdio routing (informational)
         run: python tools/benchmark_rpc.py --calls 100 --parallel 4
+      - name: Benchmark MCP startup and mailbox scans (informational)
+        run: python tools/benchmark_hotpaths.py --samples 12 --backend-delay-ms 15
       - name: Upload regression scenario report
         if: always()
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: scenarios-${{ matrix.os }}-${{ matrix.python }}
-          path: ${{ runner.temp }}/udb-tests.xml
+          path: |
+            ${{ runner.temp }}/udb-tests.xml
+            ${{ runner.temp }}/udb-simulation.json
           retention-days: 3
       - name: Check native Windows browser and utility APIs
         if: runner.os == 'Windows'

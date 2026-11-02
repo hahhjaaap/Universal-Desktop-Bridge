@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "udb-private-relay",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-30",
+  "durable_objects": {
+    "bindings": [
+      { "name": "DEVICES", "class_name": "DeviceRelay" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["DeviceRelay"] }
+  ]
+}

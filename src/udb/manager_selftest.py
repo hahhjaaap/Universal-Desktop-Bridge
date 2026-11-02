@@ -156,6 +156,23 @@ def self_test(preview_dir=None):
                         ), "Project path overflows its card"
                     if captures and not motion:
                         assert win.grab().save(str(captures / f"page-{i}-{width}.png"))
+        # Exercise both palettes on all six existing views. These are local
+        # synthetic screenshots; no permission/connection action is taken.
+        from .ui_theme import apply_theme
+
+        for appearance in ("light", "dark"):
+            apply_theme(app, appearance)
+            win.resize(1220, 820)
+            app.processEvents()
+            for page_index in range(6):
+                win.navigate(page_index)
+                QTest.qWait(20)
+                if captures:
+                    assert win.grab().save(
+                        str(captures / f"page-{page_index}-{appearance}.png")
+                    )
+        assert not (source / "gui-proof.py").exists()
+
         # Preview only synthetic host metadata; no worker, browser, grant or
         # external connection is started to produce these images.
         if captures:

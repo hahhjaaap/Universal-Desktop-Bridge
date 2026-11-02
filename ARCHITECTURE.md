@@ -39,6 +39,23 @@ names that lack a handler, unexpected handlers and duplicate schemas.
 `udb.proxy` owns backend routing, concurrency and response normalization.
 Keep this separate from file permissions and owner approvals.
 
+## Connection identity and Multi-PC status
+
+The released source's `udb.desktop` starts a tunnel client using one locally
+configured `tunnel_id`. That identifies an MCP endpoint, **not** an arbitrary
+set of Windows agents. `udb.proxy` routes tool calls to its own machine's
+core and companion workers; it has no built-in per-call `computer_id` router
+on `main`. A ChatGPT account using two computers does not by itself alter
+that routing boundary.
+
+The independent [draft Multi-PC PR #34](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/34)
+prototypes a hub, explicit device IDs, loopback-only agents and private
+Tailscale transport. It must remain a separate, opt-in review item until
+Windows CI, secure deployment and a two-network end-to-end test are verified.
+Do not claim that a feature on a draft branch is installed with the latest
+published release. Preserve existing per-host owner grants and protected-path
+checks; never route an unavailable remote command to the local machine.
+
 ## Core policy and approval queues
 
 - `udb.core.Agent`: stable public entry point for project registration, path
@@ -63,8 +80,26 @@ Keep this separate from file permissions and owner approvals.
   pause and background-session controls.
 - `udb.manager_dialogs`: local source browser, connection settings, and
   owner-only approval dialogs; no remote approval API.
-- `udb.manager_refresh`: status polling and project list refresh.
-- `udb.manager_widgets`: reusable UI widgets and styles.
+- `udb.ui_jobs`: bounded, purely local task metadata filtering and
+  fail-closed status grouping. Search excludes scripts, logs and document text;
+  filtering never changes stored jobs or permissions.
+- `udb.ui_connection`: pure fail-closed read-only Agent/Tunnel/ChatGPT health
+  viewmodels. Only explicit local and tunnel signals can be marked ready;
+  the GUI cannot assert ChatGPT tool discovery without a real invocation.
+- `udb.manager_refresh`: status polling, project list refresh, real
+  permission count updates and accessibility text for compact navigation.
+- `udb.manager_widgets`: reusable Qt components, theme-aware custom-painted
+  buttons and status indicators. Previous static dark constants remain as
+  compatibility exports; new render paths resolve the active theme.
+- `udb.ui_theme`: strict `system`/`light`/`dark` presentation preference,
+  frozen light/dark tokens, Qt stylesheet/palette application and contrast
+  checks. Invalid settings fall back to `system`, never interpreted as CSS.
+- `udb.manager`: sidebar can collapse to 72 px while preserving all six
+  routes; appearance selector lives under Connection & Settings. This changes
+  only local GUI state, not project access or owner authorization.
+- `udb.desktop.DesktopController.save_settings`: atomically persists only
+  allow-listed GUI settings (`motion`, `autoconnect`, `theme`).
+  Appearance changes cannot write credentials or issue grants.
 - `udb.companion.jobs`: cancellation, task status and checkpoint lifecycle.
 - `udb.companion.search`: search controller plus isolated worker entrypoint;
   `background.search_worker` remains a compatibility export.
@@ -129,6 +164,44 @@ Keep this separate from file permissions and owner approvals.
   reconciled against the surviving owned window after a transition failure.
 - `computer_status` can report the local grant without a running host worker;
   process availability is explicitly unknown in that fallback. It issues no grant.
+
+## GUI state versus security state
+
+The **Bảo vệ** page also reads `computer_access.summary(agent)` to
+display whether an optional broad current-user Windows grant is usable.
+This is a **read-only** status: it does not invoke `enable_local` or
+`revoke_local`. Broad computer access is unsandboxed and can bypass
+project-scoped protected-path boundaries using the current user's Windows
+permissions. Failed status refreshes display `Chưa xác minh` rather than
+claiming a known security state.
+
+The additional read-only security posture panel derives approval counts
+from `pending_local()`, input pause from `desktop_control.paused()`, and
+scoped source-auto permissions from `source_autonomy_projects()`. Pure
+`ui_security` presentation helpers map invalid/missing values to an
+unverified, neutral state; each failed local poll clears its corresponding
+display. No permission setter, remote confirmation, or new access-control
+endpoint is introduced.
+
+The GUI **observes and presents** backend state. Its Qt paint, sidebar,
+appearance and focus components do not authorize file writes, launch arbitrary
+programs or enable full-computer access. Owner approvals and protected-path
+checks remain in the core/host policy layer; backend authorization is required
+even if a GUI button is enabled. Conversely, a visual **Tunnel đã kết nối**
+indicator is not end-to-end proof that ChatGPT has discovered UDB's tools.
+
+The 200 px/72 px navigation preference is per window and not persisted.
+The theme preference is persisted to bounded local `gui.json`, applying
+the Qt/Windows system color scheme at launch and when supported Qt system
+color-scheme change events arrive. Unavailable signal backends use startup detection;
+the remaining system-theme and accessibility QA is documented in
+[Desktop GUI guide](docs/gui-user-guide.md).
+
+The enterprise UX roadmap and threat model live in
+[docs/gui-enterprise-roadmap.md](docs/gui-enterprise-roadmap.md).
+Theme foundation and compact navigation are implemented in source; dashboard
+redesign, advanced security center, multi-device routing and signed publishing
+remain separate development tasks, **not current release guarantees**.
 
 ## Where new code belongs
 

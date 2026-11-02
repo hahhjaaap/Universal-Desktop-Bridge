@@ -4,10 +4,19 @@ Launch with `udb gui`. When Windows provides a system tray, the GUI opens a smal
 control panel and registers a UDB tray icon. Click that icon to reopen controls;
 its menu also offers pause, background-session closure and **Thoát UDB**.
 
-The full manager remains available from **Mở UDB đầy đủ** for projects, local
-permissions, reviews and configuration. Its **Thu gọn** button returns to the
-small panel. If a system tray is unavailable, the full manager opens first;
-closing the compact panel returns to it.
+The full manager remains available from **Mở UDB đầy đủ** for projects,
+local permissions, reviews and configuration. Its **Thu gọn** button returns
+to the small panel. If a system tray is unavailable, the full manager opens
+first; closing the compact panel returns to it.
+
+**New on source `main` (not yet in the v0.10.0 installer):** The full manager
+has a collapsible **200 px → 72 px** left sidebar with stable accessible route
+names and tooltips. Under **Kết nối → Giao diện ứng dụng**, choose
+**Theo hệ thống Windows**, **Sáng**, or **Tối**. The choice is a local
+appearance preference; no permissions or tunnel credentials are changed.
+The Windows system color scheme is checked at startup and when Qt reports
+a color-scheme change; unsupported platforms retain startup detection. See the
+[Desktop GUI guide](gui-user-guide.md) for details.
 
 ## What each action does
 

@@ -159,6 +159,7 @@ class ConnectionDialog(QDialog):
                 {
                     "motion": self.motion.isChecked(),
                     "autoconnect": self.auto.isChecked(),
+                    "theme": self.controller.settings().get("theme", "system"),
                 }
             )
             QApplication.instance().setProperty("motion", self.motion.isChecked())
@@ -202,6 +203,30 @@ class ApprovalDialog(QDialog):
                 "H2",
             )
         )
+        risk_details = (
+            (
+                "ẢNH HƯỞNG: THAY ĐỔI TỆP NGUỒN THẬT. "
+                "Xem cả bản diff và nội dung mới, kiểm tra chính xác đường dẫn."
+            )
+            if self.is_write
+            else (
+                "ẢNH HƯỞNG: TẢI DỮ LIỆU VỀ WINDOWS. "
+                "Xác minh nguồn HTTPS và tệp đích; đây không phải Sandbox."
+            )
+            if self.is_media
+            else (
+                "ẢNH HƯỞNG: MỞ PHIÊN WINDOWS SANDBOX. "
+                "Kiểm tra phạm vi chuột/phím, thời hạn và snapshot."
+            )
+            if self.is_desktop
+            else (
+                "ẢNH HƯỞNG: CHẠY MÃ TRONG SANDBOX. "
+                "Xem nguyên script và các tệp nguồn trước khi duyệt."
+            )
+        )
+        self.risk_notice = label(risk_details, "Warning", True)
+        self.risk_notice.setAccessibleName("Cảnh báo phạm vi phê duyệt")
+        lay.addWidget(self.risk_notice)
         summary = label(
             (p.get("path") or p.get("task") or p.get("language", ""))
             + "\nThư mục: "

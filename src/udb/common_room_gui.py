@@ -62,8 +62,8 @@ def database_for_project(root: str | Path) -> Path:
         if path.is_file():
             return path
     raise FileNotFoundError(
-        "Không thấy Common Room tại chatgpt-workspace/ hoặc "
-        "examples/chatgpt-workspace/ trong dự án đã đăng ký. "
+        "Không thấy workspace.sqlite3 trong chatgpt-workspace/ hoặc "
+        "examples/chatgpt-workspace/ của dự án đã đăng ký. "
         "UDB không tự tạo cơ sở dữ liệu mới."
     )
 

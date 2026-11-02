@@ -2,6 +2,7 @@
 // The desktop retains all UDB owner-grant and tool policy enforcement.
 import { DEVICE_ID, HASH, bearer, adminAuthorized, digest, readJson, validRpc, fixedEqual } from "./auth.js";
 import { newPairing, PAIRING_TTL_MS } from "./pairing.js";
+import { handleMcp, protectedResource } from "./mcp.js";
 
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store",
@@ -62,6 +63,16 @@ export default {
       const id = env.DEVICES.idFromName(agentMatch[1]);
       return env.DEVICES.get(id).fetch(new Request("https://internal/connect", request));
     }
+    const resourceMatch = /^\/\.well-known\/oauth-protected-resource\/v1\/devices\/([a-f0-9]{32})\/mcp$/.exec(url.pathname);
+    if (resourceMatch && request.method === "GET")
+      return protectedResource(request, env, resourceMatch[1]);
+    const mcpMatch = /^\/v1\/devices\/([a-f0-9]{32})\/mcp$/.exec(url.pathname);
+    if (mcpMatch) {
+      if (!env.DEVICES?.get || !env.DEVICES?.idFromName)
+        return failure(503, "relay_not_configured");
+      const stub = env.DEVICES.get(env.DEVICES.idFromName(mcpMatch[1]));
+      return handleMcp(request, env, mcpMatch[1], stub);
+    }
     const adminMatch = /^\/v1\/admin\/devices\/([a-f0-9]{32})(\/rpc|\/status)?$/.exec(url.pathname);
     if (!adminMatch) return failure(404, "not_found");
     if (!adminAuthorized(request, env)) return failure(401, "admin_auth_required");
@@ -81,6 +92,10 @@ export default {
       if (adminMatch[2] === "/status" && request.method === "GET")
         return forward(stub, new Request("https://internal/status"));
       if (adminMatch[2] === "/rpc" && request.method === "POST") {
+        // The original private prototype admin API can bypass user identity.
+        // Keep it disabled when exposing a public, per-user MCP resource.
+        if (env.UDB_ENABLE_DEV_ADMIN_RPC !== "true")
+          return failure(403, "admin_rpc_disabled");
         const rpc = await readJson(request);
         if (!validRpc(rpc)) return failure(400, "invalid_rpc");
         return forward(stub, new Request("https://internal/rpc", {

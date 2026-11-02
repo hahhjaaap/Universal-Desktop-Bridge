@@ -48,9 +48,7 @@ def save_device_token(home: Path, device_id: str, value: str) -> None:
     # Linux CI and source-only tests. UDB production is Windows-only.
     folder = Path(home)
     folder.mkdir(parents=True, exist_ok=True)
-    fd = os.open(
-        token_file(folder), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
-    )
+    fd = os.open(token_file(folder), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w", encoding="ascii") as stream:
         stream.write(token + "\n")
 

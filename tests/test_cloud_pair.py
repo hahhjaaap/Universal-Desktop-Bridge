@@ -60,9 +60,7 @@ def test_pair_without_admin_secret_or_command_line_token(tmp_path):
         if on_windows():
             assert not (tmp_path / "cloud-device-token").exists()
         body = json.loads(opener.request.data)
-        assert body["device_token_sha256"] == hashlib.sha256(
-            token.encode()
-        ).hexdigest()
+        assert body["device_token_sha256"] == hashlib.sha256(token.encode()).hexdigest()
         assert "admin" not in str(pairing)
         with pytest.raises(ValueError, match="already paired"):
             claim_device(tmp_path, pairing["relay"], ident, code, opener=opener)

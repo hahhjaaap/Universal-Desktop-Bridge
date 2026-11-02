@@ -685,7 +685,9 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         cloud_layout = QVBoxLayout(cloud_panel)
         cloud_layout.setContentsMargins(23, 20, 23, 20)
         cloud_layout.setSpacing(12)
-        cloud_layout.addWidget(label("Cloudflare · Ghép nối thiết bị (thử nghiệm)", "H2"))
+        cloud_layout.addWidget(
+            label("Cloudflare · Ghép nối thiết bị (thử nghiệm)", "H2")
+        )
         cloud_layout.addWidget(
             label(
                 "Chỉ dùng với mã mời được chủ hệ thống cấp. Mã hết hạn sau 10 phút. "

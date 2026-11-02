@@ -56,9 +56,7 @@ def test_cloud_agent_uses_local_pairing_and_never_passes_secret_in_argv(tmp_path
 def test_cloud_agent_rejects_invalid_pairing_token(tmp_path, monkeypatch):
     device_id = uuid.uuid4().hex
     (tmp_path / "cloud-pairing.json").write_text(
-        json.dumps(
-            {"relay": "https://example.workers.dev", "device_id": device_id}
-        ),
+        json.dumps({"relay": "https://example.workers.dev", "device_id": device_id}),
         encoding="utf-8",
     )
 

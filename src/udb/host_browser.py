@@ -1172,10 +1172,14 @@ class Browser(BrowserInputMixin):
 
     def screenshot(self, tab):
         self._show_identity(tab)
+        # Software rendering on a loaded Windows runner can exceed the usual
+        # 10-second CDP budget. Keep one bounded attempt; never replay an
+        # uncertain capture or relax the underlying response-size limit.
         result = self.call(
             "Page.captureScreenshot",
             dict(format="png", captureBeyondViewport=False),
             self.sid(tab),
+            timeout=20,
         )
         if len(result["data"]) > 8 * 1048576:
             raise PolicyError("Screenshot too large")

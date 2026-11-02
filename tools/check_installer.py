@@ -154,7 +154,7 @@ def main():
                 / "Windows"
                 / "Start Menu"
                 / "Programs"
-                / "Universal Desktop Bridge.lnk"
+                / "UDB - Universal Desktop Bridge.lnk"
             )
             assert link.is_file(), "Installer did not register the Start Menu shortcut"
 

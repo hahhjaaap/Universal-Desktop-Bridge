@@ -142,7 +142,7 @@ function Register-UdbStartMenu([string]$Image,[string]$DataDirectory) {
     if (!$env:APPDATA) { throw 'APPDATA is not configured.' }
     $folder = Assert-LocalPath (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs')
     [IO.Directory]::CreateDirectory($folder) | Out-Null
-    $link = Assert-LocalPath (Join-Path $folder 'Universal Desktop Bridge.lnk')
+    $link = Assert-LocalPath (Join-Path $folder 'UDB - Universal Desktop Bridge.lnk')
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($link)
     if ((Test-Path -LiteralPath $link) -and $shortcut.Description -ne 'UDB-managed Start Menu shortcut') {

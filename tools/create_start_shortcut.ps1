@@ -30,7 +30,7 @@ if ([IO.Path]::IsPathRooted($ShortcutDir) -eq $false) {
     throw 'ShortcutDir must be absolute.'
 }
 [IO.Directory]::CreateDirectory([IO.Path]::GetFullPath($ShortcutDir)) | Out-Null
-$link = Join-Path $ShortcutDir 'Universal Desktop Bridge.lnk'
+$link = Join-Path $ShortcutDir 'UDB - Universal Desktop Bridge.lnk'
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut($link)
 if ((Test-Path -LiteralPath $link) -and $shortcut.Description -ne 'UDB-managed Start Menu shortcut') {

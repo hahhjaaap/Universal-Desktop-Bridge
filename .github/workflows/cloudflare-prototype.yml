@@ -8,6 +8,7 @@ on:
       - "docs/render-observer.md"
       - "src/udb/cloud_agent.py"
       - "src/udb/cloud_pair.py"
+      - "src/udb/manager.py"
       - "tests/test_cloud_pair.py"
       - "tests/test_cloud_agent.py"
       - "tools/cloud_enroll.py"

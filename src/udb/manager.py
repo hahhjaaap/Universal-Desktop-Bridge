@@ -681,6 +681,23 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         plugin.clicked.connect(lambda: self.open_url(PLUGIN_URL))
         cl.addLayout(row(config, plugin, None))
         lay.addWidget(card)
+        cloud_panel = panel()
+        cloud_layout = QVBoxLayout(cloud_panel)
+        cloud_layout.setContentsMargins(23, 20, 23, 20)
+        cloud_layout.setSpacing(12)
+        cloud_layout.addWidget(label("Cloudflare · Ghép nối thiết bị (thử nghiệm)", "H2"))
+        cloud_layout.addWidget(
+            label(
+                "Chỉ dùng với mã mời được chủ hệ thống cấp. Mã hết hạn sau 10 phút. "
+                "Ghép nối không cấp quyền điều khiển Windows và không tự cài plugin ChatGPT.",
+                "Muted",
+                True,
+            )
+        )
+        self.cloud_pair_button = MotionButton("Nhập mã mời Cloud", "settings")
+        self.cloud_pair_button.clicked.connect(self.cloud_pair)
+        cloud_layout.addLayout(row(self.cloud_pair_button, None))
+        lay.addWidget(cloud_panel)
         local = panel()
         ll = QVBoxLayout(local)
         ll.setContentsMargins(23, 23, 23, 23)
@@ -975,6 +992,68 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
     def configure(self):
         if not self.busy:
             ConnectionDialog(self.controller, self).exec()
+
+    def cloud_pair(self):
+        if self.busy:
+            return
+        relay, ok = QInputDialog.getText(
+            self,
+            "UDB Cloud · Ghép nối",
+            "Địa chỉ Cloudflare HTTPS (workers.dev):",
+        )
+        if not ok or not relay.strip():
+            return
+        device_id, ok = QInputDialog.getText(
+            self,
+            "UDB Cloud · Ghép nối",
+            "Mã thiết bị trong lời mời:",
+        )
+        if not ok or not device_id.strip():
+            return
+        invitation, ok = QInputDialog.getText(
+            self,
+            "UDB Cloud · Ghép nối",
+            "Mã mời một lần (ẩn):",
+            QLineEdit.EchoMode.Password,
+        )
+        if not ok or not invitation.strip():
+            return
+        answer = QMessageBox.question(
+            self,
+            "Xác nhận ghép nối Cloud",
+            "Đăng ký thiết bị Windows này với Cloudflare?\n"
+            "Thao tác không cấp thêm quyền máy tính cho AI.\n"
+            "Chỉ tiếp tục nếu bạn tin tưởng chủ hệ thống cấp mã mời.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        def pair_in_background():
+            from .cloud_pair import claim_device
+
+            claim_device(
+                Path(self.agent.home),
+                relay.strip(),
+                device_id.strip(),
+                invitation.strip(),
+            )
+            return True
+
+        self.run_background(
+            pair_in_background,
+            done=lambda success: (
+                QMessageBox.information(
+                    self,
+                    "UDB Cloud",
+                    "Đã ghép nối thiết bị. Chưa cấp quyền Windows hoặc plugin ChatGPT. "
+                    "Kết nối Cloud Agent vẫn là chức năng thử nghiệm.",
+                )
+                if success
+                else None
+            ),
+        )
 
     def project_selected(self):
         self._last_project_auth_check = time.monotonic()

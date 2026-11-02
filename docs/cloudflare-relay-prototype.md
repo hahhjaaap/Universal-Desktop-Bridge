@@ -26,14 +26,14 @@ This is the initial private Cloudflare Worker + Durable Object relay for 2–3 d
 A new opt-in owner-attended flow avoids giving the shared cloud admin secret to every Windows user. This is **not yet OAuth or a one-click GUI**.
 
 1. From a trusted developer terminal with the private Wrangler administrator key, create an invitation by issuing `POST /v1/admin/pairings` with an admin Bearer token. The response contains `device_id`, a random 256-bit `pairing_code` and `expires_in_seconds: 600`. Do not publish these values; the one-time code is a credential.
-2. On the Windows device, install this branch's UDB source build and run `udb cloud-pair` from a local attended terminal. Enter the Worker HTTPS origin and the device ID, then paste the pairing code into the hidden prompt. No shared administrator key is required on this device.
+2. On the Windows device, install this branch's UDB source build. In the full UDB manager, open **Kết nối** and select **Nhập mã mời Cloud**; enter the Worker HTTPS origin, the device ID and the code (shown as a password field), then explicitly confirm the registration. The attended terminal command `udb cloud-pair` is also available as a developer fallback. No shared administrator key is required on this device.
 3. The client generates an independent random device token, sends **only its SHA-256 digest** to `POST /v1/devices/{device_id}/claim` with the one-time invitation credential, and stores the device token locally after the server confirms the claim.
 4. The one-time invitation expires after 10 minutes, locks after five bad attempts and cannot be replayed. The administrator can revoke it using the private authenticated `DELETE /v1/admin/devices/{device_id}` endpoint. Revocation closes the existing device WebSocket.
 5. The Windows owner may run `udb cloud-agent` for a private development connection. None of these steps changes UDB owner permissions.
 
 The device token is protected by the current Windows account's filesystem ACLs, **not yet DPAPI**. After a successful remote claim followed by a local disk failure, the server registration must be revoked administratively before pairing again. The prototype owner must safeguard invitation codes and the global admin secret; the cloud is not encrypted end-to-end.
 
-**Security limitation:** Until the ChatGPT MCP resource server authenticates per-user OAuth tokens and enforces user-to-device ownership, this developer-only relay must not be exposed to unrelated users or sensitive PCs.
+**Security limitation:** The GUI button only registers the device; it does not start the background agent, configure ChatGPT or grant Windows permissions. Until the ChatGPT MCP resource server authenticates per-user OAuth tokens and enforces user-to-device ownership, this developer-only relay must not be exposed to unrelated users or sensitive PCs.
 
 ## Developer-only validation
 

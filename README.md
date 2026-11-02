@@ -22,7 +22,8 @@ The local HTTP MCP boundary requires authorization, accepts loopback clients onl
 ## Common Room in the desktop GUI (source feature)
 
 Choose a **registered source project** containing an existing
-`chatgpt-workspace/workspace.sqlite3` database, then click
+`chatgpt-workspace/workspace.sqlite3` or
+`examples/chatgpt-workspace/workspace.sqlite3` database, then click
 **Mở Common Room** on **Dự án**. The Qt dialog uses the *same* Common Room v2
 SQLite database as `examples/chatgpt-workspace/workspace.py` and `chain.py`:
 read/search discussions, join and post messages, view/create/update tasks with

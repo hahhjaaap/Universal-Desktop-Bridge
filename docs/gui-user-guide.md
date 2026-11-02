@@ -93,8 +93,10 @@ mandatory. Untrusted request/file strings are rendered as plain text.
 
 ## Common Room (source-only integration)
 
-On **Dự án**, select a registered project that already contains
-`chatgpt-workspace/workspace.sqlite3`, then click **Mở Common Room**. A
+On **Dự án**, select a registered project containing an existing
+`chatgpt-workspace/workspace.sqlite3` or
+`examples/chatgpt-workspace/workspace.sqlite3` (source checkout), or register
+the `chatgpt-workspace` folder itself. Then click **Mở Common Room**. A
 native Qt window opens the existing version-3 SQLite database (no migration or
 duplicate room creation), with tabs for discussion, tasks and the checked
 browser-cache preview. Use **Tham gia** before posting, **Làm mới** to see

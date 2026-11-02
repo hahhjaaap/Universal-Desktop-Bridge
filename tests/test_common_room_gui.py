@@ -68,6 +68,17 @@ def test_existing_room_is_edited_without_creating_a_second_database(tmp_path):
     assert len(list(root.rglob("workspace.sqlite3"))) == 1
 
 
+def test_room_in_repository_examples_is_discovered(tmp_path):
+    _, _, database_for_project = qt_components()
+    source = tmp_path / "source"
+    example = source / "examples" / "chatgpt-workspace"
+    example.mkdir(parents=True)
+    db_file = example / "workspace.sqlite3"
+    with sqlite3.connect(db_file) as db:
+        db.execute("PRAGMA user_version=3")
+    assert database_for_project(source) == db_file
+
+
 def test_missing_workspace_never_created(tmp_path):
     _, _, database_for_project = qt_components()
     root = tmp_path / "project"

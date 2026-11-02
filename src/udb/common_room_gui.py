@@ -45,20 +45,27 @@ def database_for_project(root: str | Path) -> Path:
     reject_links(project)
     if not project.is_dir() or project.resolve() != project:
         raise ValueError("Thư mục dự án đã thay đổi.")
-    room = (
-        project
+    # Common Room can be registered as its own root, a standalone child,
+    # or the example included in the canonical UDB source checkout.
+    candidates = (
+        [project]
         if project.name == "chatgpt-workspace"
-        else project / "chatgpt-workspace"
+        else [
+            project / "chatgpt-workspace",
+            project / "examples" / "chatgpt-workspace",
+        ]
     )
-    path = room / "workspace.sqlite3"
-    reject_links(room)
-    reject_links(path)
-    if not path.is_file():
-        raise FileNotFoundError(
-            "Không thấy chatgpt-workspace/workspace.sqlite3 trong dự án này. "
-            "Hãy mở Common Room hiện có trước; UDB không tự tạo phòng mới."
-        )
-    return path
+    for room in candidates:
+        path = room / "workspace.sqlite3"
+        reject_links(room)
+        reject_links(path)
+        if path.is_file():
+            return path
+    raise FileNotFoundError(
+        "Không thấy Common Room tại chatgpt-workspace/ hoặc "
+        "examples/chatgpt-workspace/ trong dự án đã đăng ký. "
+        "UDB không tự tạo cơ sở dữ liệu mới."
+    )
 
 
 def open_room(path: Path):

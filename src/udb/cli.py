@@ -95,6 +95,7 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         "gui",
         "runtime",
         "serve",
+        "cloud-agent",
         "status",
         "logs",
         "stop",
@@ -459,6 +460,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             from .source_access import command
 
             return command(settings.home, args.path, revoke=action == "revoke-source")
+        if action == "cloud-agent":
+            if args.access:
+                raise ValueError("Cloud agent does not grant owner access")
+            from .cloud_agent import run as run_cloud_agent
+
+            return run_cloud_agent(settings)
         if action == "serve":
             if args.access:
                 raise ValueError("Owner activation is not an MCP operation")

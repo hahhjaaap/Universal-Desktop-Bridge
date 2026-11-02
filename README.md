@@ -19,6 +19,13 @@
 
 The local HTTP MCP boundary requires authorization, accepts loopback clients only, rejects ambiguous authentication headers and bounds request bodies. These controls do not protect against a compromised Windows account or malicious authorized client. See [ARCHITECTURE.md](ARCHITECTURE.md) for ownership, dispatch and isolation.
 
+## Experimental Cloudflare relay (development branch only)
+
+A private Cloudflare Worker + Durable Object relay and an outbound Windows agent
+are in prototype development. This is **not** a one-click installer or usable
+ChatGPT plugin yet. OAuth and GUI pairing are still pending. See
+[Cloudflare relay prototype](docs/cloudflare-relay-prototype.md).
+
 ## Windows x64: install and start
 
 Review the installer and [published release](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases/latest) before executing downloaded code. In your own PowerShell terminal:

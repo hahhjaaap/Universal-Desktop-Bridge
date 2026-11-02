@@ -1,7 +1,7 @@
 // Only the prototype owner can call admin endpoints. No account OAuth yet.
 export const DEVICE_ID = /^[a-f0-9]{32}$/;
 export const HASH = /^[a-f0-9]{64}$/;
-export const MAX_BODY = 128 * 1024;
+export const MAX_BODY = 256 * 1024;
 export const MAX_SECRET = 256;
 
 export function fixedEqual(a, b) {

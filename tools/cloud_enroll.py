@@ -31,6 +31,11 @@ def main() -> int:
     secret = os.environ.get("UDB_ADMIN_KEY") or getpass.getpass("Owner admin key (hidden): ")
     if len(secret) < 32:
         parser.error("Admin secret must have at least 32 characters")
+    home = Path(args.home)
+    token_path = home / "cloud-device-token"
+    pairing_path = home / "cloud-pairing.json"
+    if token_path.exists() or pairing_path.exists():
+        raise RuntimeError("Existing pairing found; refusing to overwrite credentials")
     device_id = uuid.uuid4().hex
     token = secrets.token_urlsafe(48)
     body = json.dumps({"device_token_sha256": hashlib.sha256(token.encode()).hexdigest()}).encode()
@@ -43,12 +48,7 @@ def main() -> int:
                 raise RuntimeError("Cloudflare enrollment was not confirmed")
     except HTTPError as error:
         raise RuntimeError("Enrollment rejected: HTTP " + str(error.code)) from None
-    home = Path(args.home)
     home.mkdir(parents=True, exist_ok=True)
-    token_path = home / "cloud-device-token"
-    pairing_path = home / "cloud-pairing.json"
-    if token_path.exists() or pairing_path.exists():
-        raise RuntimeError("Existing pairing found; refusing to overwrite credentials")
     fd = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w", encoding="ascii") as file:
         file.write(token + "\n")

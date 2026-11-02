@@ -117,7 +117,7 @@ export class DeviceRelay {
   }
 
   webSocketMessage(ws, message) {
-    if (typeof message !== "string" || message.length > 128 * 1024) {
+    if (typeof message !== "string" || message.length > 1024 * 1024) {
       ws.close(1009, "message_too_large");
       return;
     }

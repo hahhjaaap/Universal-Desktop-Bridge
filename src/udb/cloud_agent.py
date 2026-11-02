@@ -182,7 +182,8 @@ def run(settings) -> int:
                     timeout=30,
                     max_size=_MAX_FRAME,
                 )
-                ws.settimeout(60)
+                # Keep idle WebSockets open for Cloudflare hibernation.
+                ws.settimeout(None)
                 print("UDB cloud agent: connected.")
                 try:
                     while True:

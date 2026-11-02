@@ -27,13 +27,14 @@ _MAX_RETRY_SECONDS = 120
 
 
 def device_url(relay: str, device_id: str) -> str:
-    """Only TLS URLs without embedded credentials or redirects are accepted."""
+    """Only the configured Cloudflare workers.dev TLS relay may receive the token."""
     if not isinstance(device_id, str) or not _DEVICE_ID.fullmatch(device_id):
         raise ValueError("Invalid device ID")
     parts = urlsplit(relay)
     if (
         parts.scheme != "https"
         or not parts.hostname
+        or not parts.hostname.endswith(".workers.dev")
         or parts.username is not None
         or parts.password is not None
         or parts.query

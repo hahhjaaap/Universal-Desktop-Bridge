@@ -55,23 +55,38 @@ async function boundedText(response) {
 export async function probeRelay(originValue, fetchImpl = fetch) {
   const origin = relayOrigin(originValue);
   if (!origin) return { state: "not_configured" };
+  const controller = new AbortController();
+  // Bound the entire HTTP exchange, including body streaming, not just headers.
+  const timer = setTimeout(() => controller.abort(), 3000);
   try {
     const response = await fetchImpl(origin + "/health", {
       method: "GET", redirect: "error",
-      signal: AbortSignal.timeout(3000),
+      signal: controller.signal,
       headers: { accept: "application/json" },
     });
+    if (response.status === 429) return { state: "rate_limited" };
+    if ([502, 503, 504].includes(response.status)) return { state: "upstream_unavailable" };
     if (response.status !== 200 ||
         !response.headers.get("content-type")?.includes("application/json")) {
       return { state: "unavailable" };
     }
-    const data = JSON.parse(await boundedText(response));
+    let data;
+    try { data = JSON.parse(await boundedText(response)); }
+    catch (error) {
+      if (controller.signal.aborted) return { state: "timeout" };
+      return { state: error?.message === "upstream_body_too_large"
+        ? "unavailable" : "unexpected_response" };
+    }
     if (data?.status !== "ok" || data?.kind !== "private-relay-prototype") {
       return { state: "unexpected_response" };
     }
     return { state: "online" };
-  } catch {
+  } catch (error) {
+    if (controller.signal.aborted || error?.name === "AbortError" ||
+        error?.name === "TimeoutError") return { state: "timeout" };
     return { state: "unavailable" };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

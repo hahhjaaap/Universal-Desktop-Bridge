@@ -23,7 +23,10 @@ end users, or proxy MCP traffic. Cloudflare remains the main connection path.
 - Built entirely with Node 22 standard library, with no runtime dependencies.
 - No OAuth/admin device tokens, no permissions to control a Windows computer.
 - Does not accept arbitrary external URLs from HTTP requests.
-- Cloudflare response capped at 2 KiB, rejects redirects, 3s timeout.
+- Cloudflare response capped at 2 KiB, rejects redirects, 3s end-to-end timeout.
+- Status distinguishes 429 rate limits, upstream 502/503/504, invalid health JSON,
+  timeouts and successful public health checks. A healthy relay does **not**
+  confirm any Windows device is online, authorized or reachable.
 - No background health polling, only user-triggered on-demand checks.
 - The Cloudflare private relay remains an experimental developer-only
   prototype; full OAuth, per-user permissions and GUI pairing are still pending.

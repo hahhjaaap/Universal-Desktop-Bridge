@@ -76,6 +76,13 @@ def claim_device(
         raise ValueError(
             "Cloud pairing rejected. Invitation may be expired or used."
         ) from error
+    except OSError:
+        # A timed-out POST might still have registered the device remotely.
+        # Never silently retry with a fresh secret or consume the code again.
+        raise RuntimeError(
+            "Cloud pairing outcome unknown; administrator must check and revoke "
+            "the device before retrying."
+        ) from None
     # The remote claim is now consumed. Never replay it after a write failure.
     try:
         save_device_token(home, device_id, token)

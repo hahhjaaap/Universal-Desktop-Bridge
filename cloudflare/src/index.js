@@ -14,6 +14,13 @@ const MAX_PENDING_PER_DEVICE = 1;
 const MAX_REPLY_BYTES = 1024 * 1024;
 const encoder = new TextEncoder();
 
+// A failed Durable Object invocation is an upstream outage, not a malformed
+// client request. Mutations may already have executed: no automatic replay.
+async function forward(stub, request) {
+  try { return await stub.fetch(request); }
+  catch { return failure(503, "relay_unavailable_outcome_unknown"); }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -24,7 +31,7 @@ export default {
       const { device_id, pairing_code, pairing_token_sha256 } = await newPairing();
       const expires_at = Date.now() + PAIRING_TTL_MS;
       const stub = env.DEVICES.get(env.DEVICES.idFromName(device_id));
-      const issued = await stub.fetch(new Request("https://internal/pair/issue", {
+      const issued = await forward(stub, new Request("https://internal/pair/issue", {
         method: "POST", body: JSON.stringify({ pairing_token_sha256, expires_at }),
       }));
       if (!issued.ok) return failure(503, "pairing_unavailable");
@@ -38,7 +45,7 @@ export default {
         const body = await readJson(request);
         if (!HASH.test(body.device_token_sha256)) return failure(400, "invalid_token_hash");
         const stub = env.DEVICES.get(env.DEVICES.idFromName(claimMatch[1]));
-        return stub.fetch(new Request("https://internal/pair/claim", {
+        return forward(stub, new Request("https://internal/pair/claim", {
           method: "POST",
           headers: { Authorization: "Bearer " + pairingCode },
           body: JSON.stringify({ device_token_sha256: body.device_token_sha256 }),
@@ -62,21 +69,21 @@ export default {
     const stub = env.DEVICES.get(id);
     try {
       if (!adminMatch[2] && request.method === "DELETE") {
-        return stub.fetch(new Request("https://internal/revoke", { method: "DELETE" }));
+        return forward(stub, new Request("https://internal/revoke", { method: "DELETE" }));
       }
       if (!adminMatch[2] && request.method === "PUT") {
         const body = await readJson(request);
         if (!HASH.test(body.device_token_sha256)) return failure(400, "invalid_token_hash");
-        return stub.fetch(new Request("https://internal/register", {
+        return forward(stub, new Request("https://internal/register", {
           method: "PUT", body: JSON.stringify(body),
         }));
       }
       if (adminMatch[2] === "/status" && request.method === "GET")
-        return stub.fetch(new Request("https://internal/status"));
+        return forward(stub, new Request("https://internal/status"));
       if (adminMatch[2] === "/rpc" && request.method === "POST") {
         const rpc = await readJson(request);
         if (!validRpc(rpc)) return failure(400, "invalid_rpc");
-        return stub.fetch(new Request("https://internal/rpc", {
+        return forward(stub, new Request("https://internal/rpc", {
           method: "POST", body: JSON.stringify(rpc),
         }));
       }
@@ -197,7 +204,7 @@ export class DeviceRelay {
         } catch {
           clearTimeout(timeout);
           this.pending.delete(requestId);
-          resolve(failure(503, "device_disconnected"));
+          resolve(failure(503, "device_disconnected_outcome_unknown"));
         }
       });
     }
@@ -210,9 +217,16 @@ export class DeviceRelay {
       return;
     }
     let item;
-    try { item = JSON.parse(message); } catch { return; }
+    try { item = JSON.parse(message); }
+    catch {
+      this.webSocketClose(ws, 1007, "invalid_json");
+      return;
+    }
     if (!item || item.kind !== "rpc_result" || typeof item.id !== "string" ||
-        !item.rpc || typeof item.rpc !== "object" || Array.isArray(item.rpc)) return;
+        !item.rpc || typeof item.rpc !== "object" || Array.isArray(item.rpc)) {
+      this.webSocketClose(ws, 1008, "invalid_rpc_response");
+      return;
+    }
     const waiting = this.pending.get(item.id);
     if (!waiting || waiting.ws !== ws) return;
     clearTimeout(waiting.timeout);

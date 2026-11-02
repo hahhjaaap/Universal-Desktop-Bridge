@@ -137,9 +137,17 @@ class LocalProxy:
                 if answer is None:
                     self.unusable = True
                     raise RuntimeError("Local UDB proxy disconnected")
-                if answer.get("id") == rpc["id"]:
+                if (
+                    type(answer.get("id")) is type(rpc["id"])
+                    and answer["id"] == rpc["id"]
+                    and answer.get("jsonrpc") == "2.0"
+                    and ("result" in answer) != ("error" in answer)
+                ):
                     return answer
-                # Never attribute an out-of-order reply to another request.
+                # A single outstanding proxy request cannot legitimately receive
+                # another ID or an incomplete envelope. Fail closed, never replay.
+                self.unusable = True
+                raise RuntimeError("Local UDB proxy returned an invalid RPC reply")
         except OSError:
             self.unusable = True
             raise RuntimeError("Local UDB proxy disconnected") from None
@@ -186,10 +194,11 @@ def run(settings) -> int:
                     header=[f"Authorization: Bearer {token}"],
                     timeout=30,
                     max_size=_MAX_FRAME,
+                    redirect_limit=0,  # Never forward bearer tokens to redirects.
                 )
+                connected_at = time.monotonic()
                 # Keep idle WebSockets open for Cloudflare hibernation.
                 ws.settimeout(None)
-                retry_seconds = _MIN_RETRY_SECONDS
                 print("UDB cloud agent: connected.")
                 try:
                     while True:
@@ -251,9 +260,12 @@ def run(settings) -> int:
                     if proxy is not None:
                         proxy.close()
                         proxy = None
-                # The server might accept and immediately close a socket.
-                # Never reconnect in a hot loop that wastes the Free quota.
+                # Reset backoff only after a sustained healthy connection.
+                # Brief accept/close cycles otherwise hammer Cloudflare Free.
+                if time.monotonic() - connected_at >= 60:
+                    retry_seconds = _MIN_RETRY_SECONDS
                 time.sleep(retry_seconds)
+                retry_seconds = min(retry_seconds * 2, _MAX_RETRY_SECONDS)
             except websocket.WebSocketBadStatusException as error:
                 if error.status_code in (401, 403):
                     print("UDB cloud agent: pairing rejected; stop and re-pair.")

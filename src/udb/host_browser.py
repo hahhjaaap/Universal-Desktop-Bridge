@@ -93,6 +93,16 @@ def validate_url(value):
         address = None
     if address is not None and not address.is_global:
         raise PolicyError("Private IP navigation blocked")
+    # Chrome interprets short, octal, decimal and hex IPv4 host literals that
+    # Python's ipaddress module does not accept (e.g. 2130706433 -> 127.0.0.1).
+    # Reject ambiguous numeric or percent-encoded hostnames before navigation.
+    if address is None and (
+        "%" in host
+        or re.fullmatch(
+            r"(?:0x[0-9a-f]+|[0-9]+)(?:\\.(?:0x[0-9a-f]+|[0-9]+))*", host
+        )
+    ):
+        raise PolicyError("Ambiguous numeric or encoded browser host blocked")
     return value
 
 

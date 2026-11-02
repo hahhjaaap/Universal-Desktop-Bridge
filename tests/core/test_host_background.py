@@ -112,6 +112,12 @@ def test_heavy_task_uses_live_governor_and_preserves_reserve(monkeypatch):
         "http://[::1]",
         "http://192.168.0.1",
         "http://localhost./",
+        "http://2130706433/",
+        "http://127.1/",
+        "http://0177.0.0.1/",
+        "http://0x7f000001/",
+        "http://0x7f.0.0.1/",
+        "http://%31%32%37.0.0.1/",
         "https://metadata.google.internal/",
         "https://example.com:bad/",
         "https://u:p@example.com",
@@ -125,6 +131,8 @@ def test_browser_rejects_local_file_internal_and_credential_urls(url):
 
 def test_public_url_and_blank_are_supported():
     assert validate_url("https://example.com/test?q=1")
+    assert validate_url("https://8.8.8.8/")
+    assert validate_url("https://123.example.com/")
     assert validate_url("about:blank")
 
 

@@ -33,7 +33,7 @@ def main():
     if os.name != "nt":
         parser.error("Run these acceptance checks in an interactive Windows session")
 
-    from udb.core import Agent
+    from udb.core import Agent, PolicyError
     from udb.desktop_control import InputControl, PauseHotkey, pause_local
     from udb.host_browser import Browser
     from udb.windows_utilities import WindowsBackend
@@ -118,7 +118,19 @@ def main():
             finally:
                 pointer.close()
 
-        browser = Browser(Path(folder) / "browser")
+        try:
+            browser = Browser(Path(folder) / "browser")
+        except PolicyError as exc:
+            # On loaded GitHub Windows runners, Chrome can exceed its first
+            # 15-second endpoint budget. Retry only this read-only smoke test
+            # with a fresh UDB-owned disposable profile, at most once.
+            if (
+                os.environ.get("GITHUB_ACTIONS") != "true"
+                or str(exc) != "Private browser startup timed out"
+            ):
+                raise
+            print("CI transient browser startup timeout; retrying once", file=sys.stderr)
+            browser = Browser(Path(folder) / "browser-ci-retry")
         try:
             tab = next(iter(browser.tabs))
             screenshot_started = time.monotonic()

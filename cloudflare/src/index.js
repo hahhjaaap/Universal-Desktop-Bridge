@@ -2,6 +2,7 @@
 // The desktop retains all UDB owner-grant and tool policy enforcement.
 import { DEVICE_ID, HASH, bearer, adminAuthorized, digest, readJson, validRpc, fixedEqual } from "./auth.js";
 import { newPairing, PAIRING_TTL_MS } from "./pairing.js";
+import { handleMcp, protectedResource } from "./mcp.js";
 
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store",
@@ -61,6 +62,14 @@ export default {
       if (!bearer(request)) return failure(401, "device_auth_required");
       const id = env.DEVICES.idFromName(agentMatch[1]);
       return env.DEVICES.get(id).fetch(new Request("https://internal/connect", request));
+    }
+    const resourceMatch = /^\/\\.well-known\/oauth-protected-resource\/v1\/devices\/([a-f0-9]{32})\/mcp$/.exec(url.pathname);
+    if (resourceMatch && request.method === "GET")
+      return protectedResource(request, env, resourceMatch[1]);
+    const mcpMatch = /^\/v1\/devices\/([a-f0-9]{32})\/mcp$/.exec(url.pathname);
+    if (mcpMatch) {
+      const stub = env.DEVICES.get(env.DEVICES.idFromName(mcpMatch[1]));
+      return handleMcp(request, env, mcpMatch[1], stub);
     }
     const adminMatch = /^\/v1\/admin\/devices\/([a-f0-9]{32})(\/rpc|\/status)?$/.exec(url.pathname);
     if (!adminMatch) return failure(404, "not_found");

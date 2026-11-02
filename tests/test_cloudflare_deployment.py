@@ -28,9 +28,7 @@ class FakeOpener:
         self.urls.append(request.full_url)
         url = request.full_url
         if url.endswith("/health"):
-            return FakeResponse(
-                b'{"status":"ok","kind":"private-relay-prototype"}'
-            )
+            return FakeResponse(b'{"status":"ok","kind":"private-relay-prototype"}')
         if "/.well-known/" in url:
             return FakeResponse(
                 json.dumps(
@@ -46,7 +44,9 @@ class FakeOpener:
             url,
             401,
             "unauthorized",
-            {"WWW-Authenticate": 'Bearer resource_metadata="https://example.workers.dev"'},
+            {
+                "WWW-Authenticate": 'Bearer resource_metadata="https://example.workers.dev"'
+            },
             None,
         )
 

@@ -25,7 +25,12 @@ def check(relay: str, device_id: str, opener=None) -> dict:
     origin = relay.rstrip("/")
     opener = opener or build_opener(NoRedirect())
     resource = origin + "/v1/devices/" + device_id + "/mcp"
-    metadata = origin + "/.well-known/oauth-protected-resource/v1/devices/" + device_id + "/mcp"
+    metadata = (
+        origin
+        + "/.well-known/oauth-protected-resource/v1/devices/"
+        + device_id
+        + "/mcp"
+    )
     report = {
         "health": "unverified",
         "oauth_metadata": "unverified",
@@ -35,7 +40,9 @@ def check(relay: str, device_id: str, opener=None) -> dict:
     }
 
     def read_json(url):
-        with opener.open(Request(url, headers={"Accept": "application/json"}), timeout=8) as response:
+        with opener.open(
+            Request(url, headers={"Accept": "application/json"}), timeout=8
+        ) as response:
             if response.status != 200:
                 raise ValueError("Unexpected HTTP status")
             data = response.read(2049)

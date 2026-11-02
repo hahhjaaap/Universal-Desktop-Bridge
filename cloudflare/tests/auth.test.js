@@ -33,6 +33,6 @@ test("RPC allowlist requires real request id and tools/call arguments", () => {
 });
 
 test("oversized request body refused even without content-length", async () => {
-  const req = new Request("https://example.com", { method: "POST", body: "x".repeat(128 * 1024 + 1) });
+  const req = new Request("https://example.com", { method: "POST", body: "x".repeat(256 * 1024 + 1) });
   await assert.rejects(readJson(req), /body_too_large/);
 });

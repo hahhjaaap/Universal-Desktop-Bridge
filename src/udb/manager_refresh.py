@@ -569,6 +569,17 @@ class ManagerRefreshMixin:
         self.local_button.setText(
             "Tắt MCP cục bộ" if status["local_running"] else "Bật MCP cục bộ"
         )
+        if hasattr(self, "cloud_session_button"):
+            cloud_running = status.get("cloud_running", False)
+            self.cloud_session_button.setEnabled(not self.busy)
+            self.cloud_session_button.setText(
+                "Tắt Cloud Agent" if cloud_running else "Bật Cloud Agent"
+            )
+            self.cloud_session_status.setText(
+                "Cloud Agent đang chạy · chưa xác minh plugin ChatGPT hoặc WebSocket."
+                if cloud_running
+                else "Cloud Agent đã tắt. Ghép nối không tự tạo phiên điều khiển."
+            )
         self.connection_hint.setText(
             "Tunnel sẵn sàng trên máy này; ChatGPT chưa được xác minh."
             if ready

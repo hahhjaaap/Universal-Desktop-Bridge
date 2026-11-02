@@ -306,6 +306,18 @@ class DesktopController:
     def start_local(self):
         self.start_process("mcp", command(self.home, "--serve"))
 
+    def start_cloud(self):
+        """Owner-initiated remote session. Never auto-start or create grants."""
+        from .cloud_agent import load_pairing, read_device_token
+        from .launcher import command as cli_command
+
+        _relay, _device_id, token_file = load_pairing(self.agent.home)
+        read_device_token(token_file)
+        self.start_process(
+            "cloud",
+            cli_command(["cloud-agent", "--home", str(self.agent.home)]),
+        )
+
     def stop_process(self, name):
         with self.lock:
             if name == "tunnel":
@@ -464,6 +476,7 @@ class DesktopController:
             "recovery_count": self._recovery_count,
             "last_recovery": self._last_recovery,
             "local_running": self.alive("mcp"),
+            "cloud_running": self.alive("cloud"),
             "sandbox": available(),
         }
 

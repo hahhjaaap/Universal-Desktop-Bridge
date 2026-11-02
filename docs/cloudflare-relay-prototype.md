@@ -31,6 +31,13 @@ A new opt-in owner-attended flow avoids giving the shared cloud admin secret to 
 4. The one-time invitation expires after 10 minutes, locks after five bad attempts and cannot be replayed. The administrator can revoke it using the private authenticated `DELETE /v1/admin/devices/{device_id}` endpoint. Revocation closes the existing device WebSocket.
 5. The Windows owner may run `udb cloud-agent` for a private development connection. None of these steps changes UDB owner permissions.
 
+The Windows UDB manager now has a separate **Bật Cloud Agent / Tắt Cloud Agent**
+button on the connection page. This is a manually enabled, session-only agent
+process: it does not run at startup, does not grant access, and is terminated
+with its owned local MCP proxy when the owner fully exits the GUI. Minimizing
+the window to the tray does not count as exiting. The UI intentionally reports
+only the agent process status, **not verified ChatGPT connectivity**.
+
 The device token is protected by the current Windows account's filesystem ACLs, **not yet DPAPI**. After a successful remote claim followed by a local disk failure, the server registration must be revoked administratively before pairing again. The prototype owner must safeguard invitation codes and the global admin secret; the cloud is not encrypted end-to-end.
 
 **Security limitation:** The GUI button only registers the device; it does not start the background agent, configure ChatGPT or grant Windows permissions. Until the ChatGPT MCP resource server authenticates per-user OAuth tokens and enforces user-to-device ownership, this developer-only relay must not be exposed to unrelated users or sensitive PCs.

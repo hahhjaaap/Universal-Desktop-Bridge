@@ -696,7 +696,17 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         )
         self.cloud_pair_button = MotionButton("Nhập mã mời Cloud", "settings")
         self.cloud_pair_button.clicked.connect(self.cloud_pair)
-        cloud_layout.addLayout(row(self.cloud_pair_button, None))
+        self.cloud_session_button = MotionButton("Bật Cloud Agent", "power")
+        self.cloud_session_button.clicked.connect(self.toggle_cloud)
+        cloud_layout.addLayout(
+            row(self.cloud_pair_button, self.cloud_session_button, None)
+        )
+        self.cloud_session_status = label(
+            "Chưa bật Cloud Agent. Ghép nối không tự tạo phiên điều khiển.",
+            "Muted",
+            True,
+        )
+        cloud_layout.addWidget(self.cloud_session_status)
         lay.addWidget(cloud_panel)
         local = panel()
         ll = QVBoxLayout(local)
@@ -992,6 +1002,27 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
     def configure(self):
         if not self.busy:
             ConnectionDialog(self.controller, self).exec()
+
+    def toggle_cloud(self):
+        """Only a local GUI action may enable the experimental cloud session."""
+        if self.busy:
+            return
+        if self.controller.alive("cloud"):
+            self.run_background(lambda: self.controller.stop_process("cloud"))
+            return
+        answer = QMessageBox.question(
+            self,
+            "UDB Cloud · Bật phiên thử nghiệm",
+            "Bật phiên Cloud Agent ra Internet cho máy Windows này?\\n"
+            "Cloudflare có thể chuyển các yêu cầu được xác thực về UDB.\\n"
+            "Chỉ bật khi bạn tin tưởng chủ hệ thống và đã ghép nối máy.\\n"
+            "UDB vẫn kiểm tra quyền máy tính riêng và tự tắt phiên khi thoát ứng dụng.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self.run_background(self.controller.start_cloud)
 
     def cloud_pair(self):
         if self.busy:

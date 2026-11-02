@@ -1,0 +1,61 @@
+# UDB Cloudflare OAuth MCP gateway (read-only P0 foundation)
+
+This is an **opt-in remote resource-server** layer for the private Cloudflare
+relay. It does not implement an OAuth authorization server or perform a live
+Cloudflare deployment. ChatGPT registration is **not** automatic.
+
+## Security model
+
+- The external OAuth 2.1 authorization server must implement authorization-code
+  + PKCE (S256), registered client redirect URIs, metadata and Resource
+  Indicators. It issues short-lived RS256 JWT access tokens with `iss`, `sub`,
+  `aud` (the **exact** per-device MCP URL), `exp` and `scope: "udb:read"`.
+- Configure `UDB_OAUTH_ISSUER` and `UDB_OAUTH_JWKS_URL` (HTTPS same host).
+  Only signed RS256 tokens from these pinned keys are accepted; other algorithms,
+  device tokens and the administrator key are **not** user identity.
+- Configure `UDB_DEVICE_GRANTS` as JSON mapping device IDs to identity subjects
+  to approved read-only tool names. Example with placeholder IDs:
+
+```json
+{
+  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+    "idp-user-123": ["bridge_status", "list_projects"]
+  }
+}
+```
+
+- Only `bridge_status` and `list_projects` are permitted across this experimental
+  gateway, regardless of any other entries in the environment.
+- All unconfigured or unauthorized requests are denied. Local UDB owner grants
+  still apply independently. There is no anonymous mode or remote write access.
+- A health check on Render confirms only the Cloudflare health endpoint, not
+  a working device or ChatGPT OAuth exchange.
+
+## Remote endpoint
+
+`https://WORKER.workers.dev/v1/devices/DEVICE_ID/mcp`
+
+OAuth discovery:
+
+`https://WORKER.workers.dev/.well-known/oauth-protected-resource/v1/devices/DEVICE_ID/mcp`
+
+A stateless subset of Streamable HTTP MCP (`2025-03-26`, `2025-06-18`,
+`2025-11-25`) is supported using individual JSON POST requests. Only
+`initialize`, `ping`, `notifications/initialized`, `tools/list` and
+approved `tools/call` are implemented. GET streaming and session resumptions
+are not supported. This gateway is **not** yet a general-purpose production
+MCP endpoint.
+
+## Release gate
+
+Before exposing a real Windows PC, complete:
+1. OAuth authorization server configuration with PKCE and correct resource
+   audience; full ChatGPT callback/login test.
+2. Real Windows ↔ Cloudflare Worker ↔ Durable Object tests on an isolated
+   test device; verify token rotation, revocation, reconnect, rate limiting,
+   and unknown-outcome safety.
+3. Security audit for the admin-only prototype endpoints, browser/Origin
+   handling, token/audience isolation and per-device permission controls.
+4. CI matrix, release packaging, signed release if available and rollback test.
+
+No secrets, API keys or actual user subjects belong in source control.

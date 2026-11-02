@@ -63,7 +63,7 @@ export default {
       const id = env.DEVICES.idFromName(agentMatch[1]);
       return env.DEVICES.get(id).fetch(new Request("https://internal/connect", request));
     }
-    const resourceMatch = /^\/\\.well-known\/oauth-protected-resource\/v1\/devices\/([a-f0-9]{32})\/mcp$/.exec(url.pathname);
+    const resourceMatch = /^\/\.well-known\/oauth-protected-resource\/v1\/devices\/([a-f0-9]{32})\/mcp$/.exec(url.pathname);
     if (resourceMatch && request.method === "GET")
       return protectedResource(request, env, resourceMatch[1]);
     const mcpMatch = /^\/v1\/devices\/([a-f0-9]{32})\/mcp$/.exec(url.pathname);

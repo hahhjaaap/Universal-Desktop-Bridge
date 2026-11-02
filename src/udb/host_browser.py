@@ -99,7 +99,7 @@ def validate_url(value):
     if address is None and (
         "%" in host
         or re.fullmatch(
-            r"(?:0x[0-9a-f]+|[0-9]+)(?:\\.(?:0x[0-9a-f]+|[0-9]+))*", host
+            r"(?:0x[0-9a-f]+|[0-9]+)(?:\.(?:0x[0-9a-f]+|[0-9]+))*", host
         )
     ):
         raise PolicyError("Ambiguous numeric or encoded browser host blocked")

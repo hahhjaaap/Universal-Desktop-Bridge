@@ -6,7 +6,6 @@ The relay is private/admin-only until an audited OAuth MCP front end is added.
 from __future__ import annotations
 
 import json
-import os
 import queue
 import re
 import subprocess
@@ -138,7 +137,7 @@ class LocalProxy:
                 if answer.get("id") == rpc["id"]:
                     return answer
                 # Never attribute an out-of-order reply to another request.
-        except (OSError, BrokenPipeError):
+        except OSError:
             self.unusable = True
             raise RuntimeError("Local UDB proxy disconnected") from None
 
@@ -218,7 +217,7 @@ def run(settings) -> int:
                         ws.send(json.dumps({"kind": "rpc_result", "id": relay_id, "rpc": response}))
                 finally:
                     ws.close()
-            except (OSError, websocket.WebSocketException, TimeoutError):
+            except (OSError, websocket.WebSocketException):
                 print("UDB cloud agent: connection unavailable; retrying.")
                 time.sleep(5)
     except KeyboardInterrupt:

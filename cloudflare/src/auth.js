@@ -32,14 +32,35 @@ export async function digest(value) {
 }
 
 export async function readJson(request) {
-  const size = Number(request.headers.get("Content-Length") || "0");
-  if (size > MAX_BODY) throw new Error("body_too_large");
-  const text = await request.text();
-  if (new TextEncoder().encode(text).length > MAX_BODY) throw new Error("body_too_large");
-  const value = JSON.parse(text);
-  if (value === null || typeof value !== "object" || Array.isArray(value))
+  const declared = Number(request.headers.get("Content-Length") || "0");
+  if (!Number.isFinite(declared) || declared < 0) throw new Error("invalid_content_length");
+  if (declared > MAX_BODY) throw new Error("body_too_large");
+  if (!request.body) throw new Error("invalid_json");
+  // Consume streams with a hard cap. request.text() would allocate the entire
+  // body before checking its size, even with chunked transfers.
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let text = "";
+  let bytes = 0;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > MAX_BODY) {
+        await reader.cancel();
+        throw new Error("body_too_large");
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
+  const body = JSON.parse(text);
+  if (body === null || typeof body !== "object" || Array.isArray(body))
     throw new Error("invalid_json");
-  return value;
+  return body;
 }
 
 export function validRpc(rpc) {

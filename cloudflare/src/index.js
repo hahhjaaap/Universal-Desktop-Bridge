@@ -8,6 +8,11 @@ const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
     "x-content-type-options": "nosniff" }
 });
 const failure = (status, code) => json({ error: code }, status);
+// A single Windows stdio proxy processes RPCs sequentially. Refuse additional
+// calls rather than queue commands that might outlive HTTP timeouts.
+const MAX_PENDING_PER_DEVICE = 1;
+const MAX_REPLY_BYTES = 1024 * 1024;
+const encoder = new TextEncoder();
 
 export default {
   async fetch(request, env) {
@@ -177,7 +182,7 @@ export class DeviceRelay {
     if (path === "/rpc" && request.method === "POST") {
       const ws = this.deviceSocket();
       if (!ws) return failure(503, "device_offline");
-      if (this.pending.size >= 4) return failure(429, "device_busy");
+      if (this.pending.size >= MAX_PENDING_PER_DEVICE) return failure(429, "device_busy");
       const rpc = await readJson(request);
       if (!validRpc(rpc)) return failure(400, "invalid_rpc");
       const requestId = crypto.randomUUID();
@@ -186,7 +191,7 @@ export class DeviceRelay {
           this.pending.delete(requestId);
           resolve(failure(504, "outcome_unknown_do_not_retry_mutations"));
         }, 25000);
-        this.pending.set(requestId, { ws, resolve, timeout });
+        this.pending.set(requestId, { ws, resolve, timeout, rpcId: rpc.id });
         try {
           ws.send(JSON.stringify({ kind: "rpc", id: requestId, rpc }));
         } catch {
@@ -200,19 +205,27 @@ export class DeviceRelay {
   }
 
   webSocketMessage(ws, message) {
-    if (typeof message !== "string" || message.length > 1024 * 1024) {
-      ws.close(1009, "message_too_large");
+    if (typeof message !== "string" || encoder.encode(message).byteLength > MAX_REPLY_BYTES) {
+      this.webSocketClose(ws, 1009, "message_too_large");
       return;
     }
     let item;
     try { item = JSON.parse(message); } catch { return; }
     if (!item || item.kind !== "rpc_result" || typeof item.id !== "string" ||
-        !item.rpc || typeof item.rpc !== "object") return;
+        !item.rpc || typeof item.rpc !== "object" || Array.isArray(item.rpc)) return;
     const waiting = this.pending.get(item.id);
     if (!waiting || waiting.ws !== ws) return;
     clearTimeout(waiting.timeout);
     this.pending.delete(item.id);
-    waiting.resolve(json(item.rpc));
+    const rpc = item.rpc;
+    const hasResult = Object.prototype.hasOwnProperty.call(rpc, "result");
+    const hasError = Object.prototype.hasOwnProperty.call(rpc, "error");
+    if (rpc.jsonrpc !== "2.0" || rpc.id !== waiting.rpcId || hasResult === hasError) {
+      waiting.resolve(failure(502, "invalid_device_rpc_response"));
+      this.webSocketClose(ws, 1008, "invalid_rpc_response");
+      return;
+    }
+    waiting.resolve(json(rpc));
   }
 
   webSocketClose(ws, code, reason) {

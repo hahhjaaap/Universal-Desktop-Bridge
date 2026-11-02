@@ -22,6 +22,8 @@ from .launcher import child_environment, command
 _DEVICE_ID = re.compile(r"[a-f0-9]{32}\Z")
 _ALLOWED_METHODS = {"initialize", "ping", "tools/list", "tools/call"}
 _MAX_FRAME = 1024 * 1024
+_MIN_RETRY_SECONDS = 5
+_MAX_RETRY_SECONDS = 120
 
 
 def device_url(relay: str, device_id: str) -> str:
@@ -171,7 +173,9 @@ def run(settings) -> int:
     url = device_url(relay, device_id)
     # Windows uses Credential Manager keyed by device ID; no plaintext file.
     token = load_device_token(settings.home, device_id)
-    proxy = LocalProxy(settings)
+    # Avoid spawning the local MCP process when the cloud is offline or idle.
+    proxy = None
+    retry_seconds = _MIN_RETRY_SECONDS
     print("UDB cloud agent: private relay enabled for this Windows user.")
     try:
         while True:
@@ -184,6 +188,7 @@ def run(settings) -> int:
                 )
                 # Keep idle WebSockets open for Cloudflare hibernation.
                 ws.settimeout(None)
+                retry_seconds = _MIN_RETRY_SECONDS
                 print("UDB cloud agent: connected.")
                 try:
                     while True:
@@ -211,6 +216,8 @@ def run(settings) -> int:
                         try:
                             if not valid_remote_rpc(rpc):
                                 raise ValueError("Unsupported remote RPC")
+                            if proxy is None:
+                                proxy = LocalProxy(settings)
                             response = proxy.call(rpc)
                         except (RuntimeError, TimeoutError, ValueError) as error:
                             # Do not leak file paths, arguments, data or credentials.
@@ -222,7 +229,7 @@ def run(settings) -> int:
                                     "message": type(error).__name__,
                                 },
                             }
-                            if proxy.unusable:
+                            if proxy is not None and proxy.unusable:
                                 ws.send(
                                     json.dumps(
                                         {
@@ -240,10 +247,25 @@ def run(settings) -> int:
                         )
                 finally:
                     ws.close()
+                    if proxy is not None:
+                        proxy.close()
+                        proxy = None
+                # The server might accept and immediately close a socket.
+                # Never reconnect in a hot loop that wastes the Free quota.
+                time.sleep(retry_seconds)
+            except websocket.WebSocketBadStatusException as error:
+                if error.status_code in (401, 403):
+                    print("UDB cloud agent: pairing rejected; stop and re-pair.")
+                    return 2
+                print("UDB cloud agent: remote endpoint unavailable.")
+                time.sleep(retry_seconds)
+                retry_seconds = min(retry_seconds * 2, _MAX_RETRY_SECONDS)
             except (OSError, websocket.WebSocketException):
                 print("UDB cloud agent: connection unavailable; retrying.")
-                time.sleep(5)
+                time.sleep(retry_seconds)
+                retry_seconds = min(retry_seconds * 2, _MAX_RETRY_SECONDS)
     except KeyboardInterrupt:
         return 0
     finally:
-        proxy.close()
+        if proxy is not None:
+            proxy.close()

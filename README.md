@@ -19,6 +19,21 @@
 
 The local HTTP MCP boundary requires authorization, accepts loopback clients only, rejects ambiguous authentication headers and bounds request bodies. These controls do not protect against a compromised Windows account or malicious authorized client. See [ARCHITECTURE.md](ARCHITECTURE.md) for ownership, dispatch and isolation.
 
+## Experimental Cloudflare relay (development branch only)
+
+A private Cloudflare Worker + Durable Object relay and an outbound Windows agent
+are in prototype development. This is **not** a one-click installer or usable
+ChatGPT plugin yet. OAuth and GUI pairing are still pending. See
+[Cloudflare relay prototype](docs/cloudflare-relay-prototype.md).
+
+### Optional Render observer (development branch only)
+
+An optional **read-only Render Free dashboard** can check the public Cloudflare
+relay health endpoint on demand, without device tokens or command access.
+It is **not** a second MCP server, instant failover, or a replacement for owner
+permissions. See [Render observer](docs/render-observer.md) and the root
+[Render Blueprint](render.yaml). Neither platform is deployed automatically.
+
 ## Common Room in the desktop GUI (source feature)
 
 Choose a **registered source project** containing an existing

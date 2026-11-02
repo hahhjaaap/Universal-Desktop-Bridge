@@ -8,7 +8,8 @@ This is the initial private Cloudflare Worker + Durable Object relay for 2–3 d
 - A hibernatable Durable Object WebSocket per device, with independent device token hashes.
 - The Windows `udb cloud-agent` command. It connects outbound using TLS and forwards allowed MCP JSON-RPC requests to the existing local `udb serve` proxy.
 - Random device tokens registered by SHA-256 digest; local credentials are not passed through command-line arguments. A second, owner-attended invitation flow now supports enrollment without sharing the global admin key.
-- Bounded frame size, maximum four pending calls, conservative timeouts and no retries of uncertain mutations.
+- Bounded frame size, one in-flight RPC per device, conservative timeouts and no retries of uncertain mutations.
+- The cloud agent rejects WebSocket redirects with bearer credentials and exponentially backs off quick connection closures. Malformed device replies fail closed; Durable Object outages return 503 instead of misleading 400 errors.
 - Node and Python unit tests with a CI validation workflow.
 
 ## Security boundaries

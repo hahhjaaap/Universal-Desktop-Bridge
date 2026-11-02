@@ -64,6 +64,7 @@ test("Durable Object connection outage is a 503, never a bad client request", as
   const key = "test-secret-" + "x".repeat(35);
   const env = {
     UDB_ADMIN_KEY: key,
+    UDB_ENABLE_DEV_ADMIN_RPC: "true", // Explicitly exercise legacy prototype mode.
     DEVICES: {
       idFromName: name => name,
       get: () => ({ fetch: async () => { throw Error("upstream inaccessible"); } }),

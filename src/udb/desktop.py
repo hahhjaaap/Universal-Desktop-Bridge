@@ -308,11 +308,12 @@ class DesktopController:
 
     def start_cloud(self):
         """Owner-initiated remote session. Never auto-start or create grants."""
-        from .cloud_agent import load_pairing, read_device_token
+        from .cloud_agent import load_pairing
+        from .cloud_secrets import load_device_token
         from .launcher import command as cli_command
 
-        _relay, _device_id, token_file = load_pairing(self.agent.home)
-        read_device_token(token_file)
+        _relay, device_id, _token_file = load_pairing(self.agent.home)
+        load_device_token(self.agent.home, device_id)
         self.start_process(
             "cloud",
             cli_command(["cloud-agent", "--home", str(self.agent.home)]),

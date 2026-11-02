@@ -3,10 +3,12 @@
 import hashlib
 import io
 import json
+import uuid
 
 import pytest
 
 from udb.cloud_pair import claim_device, validate_origin
+from udb.cloud_secrets import load_device_token, on_windows, remove_device_token
 
 
 class FakeResponse(io.BytesIO):
@@ -36,7 +38,7 @@ class FakeOpener:
 
 def test_pair_without_admin_secret_or_command_line_token(tmp_path):
     opener = FakeOpener()
-    ident = "a" * 32
+    ident = uuid.uuid4().hex
     code = "b" * 64
     claim_device(
         tmp_path,
@@ -52,13 +54,20 @@ def test_pair_without_admin_secret_or_command_line_token(tmp_path):
         "relay": "https://example.workers.dev",
         "device_id": ident,
     }
-    token = (tmp_path / "cloud-device-token").read_text().strip()
-    assert len(token) >= 32
-    body = json.loads(opener.request.data)
-    assert body["device_token_sha256"] == hashlib.sha256(token.encode()).hexdigest()
-    assert "admin" not in str(pairing)
-    with pytest.raises(ValueError, match="already paired"):
-        claim_device(tmp_path, pairing["relay"], ident, code, opener=opener)
+    try:
+        token = load_device_token(tmp_path, ident)
+        assert len(token) >= 32
+        if on_windows():
+            assert not (tmp_path / "cloud-device-token").exists()
+        body = json.loads(opener.request.data)
+        assert body["device_token_sha256"] == hashlib.sha256(
+            token.encode()
+        ).hexdigest()
+        assert "admin" not in str(pairing)
+        with pytest.raises(ValueError, match="already paired"):
+            claim_device(tmp_path, pairing["relay"], ident, code, opener=opener)
+    finally:
+        remove_device_token(tmp_path, ident)
 
 
 def test_pairing_rejects_external_hosts_and_bad_codes(tmp_path):

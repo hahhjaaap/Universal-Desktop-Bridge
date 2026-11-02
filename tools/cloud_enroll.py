@@ -18,6 +18,8 @@ from urllib.error import HTTPError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
+from udb.cloud_secrets import remove_device_token, save_device_token
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -72,14 +74,13 @@ def main() -> int:
     except HTTPError as error:
         raise RuntimeError("Enrollment rejected: HTTP " + str(error.code)) from None
     home.mkdir(parents=True, exist_ok=True)
-    fd = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w", encoding="ascii") as file:
-        file.write(token + "\n")
     try:
+        save_device_token(home, device_id, token)
         with pairing_path.open("x", encoding="utf-8") as file:
             json.dump({"relay": args.relay.rstrip("/"), "device_id": device_id}, file)
     except BaseException:
-        token_path.unlink(missing_ok=True)
+        remove_device_token(home, device_id)
+        pairing_path.unlink(missing_ok=True)
         raise
     print("Device enrolled. Run: udb cloud-agent")
     print("Token was saved privately under the current user's UDB home.")

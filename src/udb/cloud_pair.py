@@ -9,7 +9,6 @@ from __future__ import annotations
 import getpass
 import hashlib
 import json
-import os
 import re
 import secrets
 from pathlib import Path
@@ -18,6 +17,7 @@ from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from .cloud_agent import device_url
+from .cloud_secrets import remove_device_token, save_device_token
 
 _HEX64 = re.compile(r"[a-f0-9]{64}\Z")
 
@@ -78,13 +78,11 @@ def claim_device(
         ) from error
     # The remote claim is now consumed. Never replay it after a write failure.
     try:
-        fd = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "w", encoding="ascii") as stream:
-            stream.write(token + "\n")
+        save_device_token(home, device_id, token)
         with pairing_path.open("x", encoding="utf-8") as stream:
             json.dump({"relay": relay, "device_id": device_id}, stream)
     except BaseException:
-        token_path.unlink(missing_ok=True)
+        remove_device_token(home, device_id)
         pairing_path.unlink(missing_ok=True)
         raise RuntimeError(
             "Local storage failed after pairing; administrator must revoke the device."

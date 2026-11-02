@@ -8,6 +8,8 @@ on:
       - "docs/render-observer.md"
       - "src/udb/cloud_agent.py"
       - "src/udb/cloud_pair.py"
+      - "src/udb/cloud_secrets.py"
+      - "tests/test_cloud_secrets.py"
       - "src/udb/manager.py"
       - "src/udb/desktop.py"
       - "src/udb/manager_refresh.py"
@@ -35,5 +37,5 @@ jobs:
       - name: UDB Python client tests
         run: |
           python -m pip install -e ".[dev]"
-          python -m pytest -q tests/test_cloud_agent.py tests/test_cloud_pair.py tests/test_cloud_lifecycle.py
-          python -m ruff check src/udb/cloud_agent.py src/udb/cloud_pair.py tests/test_cloud_agent.py tests/test_cloud_pair.py tests/test_cloud_lifecycle.py tools/cloud_enroll.py
+          python -m pytest -q tests/test_cloud_agent.py tests/test_cloud_pair.py tests/test_cloud_lifecycle.py tests/test_cloud_secrets.py
+          python -m ruff check src/udb/cloud_agent.py src/udb/cloud_pair.py src/udb/cloud_secrets.py tests/test_cloud_agent.py tests/test_cloud_pair.py tests/test_cloud_lifecycle.py tests/test_cloud_secrets.py tools/cloud_enroll.py

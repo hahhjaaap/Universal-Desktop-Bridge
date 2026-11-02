@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from .cloud_secrets import load_device_token, read_token_file
 from .config import serve_options
 from .launcher import child_environment, command
 
@@ -43,18 +44,8 @@ def device_url(relay: str, device_id: str) -> str:
 
 
 def read_device_token(path: str | Path) -> str:
-    """The token stays on the owner's machine; never pass it on the command line."""
-    file = Path(path)
-    if file.is_symlink() or not file.is_file() or file.stat().st_size > 512:
-        raise ValueError("Invalid token file")
-    token = file.read_text(encoding="ascii").strip()
-    if (
-        len(token) < 32
-        or len(token) > 256
-        or not re.fullmatch(r"[A-Za-z0-9_-]+", token)
-    ):
-        raise ValueError("Invalid device token")
-    return token
+    """Backwards-compatible file reader for source-only test environments."""
+    return read_token_file(Path(path))
 
 
 def valid_remote_rpc(rpc: object) -> bool:
@@ -176,9 +167,10 @@ def run(settings) -> int:
     """Connect only after local owner provisioned a paired device secret."""
     import websocket
 
-    relay, device_id, token_file = load_pairing(settings.home)
+    relay, device_id, _token_file = load_pairing(settings.home)
     url = device_url(relay, device_id)
-    token = read_device_token(token_file)
+    # Windows uses Credential Manager keyed by device ID; no plaintext file.
+    token = load_device_token(settings.home, device_id)
     proxy = LocalProxy(settings)
     print("UDB cloud agent: private relay enabled for this Windows user.")
     try:

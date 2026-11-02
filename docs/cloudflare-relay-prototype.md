@@ -15,7 +15,7 @@ This is the initial private Cloudflare Worker + Durable Object relay for 2–3 d
 
 - Admin calls require a 32+ character secret kept as a Wrangler secret. Do not reuse device tokens as the admin key.
 - Each Windows device uses a distinct random token. The Durable Object only stores its hash and drops old sockets on rotation.
-- Token files live in the local user's UDB data directory, subject to the Windows account's filesystem permissions. Windows DPAPI encryption and a device revocation UI are **not** included yet.
+- Newly paired Windows device tokens live in Windows Credential Manager under a device-specific target, rather than a plaintext file. A device revocation UI is **not** included yet.
 - Cloudflare is a trusted relay, **not** a blind end-to-end encrypted channel. RPC payloads may be visible to the relay operator.
 - This prototype's single admin key can contact all enrolled devices. **Do not deploy it for unrelated users or sensitive desktop work.** The production design needs explicit user-to-device authorization and OAuth consent.
 - The UDB local proxy continues enforcing its own scoped project permissions and owner grants. The cloud cannot activate local owner permissions.
@@ -38,7 +38,7 @@ with its owned local MCP proxy when the owner fully exits the GUI. Minimizing
 the window to the tray does not count as exiting. The UI intentionally reports
 only the agent process status, **not verified ChatGPT connectivity**.
 
-The device token is protected by the current Windows account's filesystem ACLs, **not yet DPAPI**. After a successful remote claim followed by a local disk failure, the server registration must be revoked administratively before pairing again. The prototype owner must safeguard invitation codes and the global admin secret; the cloud is not encrypted end-to-end.
+On Windows, new device tokens are stored in **Windows Credential Manager**, under a unique device-scoped credential target. No plaintext cloud token file is created by the new GUI pairing or developer bootstrap. Other platforms in source-only tests use a local test token file; production UDB remains Windows-only. This protects credentials at rest using the existing UDB credential backend, but does not replace OAuth or per-user device authorization. After a successful remote claim followed by a local disk failure, the server registration must be revoked administratively before pairing again. The prototype owner must safeguard invitation codes and the global admin secret; the cloud is not encrypted end-to-end.
 
 **Security limitation:** The GUI button only registers the device; it does not start the background agent, configure ChatGPT or grant Windows permissions. Until the ChatGPT MCP resource server authenticates per-user OAuth tokens and enforces user-to-device ownership, this developer-only relay must not be exposed to unrelated users or sensitive PCs.
 
@@ -58,7 +58,7 @@ Keep the owner secret and pairing files out of git, chat transcripts and release
 ## Remaining for the real one-click product
 
 1. Implement OAuth 2.1 for ChatGPT with distinct users, explicit consent, per-device scopes, and revocation.
-2. Implement owner-attended GUI device pairing without entering admin keys or tunnel IDs. Protect secrets with Windows DPAPI.
+2. Implement owner-attended GUI device pairing without entering admin keys or tunnel IDs. Protect secrets with Windows Credential Manager.
 3. Implement Streamable HTTP MCP front end, including protocol initialization, notifications, complete tool catalog and long-running operations.
 4. Integrate GUI state, background startup after explicit owner opt-in, clickable installer, and published ChatGPT plugin.
 5. Test with two independent Windows devices on different networks and verify security, disconnect behavior and Cloudflare Free quota.

@@ -68,6 +68,8 @@ export default {
       return protectedResource(request, env, resourceMatch[1]);
     const mcpMatch = /^\/v1\/devices\/([a-f0-9]{32})\/mcp$/.exec(url.pathname);
     if (mcpMatch) {
+      if (!env.DEVICES?.get || !env.DEVICES?.idFromName)
+        return failure(503, "relay_not_configured");
       const stub = env.DEVICES.get(env.DEVICES.idFromName(mcpMatch[1]));
       return handleMcp(request, env, mcpMatch[1], stub);
     }
@@ -90,6 +92,10 @@ export default {
       if (adminMatch[2] === "/status" && request.method === "GET")
         return forward(stub, new Request("https://internal/status"));
       if (adminMatch[2] === "/rpc" && request.method === "POST") {
+        // The original private prototype admin API can bypass user identity.
+        // Keep it disabled when exposing a public, per-user MCP resource.
+        if (env.UDB_ENABLE_DEV_ADMIN_RPC !== "true")
+          return failure(403, "admin_rpc_disabled");
         const rpc = await readJson(request);
         if (!validRpc(rpc)) return failure(400, "invalid_rpc");
         return forward(stub, new Request("https://internal/rpc", {

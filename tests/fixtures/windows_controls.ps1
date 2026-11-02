@@ -39,7 +39,9 @@ for($i=0;$i -lt 20;$i++){
  [Windows.Automation.AutomationProperties]::SetAutomationId($item,"Row$i")
  $long.Items.Add($item)>$null
 }
-$window.Add_ContentRendered({
+# A WPF Loaded handler publishes the HWND without waiting for composition/
+# ContentRendered, which may stall on unattended Windows CI desktops.
+$window.Add_Loaded({
  $handle=[Windows.Interop.WindowInteropHelper]::new($window).Handle.ToInt64()
  [IO.File]::WriteAllText($ReadyPath+'.tmp',(@{hwnd=$handle;pid=$PID}|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))
  [IO.File]::Move($ReadyPath+'.tmp',$ReadyPath)

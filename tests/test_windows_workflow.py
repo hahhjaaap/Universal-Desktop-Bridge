@@ -225,3 +225,28 @@ def test_control_status_remains_readable_without_resource_admission(
     server = make_server(Agent(tmp_path))
     asyncio.run(server.call_tool("computer_desktop", {"action": "control_status"}))
     assert calls == ["status"]
+
+
+def test_windows_apps_enumeration_has_bounded_cold_start_budget(monkeypatch):
+    from types import SimpleNamespace
+
+    from udb.windows_utilities import WindowsBackend
+
+    calls = []
+
+    def fake_run(*_args, **kwargs):
+        calls.append(kwargs["timeout"])
+        return SimpleNamespace(
+            returncode=0,
+            stdout='{"ok":true,"apps":[]}',
+        )
+
+    monkeypatch.setattr("udb.windows_utilities.subprocess.run", fake_run)
+    monkeypatch.setattr(
+        "udb.windows_utilities.system_executable", lambda _exe: "powershell.exe"
+    )
+    backend = WindowsBackend()
+    assert backend.apps() == []
+    assert calls == [30]
+    backend.helper({"action": "notify", "title": "test", "text": "ok"})
+    assert calls == [30, 10]

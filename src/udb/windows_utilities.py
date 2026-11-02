@@ -54,7 +54,10 @@ class WindowsBackend:
             text=True,
             encoding="utf-8",
             capture_output=True,
-            timeout=10,
+            # App enumeration loads shell registry entries and can be slow on
+            # a cold Windows CI machine. It is read-only; other actions retain
+            # their shorter budget and unknown-outcome safety.
+            timeout=30 if request.get("action") == "apps" else 10,
             shell=False,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )

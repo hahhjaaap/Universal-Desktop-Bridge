@@ -16,7 +16,7 @@ from urllib.error import HTTPError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from .cloud_agent import device_url
+from .cloud_agent import CLOUD_USER_AGENT, device_url
 from .cloud_secrets import remove_device_token, save_device_token
 
 _HEX64 = re.compile(r"[a-f0-9]{64}\Z")
@@ -64,6 +64,7 @@ def claim_device(
         headers={
             "Authorization": "Bearer " + pairing_code,
             "Content-Type": "application/json",
+            "User-Agent": CLOUD_USER_AGENT,
         },
     )
     opener = opener if opener is not None else build_opener(NoRedirect())

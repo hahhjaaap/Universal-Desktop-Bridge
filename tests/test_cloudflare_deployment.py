@@ -7,6 +7,7 @@ from urllib.error import HTTPError
 import pytest
 
 from tools.check_cloudflare_deployment import check
+from udb.cloud_agent import CLOUD_USER_AGENT
 
 
 class FakeResponse(io.BytesIO):
@@ -25,6 +26,7 @@ class FakeOpener:
 
     def open(self, request, timeout):
         assert timeout == 8
+        assert request.get_header("User-agent") == CLOUD_USER_AGENT
         self.urls.append(request.full_url)
         url = request.full_url
         if url.endswith("/health"):

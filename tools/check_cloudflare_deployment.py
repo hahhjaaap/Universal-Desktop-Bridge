@@ -11,7 +11,7 @@ import json
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from udb.cloud_agent import device_url
+from udb.cloud_agent import CLOUD_USER_AGENT, device_url
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -41,7 +41,11 @@ def check(relay: str, device_id: str, opener=None) -> dict:
 
     def read_json(url):
         with opener.open(
-            Request(url, headers={"Accept": "application/json"}), timeout=8
+            Request(
+                url,
+                headers={"Accept": "application/json", "User-Agent": CLOUD_USER_AGENT},
+            ),
+            timeout=8,
         ) as response:
             if response.status != 200:
                 raise ValueError("Unexpected HTTP status")
@@ -66,7 +70,10 @@ def check(relay: str, device_id: str, opener=None) -> dict:
     request = Request(
         resource,
         data=b'{"jsonrpc":"2.0","id":1,"method":"tools/list"}',
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": CLOUD_USER_AGENT,
+        },
         method="POST",
     )
     try:

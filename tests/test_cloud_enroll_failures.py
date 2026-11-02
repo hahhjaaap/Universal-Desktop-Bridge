@@ -8,7 +8,7 @@ from urllib.error import HTTPError
 import pytest
 
 from tools import cloud_enroll
-from udb.cloud_pair import NoRedirect
+from udb.cloud_pair import CLOUD_USER_AGENT, NoRedirect
 
 
 def setup_bootstrap(monkeypatch, tmp_path, relay="https://example.workers.dev"):
@@ -59,6 +59,7 @@ def test_bootstrap_refuses_redirect_without_forwarding_admin_key(monkeypatch, tm
     assert len(seen) == 1
     assert seen[0][1] == 20
     assert seen[0][0].full_url.startswith("https://example.workers.dev/")
+    assert seen[0][0].get_header("User-agent") == CLOUD_USER_AGENT
     assert not (tmp_path / "cloud-pairing.json").exists()
 
 

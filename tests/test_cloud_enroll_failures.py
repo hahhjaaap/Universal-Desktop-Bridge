@@ -34,9 +34,7 @@ def test_bootstrap_refuses_non_cloudflare_origin_before_opening_network(
     assert not (tmp_path / "cloud-pairing.json").exists()
 
 
-def test_bootstrap_refuses_redirect_without_forwarding_admin_key(
-    monkeypatch, tmp_path
-):
+def test_bootstrap_refuses_redirect_without_forwarding_admin_key(monkeypatch, tmp_path):
     setup_bootstrap(monkeypatch, tmp_path)
     seen = []
 
@@ -64,9 +62,7 @@ def test_bootstrap_refuses_redirect_without_forwarding_admin_key(
     assert not (tmp_path / "cloud-pairing.json").exists()
 
 
-def test_bootstrap_timeout_is_unknown_without_local_token(
-    monkeypatch, tmp_path
-):
+def test_bootstrap_timeout_is_unknown_without_local_token(monkeypatch, tmp_path):
     setup_bootstrap(monkeypatch, tmp_path)
 
     class TimedOut:

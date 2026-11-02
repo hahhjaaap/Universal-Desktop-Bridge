@@ -1,0 +1,30 @@
+name: cloudflare-private-relay-validation
+on:
+  pull_request:
+    paths:
+      - "cloudflare/**"
+      - "src/udb/cloud_agent.py"
+      - "tests/test_cloud_agent.py"
+      - "tools/cloud_enroll.py"
+      - ".github/workflows/cloudflare-prototype.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Cloud relay protocol and security unit tests
+        run: node --test cloudflare/tests/*.test.js
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: UDB Python client tests
+        run: |
+          python -m pip install -e ".[dev]"
+          python -m pytest -q tests/test_cloud_agent.py
+          python -m ruff check src/udb/cloud_agent.py tests/test_cloud_agent.py tools/cloud_enroll.py

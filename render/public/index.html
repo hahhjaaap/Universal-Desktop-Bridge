@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UDB • Tình trạng dịch vụ</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Universal Desktop Bridge</p>
+    <h1>Theo dõi dịch vụ</h1>
+    <p class="intro">Render là bảng trạng thái độc lập. Cloudflare mới là nơi định tuyến yêu cầu.
+    Bảng này không có quyền điều khiển máy, không hiển thị thiết bị và không lưu khóa.</p>
+    <section aria-labelledby="renderTitle" class="status">
+      <h2 id="renderTitle">Render observer</h2>
+      <p><span class="dot"></span> Web service đang phản hồi.</p>
+    </section>
+    <section aria-labelledby="relayTitle" class="status">
+      <h2 id="relayTitle">Cloudflare relay</h2>
+      <p id="relayStatus" role="status" aria-live="polite">Chưa kiểm tra.</p>
+      <button type="button" id="refresh">Kiểm tra kết nối</button>
+      <p class="hint">Chỉ kiểm tra /health. Không xác nhận ChatGPT có thể gọi công cụ hay máy Windows đã kết nối.</p>
+    </section>
+  </main>
+</body>
+</html>

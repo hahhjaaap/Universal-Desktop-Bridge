@@ -3,6 +3,7 @@
 No account login, grants, tunnel creation or privilege escalation is performed here.
 The relay is private/admin-only until an audited OAuth MCP front end is added.
 """
+
 from __future__ import annotations
 
 import json
@@ -47,7 +48,11 @@ def read_device_token(path: str | Path) -> str:
     if file.is_symlink() or not file.is_file() or file.stat().st_size > 512:
         raise ValueError("Invalid token file")
     token = file.read_text(encoding="ascii").strip()
-    if len(token) < 32 or len(token) > 256 or not re.fullmatch(r"[A-Za-z0-9_-]+", token):
+    if (
+        len(token) < 32
+        or len(token) > 256
+        or not re.fullmatch(r"[A-Za-z0-9_-]+", token)
+    ):
         raise ValueError("Invalid device token")
     return token
 
@@ -118,7 +123,9 @@ class LocalProxy:
             raise RuntimeError("Local UDB proxy is unavailable")
         if not valid_remote_rpc(rpc):
             raise ValueError("Unsupported remote RPC")
-        wire = (json.dumps(rpc, ensure_ascii=True, separators=(",", ":")) + "\n").encode("utf-8")
+        wire = (
+            json.dumps(rpc, ensure_ascii=True, separators=(",", ":")) + "\n"
+        ).encode("utf-8")
         if len(wire) > _MAX_FRAME:
             raise ValueError("RPC frame too large")
         assert self.process.stdin is not None
@@ -130,7 +137,9 @@ class LocalProxy:
                     answer = self.replies.get(timeout=timeout)
                 except queue.Empty:
                     self.unusable = True
-                    raise TimeoutError("Outcome unknown; do not retry a mutation") from None
+                    raise TimeoutError(
+                        "Outcome unknown; do not retry a mutation"
+                    ) from None
                 if answer is None:
                     self.unusable = True
                     raise RuntimeError("Local UDB proxy disconnected")
@@ -189,13 +198,19 @@ def run(settings) -> int:
                         frame = ws.recv()
                         if not frame:
                             break
-                        if not isinstance(frame, str) or len(frame.encode("utf-8")) > _MAX_FRAME:
+                        if (
+                            not isinstance(frame, str)
+                            or len(frame.encode("utf-8")) > _MAX_FRAME
+                        ):
                             break
                         try:
                             request = json.loads(frame)
                         except ValueError:
                             break
-                        if not isinstance(request, dict) or request.get("kind") != "rpc":
+                        if (
+                            not isinstance(request, dict)
+                            or request.get("kind") != "rpc"
+                        ):
                             break
                         relay_id = request.get("id")
                         rpc = request.get("rpc")
@@ -208,13 +223,29 @@ def run(settings) -> int:
                         except (RuntimeError, TimeoutError, ValueError) as error:
                             # Do not leak file paths, arguments, data or credentials.
                             response = {
-                                "jsonrpc": "2.0", "id": rpc.get("id") if isinstance(rpc, dict) else None,
-                                "error": {"code": -32000, "message": type(error).__name__},
+                                "jsonrpc": "2.0",
+                                "id": rpc.get("id") if isinstance(rpc, dict) else None,
+                                "error": {
+                                    "code": -32000,
+                                    "message": type(error).__name__,
+                                },
                             }
                             if proxy.unusable:
-                                ws.send(json.dumps({"kind": "rpc_result", "id": relay_id, "rpc": response}))
+                                ws.send(
+                                    json.dumps(
+                                        {
+                                            "kind": "rpc_result",
+                                            "id": relay_id,
+                                            "rpc": response,
+                                        }
+                                    )
+                                )
                                 return 2
-                        ws.send(json.dumps({"kind": "rpc_result", "id": relay_id, "rpc": response}))
+                        ws.send(
+                            json.dumps(
+                                {"kind": "rpc_result", "id": relay_id, "rpc": response}
+                            )
+                        )
                 finally:
                     ws.close()
             except (OSError, websocket.WebSocketException):

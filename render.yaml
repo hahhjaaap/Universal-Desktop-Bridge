@@ -1,0 +1,13 @@
+# Optional read-only Render observer; never proxy UDB device RPCs.
+services:
+  - type: web
+    name: udb-readonly-observer
+    runtime: node
+    plan: free
+    buildCommand: node --version
+    startCommand: node render/dashboard.mjs
+    healthCheckPath: /health
+    autoDeployTrigger: "off"
+    envVars:
+      - key: NODE_VERSION
+        value: "22"

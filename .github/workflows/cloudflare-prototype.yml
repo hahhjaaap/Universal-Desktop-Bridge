@@ -3,6 +3,9 @@ on:
   pull_request:
     paths:
       - "cloudflare/**"
+      - "render/**"
+      - "render.yaml"
+      - "docs/render-observer.md"
       - "src/udb/cloud_agent.py"
       - "tests/test_cloud_agent.py"
       - "tools/cloud_enroll.py"
@@ -18,8 +21,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Cloud relay protocol and security unit tests
-        run: node --test cloudflare/tests/*.test.js
+      - name: Cloud relay and Render dashboard unit tests
+        run: node --test cloudflare/tests/*.test.js render/tests/*.test.mjs
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"

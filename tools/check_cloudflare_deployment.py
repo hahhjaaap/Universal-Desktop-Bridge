@@ -111,6 +111,8 @@ def check(relay: str, device_id: str, opener=None, *, auth_mode="jwt") -> dict:
             ):
                 raise ValueError("Untrusted Cloudflare resource metadata URL") from None
             access_metadata, _ = read_json(metadata_url)
+            if not isinstance(access_metadata, dict):
+                raise ValueError("Invalid Cloudflare Access metadata type") from None
             team = access_metadata.get("team_domain")
             if not isinstance(team, str):
                 raise ValueError("Missing Cloudflare Access team domain") from None
@@ -120,13 +122,21 @@ def check(relay: str, device_id: str, opener=None, *, auth_mode="jwt") -> dict:
                 team_host,
             ):
                 raise ValueError("Invalid Cloudflare Access team domain") from None
+            servers = access_metadata.get("authorization_servers")
+            if not isinstance(servers, list) or not all(
+                isinstance(value, str) for value in servers
+            ):
+                raise ValueError("Invalid Cloudflare authorization servers") from None
+            resource_id = access_metadata.get("resource")
             if (
                 access_metadata.get("protected") is not True
-                or access_metadata.get("resource") not in {origin, resource}
-                or "https://" + team_host
-                not in access_metadata.get("authorization_servers", [])
+                or not isinstance(resource_id, str)
+                or resource_id not in {origin, resource}
+                or "https://" + team_host not in servers
             ):
-                raise ValueError("Invalid Cloudflare Access resource metadata") from None
+                raise ValueError(
+                    "Invalid Cloudflare Access resource metadata"
+                ) from None
             report["oauth_metadata"] = "cloudflare_access_metadata"
     else:
         raise ValueError("Unauthenticated MCP request unexpectedly succeeded")

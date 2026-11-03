@@ -89,3 +89,11 @@ test("Access authentication never accepts identity from arbitrary request header
   assert.equal((await worker.fetch(attempt, env)).status, 403);
   assert.equal(env.forwarded.length, 0);
 });
+
+test("Worker health advertises Access code capability without claiming auth enabled", async () => {
+  const response = await worker.fetch(new Request(ORIGIN + "/health"), settings());
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("X-UDB-Access-OAuth-Capable"), "1");
+  assert.deepEqual(await response.json(),
+    { status: "ok", kind: "private-relay-prototype" });
+});

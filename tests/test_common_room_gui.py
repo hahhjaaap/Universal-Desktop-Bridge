@@ -165,7 +165,7 @@ def test_read_failure_clears_stale_room_rows_and_browser_preview(tmp_path):
     assert dialog.tasks.topLevelItemCount() == 0
     assert dialog.message_detail.toPlainText() == ""
     assert "Không đọc được" in dialog.browser_status.text()
-    assert dialog.browser_image.pixmap() is None
+    assert dialog.browser_image.pixmap().isNull()
     dialog.close()
 
 

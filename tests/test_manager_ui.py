@@ -821,3 +821,22 @@ def test_failed_pending_refresh_hides_stale_approvals_and_recovers(manager, monk
     window.refresh()
     assert window.media_auto.isEnabled()
     assert window.requests.topLevelItemCount() == 0
+
+
+def test_failed_media_autonomy_read_does_not_leave_checkbox_inert(
+    manager, monkeypatch
+):
+    window, _ = manager
+    original = window.agent.media_autonomy
+
+    def unavailable():
+        raise OSError("Simulated temporary settings read failure")
+
+    monkeypatch.setattr(window.agent, "media_autonomy", unavailable)
+    window.refresh()
+    assert not window.media_auto.signalsBlocked()
+    assert not window.media_auto.isEnabled()
+    monkeypatch.setattr(window.agent, "media_autonomy", original)
+    window.refresh()
+    assert window.media_auto.isEnabled()
+    assert not window.media_auto.signalsBlocked()

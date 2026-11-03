@@ -317,9 +317,13 @@ class ManagerRefreshMixin:
         self.setup_agent_health.setToolTip(indicator.detail)
 
     def _refresh_requests(self):
-        self.media_auto.blockSignals(True)
-        self.media_auto.setChecked(self.agent.media_autonomy())
-        self.media_auto.blockSignals(False)
+        # An unavailable settings store must not permanently block the
+        # checkbox's signals. Preserve the pre-existing block state as well.
+        was_blocked = self.media_auto.blockSignals(True)
+        try:
+            self.media_auto.setChecked(self.agent.media_autonomy())
+        finally:
+            self.media_auto.blockSignals(was_blocked)
         rows = self.agent.pending_local()
         approval_state = approval_indicator(len(rows))
         self.security_approval_status.set_status(

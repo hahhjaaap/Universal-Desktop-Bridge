@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from udb.cloud_agent import CLOUD_USER_AGENT, device_url
@@ -92,13 +94,50 @@ def check(relay: str, device_id: str, opener=None, *, auth_mode="jwt") -> dict:
         if exc.code != 401 or "resource_metadata=" not in challenge:
             raise ValueError("Expected OAuth authentication challenge") from None
         if auth_mode == "cloudflare-access":
-            # An internal UDB JWT challenge is NOT proof that the Access
-            # application or Managed OAuth policy is actually activated.
-            if "/.well-known/cloudflare-access-protected-resource" not in challenge:
+            # A 403, an internal JWT challenge, or a fake string containing
+            # "cloudflare" cannot establish Managed OAuth readiness. Fetch
+            # the well-known resource document from this same HTTPS origin.
+            match = re.search(r'resource_metadata="([^"]+)"', challenge)
+            if not match:
+                raise ValueError("Missing Cloudflare resource metadata URL") from None
+            metadata_url = match.group(1)
+            parsed = urlsplit(metadata_url)
+            if (
+                parsed.scheme != "https"
+                or parsed.netloc != urlsplit(origin).netloc
+                or parsed.path != "/.well-known/cloudflare-access-protected-resource/"
+                or parsed.query
+                or parsed.fragment
+            ):
+                raise ValueError("Untrusted Cloudflare resource metadata URL") from None
+            access_metadata, _ = read_json(metadata_url)
+            if not isinstance(access_metadata, dict):
+                raise ValueError("Invalid Cloudflare Access metadata type") from None
+            team = access_metadata.get("team_domain")
+            if not isinstance(team, str):
+                raise ValueError("Missing Cloudflare Access team domain") from None
+            team_host = team.removeprefix("https://")
+            if not re.fullmatch(
+                r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com",
+                team_host,
+            ):
+                raise ValueError("Invalid Cloudflare Access team domain") from None
+            servers = access_metadata.get("authorization_servers")
+            if not isinstance(servers, list) or not all(
+                isinstance(value, str) for value in servers
+            ):
+                raise ValueError("Invalid Cloudflare authorization servers") from None
+            resource_id = access_metadata.get("resource")
+            if (
+                access_metadata.get("protected") is not True
+                or not isinstance(resource_id, str)
+                or resource_id not in {origin, resource}
+                or "https://" + team_host not in servers
+            ):
                 raise ValueError(
-                    "Managed OAuth edge challenge was not detected"
+                    "Invalid Cloudflare Access resource metadata"
                 ) from None
-            report["oauth_metadata"] = "cloudflare_edge_challenge"
+            report["oauth_metadata"] = "cloudflare_access_metadata"
     else:
         raise ValueError("Unauthenticated MCP request unexpectedly succeeded")
     report["unauthorized_access"] = "blocked"

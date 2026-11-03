@@ -1,7 +1,9 @@
 // Opt-in stateless Streamable HTTP MCP resource. No admin or device secrets
 // are accepted as user authentication; only explicit read-only grants are exposed.
 import { readJson, validRpc } from "./auth.js";
-import { AuthError, authorize, deviceGrant, oauthConfig } from "./oauth.js";
+import { AuthError, authorize, oauthConfig } from "./oauth.js";
+import { accessConfig, authorizeAccess } from "./access.js";
+export { authorizeAccess } from "./access.js";
 
 const supported = new Set(["2025-03-26", "2025-06-18", "2025-11-25"]);
 const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(value), {
@@ -11,6 +13,9 @@ const error = (status, code) => json({ error: code }, status);
 export const metadataPath = (id) => "/.well-known/oauth-protected-resource/v1/devices/" + id + "/mcp";
 
 export function protectedResource(request, env, id) {
+  // Cloudflare publishes its own metadata in Managed OAuth mode.
+  if ((env?.UDB_AUTH_MODE || "jwt") !== "jwt")
+    return error(404, "oauth_metadata_owned_by_access");
   const cfg = oauthConfig(env);
   if (!cfg) return error(503, "oauth_not_configured");
   return json({ resource: new URL(request.url).origin + "/v1/devices/" + id + "/mcp",
@@ -33,26 +38,6 @@ async function relay(stub, rpc) {
   } catch { return error(503, "relay_unavailable_outcome_unknown"); }
 }
 
-// Cloudflare Access is a separately managed identity boundary. This path is
-// opt-in only, and must never trust client-supplied Cf-Access-* headers as proof.
-// ctx.access is populated by the Cloudflare runtime only after Access verifies
-// the user. Per-device grants remain mandatory, even for a valid login.
-export async function authorizeAccess(access, env, deviceId) {
-  const aud = env?.UDB_ACCESS_AUD;
-  if (typeof aud !== "string" || aud.length < 12 ||
-      !access || typeof access.getIdentity !== "function" || access.aud !== aud)
-    throw new AuthError();
-  let identity;
-  try { identity = await access.getIdentity(); }
-  catch { throw new AuthError(); }
-  const subject = identity?.email;
-  if (typeof subject !== "string" || subject.length < 3 ||
-      subject.length > 200 || !subject.includes("@")) throw new AuthError();
-  const allowTools = deviceGrant(env, deviceId, subject);
-  if (allowTools.length === 0) throw new AuthError();
-  return { subject, allowTools };
-}
-
 export async function handleMcp(request, env, id, stub, fetchImpl = fetch, access = null) {
   const origin = request.headers.get("Origin");
   if (origin && origin !== new URL(request.url).origin) return error(403, "invalid_origin");
@@ -66,14 +51,13 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   if (mode === "jwt" && !oauthConfig(env))
     return error(503, "oauth_not_configured");
   if (mode === "cloudflare-access" &&
-      (typeof env?.UDB_ACCESS_AUD !== "string" || !env.UDB_ACCESS_AUD))
+      !accessConfig(env))
     return error(503, "access_not_configured");
 
   let user;
   if (mode === "cloudflare-access") {
-    // Cloudflare Access Managed OAuth must protect precisely this MCP path.
-    // No ctx.access means the edge did not authenticate this request.
-    try { user = await authorizeAccess(access, env, id); }
+    // Cloudflare runtime identity or a verified Access-signed JWT only.
+    try { user = await authorizeAccess(access, env, id, request, fetchImpl); }
     catch { return error(403, "cloudflare_access_identity_or_grant_required"); }
   } else {
     try { user = await authorize(request, env, id, fetchImpl); }

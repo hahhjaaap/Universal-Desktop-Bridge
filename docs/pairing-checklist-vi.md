@@ -51,7 +51,9 @@ thiết bị có trong Relay, hoặc ChatGPT báo "Connected" **đều không đ
    chủ máy, sau đó bật **Managed OAuth** trên app. **Không** bật Worker-level
    Access cho toàn bộ Worker hoặc `/connect` WebSocket.
 6. Dùng thiết lập riêng tư, không commit: `UDB_AUTH_MODE=cloudflare-access`,
-   `UDB_ACCESS_AUD` bằng audience thật của Access app, và
+   `UDB_ACCESS_AUD` bằng audience thật của Access app,
+   `UDB_ACCESS_TEAM_DOMAIN=https://TEN_TEAM.cloudflareaccess.com` để xác minh
+   chữ ký JWT Access nếu `ctx.access` không có danh tính, và
    `UDB_DEVICE_GRANTS` cấp đúng chủ máy/thiết bị. Chỉ cho phép công cụ
    read-only `bridge_status`, `list_projects`. Admin RPC vẫn tắt.
 7. Chạy kiểm tra **không dùng token** (sau khi Worker có phiên bản mã mới
@@ -61,8 +63,9 @@ thiết bị có trong Relay, hoặc ChatGPT báo "Connected" **đều không đ
    python tools/check_cloudflare_deployment.py --relay https://WORKER.workers.dev --device-id DEVICE_ID --auth-mode cloudflare-access
    ```
 
-   Kết quả đúng mới xác nhận HTTP health, khả năng Worker và challenge
-   Managed OAuth của Cloudflare ở edge; **không** xác nhận đăng nhập.
+   Kết quả đúng xác nhận HTTP health, challenge OAuth và metadata Cloudflare
+   qua các phản hồi không kèm token; **không** chứng minh bằng mật mã rằng edge
+   đang thực thi đúng policy và **không** xác nhận đã đăng nhập.
 8. Trong ChatGPT, thêm MCP server riêng bằng **chính xác URL MCP**,
    bắt đầu đăng nhập Cloudflare và hoàn thành consent do chủ máy thực hiện.
    Kiểm tra danh sách công cụ read-only và gọi `bridge_status` trên đúng máy.

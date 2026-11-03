@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -1118,35 +1119,57 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             selected[0].data(0, Qt.ItemDataRole.UserRole) if selected else None
         )
         self.common_room_button.setEnabled(bool(self.selected_project))
-        self.sandbox_auto.blockSignals(True)
-        self.sandbox_auto.setEnabled(bool(self.selected_project))
-        automatic = bool(
-            self.selected_project
-            and self.agent.sandbox_authorization(
-                self.selected_project["id"], self.selected_project["root"]
-            )
-        )
-        self.sandbox_auto.setChecked(automatic)
-        self.sandbox_auto.blockSignals(False)
-        self.source_auto.blockSignals(True)
-        source_granted = bool(
-            self.selected_project
-            and self.agent.source_autonomy_authorization(
-                self.selected_project["id"], self.selected_project["root"]
-            )
-        )
-        self.source_auto.setEnabled(
-            bool(self.selected_project and self.selected_project["writable"])
-        )
-        self.source_auto.setChecked(source_granted)
-        self.source_auto.blockSignals(False)
+        automatic = False
+        source_granted = False
+        permissions_verified = not self.selected_project
+        if self.selected_project:
+            try:
+                automatic = bool(
+                    self.agent.sandbox_authorization(
+                        self.selected_project["id"], self.selected_project["root"]
+                    )
+                )
+                source_granted = bool(
+                    self.agent.source_autonomy_authorization(
+                        self.selected_project["id"], self.selected_project["root"]
+                    )
+                )
+            except (OSError, ValueError, sqlite3.Error):
+                # A failed grant read is UNKNOWN, not an implicit rejection
+                # or permission to keep an old checked toggle active.
+                automatic = source_granted = False
+            else:
+                permissions_verified = True
+
+        for checkbox, granted, available in (
+            (
+                self.sandbox_auto,
+                automatic,
+                bool(self.selected_project) and permissions_verified,
+            ),
+            (
+                self.source_auto,
+                source_granted,
+                bool(self.selected_project)
+                and bool(self.selected_project["writable"])
+                and permissions_verified,
+            ),
+        ):
+            was_blocked = checkbox.blockSignals(True)
+            try:
+                checkbox.setChecked(granted)
+                checkbox.setEnabled(available)
+            finally:
+                checkbox.blockSignals(was_blocked)
         if self.selected_project:
             self.footer_project.setText("Dự án: " + self.selected_project["id"])
             self.project_path.setText(self.selected_project["root"])
             self.project_path.setCursorPosition(0)
             self.project_path.setToolTip(self.selected_project["root"])
             self.project_access.setText(
-                (
+                "Không xác minh được quyền dự án; làm mới trước khi thay đổi."
+                if not permissions_verified
+                else (
                     "AI tự sửa mã nguồn hợp lệ, có backup."
                     if source_granted
                     else "Được ghi: bật AI tự sửa để không phải duyệt."

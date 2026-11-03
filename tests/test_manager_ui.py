@@ -840,3 +840,38 @@ def test_failed_media_autonomy_read_does_not_leave_checkbox_inert(manager, monke
     window.refresh()
     assert window.media_auto.isEnabled()
     assert not window.media_auto.signalsBlocked()
+
+
+@pytest.mark.parametrize(
+    "method",
+    ["sandbox_authorization", "source_autonomy_authorization"],
+)
+def test_failed_selected_project_permission_read_disables_grant_toggles(
+    manager, monkeypatch, method
+):
+    window, _ = manager
+    root = window.agent.home / "owned-permission-project"
+    root.mkdir()
+    window.agent.register_local("owner-test", str(root), True)
+    window._refresh_projects()
+    assert window.selected_project
+
+    original = getattr(window.agent, method)
+
+    def unavailable(*_args, **_kwargs):
+        raise OSError("Cannot read grants")
+
+    monkeypatch.setattr(window.agent, method, unavailable)
+    window.project_selected()
+    assert not window.sandbox_auto.isEnabled()
+    assert not window.source_auto.isEnabled()
+    assert not window.sandbox_auto.signalsBlocked()
+    assert not window.source_auto.signalsBlocked()
+    assert "Không xác minh được" in window.project_access.text()
+
+    monkeypatch.setattr(window.agent, method, original)
+    window.project_selected()
+    assert window.sandbox_auto.isEnabled()
+    assert window.source_auto.isEnabled()
+    assert not window.sandbox_auto.signalsBlocked()
+    assert not window.source_auto.signalsBlocked()

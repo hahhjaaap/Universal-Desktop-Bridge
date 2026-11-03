@@ -183,6 +183,7 @@ def test_no_topics_remain_does_not_display_previous_results(tmp_path):
 
 
 def test_room_connection_releases_sqlite_handle_after_context(tmp_path):
+    pytest.importorskip("PySide6")
     from udb.common_room_gui import open_room
 
     _, path = room_fixture(tmp_path)

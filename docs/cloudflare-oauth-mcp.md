@@ -59,3 +59,21 @@ Before exposing a real Windows PC, complete:
 4. CI matrix, release packaging, signed release if available and rollback test.
 
 No secrets, API keys or actual user subjects belong in source control.
+
+## Identity-provider interoperability
+
+`UDB_OAUTH_ISSUER` must be copied **exactly** from the authorization server's
+published `issuer` value, including any trailing slash. Token verification
+compares that identifier byte-for-byte to the access token `iss` claim; it
+never strips or adds a slash. The registered resource audience must be the
+**full device MCP URL** (including `/v1/devices/DEVICE_ID/mcp`).
+
+Do not enable the MCP connection by inventing an issuer or copying a Cloudflare
+Access session token. Use an established OAuth 2.1 provider that can issue
+RS256 JWT access tokens with the exact resource audience and `udb:read` scope,
+with authorization-code PKCE and a ChatGPT-compatible client registration
+mechanism. Provision the user-to-device grant locally from the authenticated
+subject; never use the Cloudflare administrator key as a user token.
+
+A separate, standards-compliant authorization server is still required; the
+Worker does not issue OAuth tokens or provide a login UI.

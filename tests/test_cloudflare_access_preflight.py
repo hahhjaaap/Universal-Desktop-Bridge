@@ -119,6 +119,7 @@ def test_access_preflight_rejects_unknown_mode_before_network():
         check(ORIGIN, DEVICE, opener, auth_mode="disabled")
     assert not opener.urls
 
+
 def test_access_preflight_refuses_off_origin_metadata_without_fetch():
     opener = Opener(edge="external")
     with pytest.raises(ValueError, match="Untrusted Cloudflare"):

@@ -219,6 +219,48 @@ def main():
             assert cli.returncode == 0 and cli.stdout.strip() == first["version"], (
                 cli.stderr
             )
+            # PowerShell command lookup must not pick a restricted udb.ps1
+            # ahead of udb.cmd. Use a process-only Restricted policy in a
+            # disposable owner profile; do not modify machine policy.
+            assert (install / "bin/udb-launcher.ps1").is_file()
+            assert not (install / "bin/udb.ps1").exists()
+            restricted_env = {
+                **env,
+                "PATH": str(install / "bin") + os.pathsep + env["PATH"],
+            }
+            restricted = subprocess.run(
+                [
+                    str(powershell),
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Restricted",
+                    "-Command",
+                    "& udb --version",
+                ],
+                env=restricted_env,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            assert restricted.returncode == 0, restricted.stdout + restricted.stderr
+            assert restricted.stdout.strip() == first["version"]
+
+            # Reproduce an upgrade from released v0.10.0, where the managed
+            # helper was named udb.ps1 and shadowed the working .cmd file.
+            old_helper = install / "bin/udb.ps1"
+            old_helper.write_bytes((install / "bin/udb-launcher.ps1").read_bytes())
+            run_install()
+            assert not old_helper.exists(), "Legacy PowerShell shadow remains"
+            assert (install / "bin/udb-launcher.ps1").is_file()
+
+            # A user-modified script must never be deleted by a repair.
+            old_helper.write_text("Write-Host 'owner file'\n", encoding="utf-8")
+            before_owner_collision = record_path.read_bytes()
+            run_install(expect_success=False)
+            assert old_helper.read_text(encoding="utf-8") == "Write-Host 'owner file'\n"
+            assert record_path.read_bytes() == before_owner_collision
+            old_helper.unlink()
             setup_home = root / "refused setup"
             setup = subprocess.run(
                 [str(exe), "setup", "--home", str(setup_home)],

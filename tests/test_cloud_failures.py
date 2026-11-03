@@ -44,7 +44,10 @@ def test_agent_disallows_bearer_redirects_on_handshake(monkeypatch, tmp_path):
     )
     assert cloud_agent.run(SimpleNamespace(home=tmp_path)) == 0
     assert attempted[0]["redirect_limit"] == 0
-    assert attempted[0]["header"] == ["Authorization: Bearer " + "x" * 48]
+    assert attempted[0]["header"] == [
+        "Authorization: Bearer " + "x" * 48,
+        f"User-Agent: {cloud_agent.CLOUD_USER_AGENT}",
+    ]
 
 
 def test_agent_backs_off_immediately_closed_websockets(monkeypatch, tmp_path):

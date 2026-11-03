@@ -7,6 +7,7 @@ import uuid
 
 import pytest
 
+from udb.cloud_agent import CLOUD_USER_AGENT
 from udb.cloud_pair import claim_device, validate_origin
 from udb.cloud_secrets import load_device_token, on_windows, remove_device_token
 
@@ -49,6 +50,7 @@ def test_pair_without_admin_secret_or_command_line_token(tmp_path):
     )
     assert opener.called
     assert opener.request.get_header("Authorization") == "Bearer " + code
+    assert opener.request.get_header("User-agent") == CLOUD_USER_AGENT
     pairing = json.loads((tmp_path / "cloud-pairing.json").read_text())
     assert pairing == {
         "relay": "https://example.workers.dev",

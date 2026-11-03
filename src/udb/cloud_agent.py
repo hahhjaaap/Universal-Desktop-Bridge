@@ -15,9 +15,12 @@ import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from ._version import VERSION
 from .cloud_secrets import load_device_token, read_token_file
 from .config import serve_options
 from .launcher import child_environment, command
+
+CLOUD_USER_AGENT = f"UniversalDesktopBridge/{VERSION}"
 
 _DEVICE_ID = re.compile(r"[a-f0-9]{32}\Z")
 _ALLOWED_METHODS = {"initialize", "ping", "tools/list", "tools/call"}
@@ -191,7 +194,10 @@ def run(settings) -> int:
             try:
                 ws = websocket.create_connection(
                     url,
-                    header=[f"Authorization: Bearer {token}"],
+                    header=[
+                        f"Authorization: Bearer {token}",
+                        f"User-Agent: {CLOUD_USER_AGENT}",
+                    ],
                     timeout=30,
                     max_size=_MAX_FRAME,
                     redirect_limit=0,  # Never forward bearer tokens to redirects.

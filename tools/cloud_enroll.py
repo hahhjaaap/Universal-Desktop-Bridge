@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, build_opener
 
-from udb.cloud_pair import NoRedirect, validate_origin
+from udb.cloud_pair import CLOUD_USER_AGENT, NoRedirect, validate_origin
 from udb.cloud_secrets import remove_device_token, save_device_token
 
 
@@ -57,6 +57,7 @@ def main() -> int:
         headers={
             "Authorization": "Bearer " + secret,
             "Content-Type": "application/json",
+            "User-Agent": CLOUD_USER_AGENT,
         },
     )
     try:

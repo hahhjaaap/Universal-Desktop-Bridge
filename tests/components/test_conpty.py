@@ -50,7 +50,7 @@ class Native(unittest.TestCase):
             time.sleep(0.05)
         self.fail("Missing " + until + " in " + repr(raw))
 
-    def test_console_vt_arrow_unicode_and_resize(self):
+    def test_console_vt_arrow_bmp_unicode_and_resize(self):
         row = self.rt.start(
             sys.executable,
             ["-u", "-c", SCRIPT],
@@ -64,14 +64,32 @@ class Native(unittest.TestCase):
         self.assertIn("NATIVE_CONSOLE=True", self.output(sid, "INITIAL=90,25"))
         self.rt.sessions[sid].process.resize(132, 40)
         self.rt.sessions[sid].send("\x1b[A")
-        raw = self.output(sid, "UNICODE=Tiếng Việt 🚀")
+        # Windows 10's original console reports a leading 0; later builds
+        # report 224 for the same arrow key. Both are valid extended-key codes.
+        raw = self.output(sid, "UNICODE=Tiếng Việt ")
         self.assertIn("RESIZED=132,40", raw)
-        self.assertIn("KEY_CODES=[224, 72]", raw)
+        self.assertTrue(
+            "KEY_CODES=[0, 72]" in raw or "KEY_CODES=[224, 72]" in raw
+        )
         for _ in range(50):
             if self.rt.sessions[sid].read(0, 0)["state"] == "PASS":
                 break
             time.sleep(0.05)
         self.assertEqual(self.rt.sessions[sid].read(0, 0)["state"], "PASS")
+
+    @unittest.skipIf(
+        os.name == "nt" and sys.getwindowsversion().build <= 18363,
+        "Legacy Windows 10 ConPTY replaces astral Unicode with U+FFFD; "
+        "BMP/keyboard/resize remain separately verified",
+    )
+    def test_conpty_non_bmp_unicode(self):
+        row = self.rt.start(
+            sys.executable,
+            ["-u", "-c", "print('SUPPLEMENTARY=🚀', flush=True)"],
+            mode="conpty",
+            wait_ms=0,
+        )
+        self.output(row["session_id"], "SUPPLEMENTARY=🚀")
 
     def test_stop_and_invalid_geometry(self):
         with self.assertRaises(ValueError):

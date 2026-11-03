@@ -47,6 +47,8 @@ def test_native_control_patterns_on_one_owned_window(tmp_path, monkeypatch):
             system_executable("powershell.exe"),
             "-NoProfile",
             "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",  # The checked-in fixture only; no persistent policy change.
             "-Sta",
             "-File",
             str(script),

@@ -182,6 +182,7 @@ def test_notification_text_is_data_and_never_a_powershell_command(monkeypatch):
     assert WindowsBackend().notify("UDB", text)["requested"]
     argv, options = calls[0]
     assert options["shell"] is False and "-File" in argv
+    assert argv[argv.index("-ExecutionPolicy") + 1] == "Bypass"
     assert all(text not in argument for argument in argv)
     assert json.loads(options["input"])["text"] == text
 

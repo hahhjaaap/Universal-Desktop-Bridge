@@ -95,7 +95,9 @@ def check(relay: str, device_id: str, opener=None, *, auth_mode="jwt") -> dict:
             # An internal UDB JWT challenge is NOT proof that the Access
             # application or Managed OAuth policy is actually activated.
             if "/.well-known/cloudflare-access-protected-resource" not in challenge:
-                raise ValueError("Managed OAuth edge challenge was not detected") from None
+                raise ValueError(
+                    "Managed OAuth edge challenge was not detected"
+                ) from None
             report["oauth_metadata"] = "cloudflare_edge_challenge"
     else:
         raise ValueError("Unauthenticated MCP request unexpectedly succeeded")
@@ -115,7 +117,11 @@ def main() -> int:
     )
     args = parser.parse_args()
     try:
-        print(json.dumps(check(args.relay, args.device_id, auth_mode=args.auth_mode), indent=2))
+        print(
+            json.dumps(
+                check(args.relay, args.device_id, auth_mode=args.auth_mode), indent=2
+            )
+        )
         return 0
     except (ValueError, HTTPError, URLError, OSError) as exc:
         print(json.dumps({"result": "failed", "reason": type(exc).__name__}))

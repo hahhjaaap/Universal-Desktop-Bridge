@@ -3,6 +3,7 @@
 import datetime
 import os
 import sqlite3
+from contextlib import closing
 
 import pytest
 
@@ -26,7 +27,7 @@ def room_fixture(tmp_path):
     folder = root / "chatgpt-workspace"
     folder.mkdir(parents=True)
     path = folder / "workspace.sqlite3"
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db, db:
         db.executescript(
             """
             PRAGMA user_version=3;
@@ -59,7 +60,7 @@ def test_existing_room_is_edited_without_creating_a_second_database(tmp_path):
     dialog.join()
     dialog.composer.setPlainText("<unsafe-looking> text is literal")
     dialog.post()
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db, db:
         assert db.execute("SELECT body FROM messages").fetchone()[0] == (
             "<unsafe-looking> text is literal"
         )
@@ -74,7 +75,7 @@ def test_room_in_repository_examples_is_discovered(tmp_path):
     example = source / "examples" / "chatgpt-workspace"
     example.mkdir(parents=True)
     db_file = example / "workspace.sqlite3"
-    with sqlite3.connect(db_file) as db:
+    with closing(sqlite3.connect(db_file)) as db, db:
         db.execute("PRAGMA user_version=3")
     assert database_for_project(source) == db_file
 
@@ -91,7 +92,7 @@ def test_missing_workspace_never_created(tmp_path):
 def test_task_revision_refuses_stale_writes(tmp_path):
     app, CommonRoomDialog, _ = qt_components()
     root, path = room_fixture(tmp_path)
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db, db:
         stamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
         db.execute(
             "INSERT INTO tasks(request_id,topic,title,state,revision,created_at,updated_at) "
@@ -101,13 +102,13 @@ def test_task_revision_refuses_stale_writes(tmp_path):
     dialog = CommonRoomDialog(root)
     item = dialog.tasks.topLevelItem(0)
     assert item.text(4) == "1"
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db, db:
         db.execute("UPDATE tasks SET revision=2,state='doing' WHERE id=1")
     dialog.tasks.setCurrentItem(item)
     dialog.state.setCurrentText("done")
     with pytest.raises(ValueError, match="đã thay đổi"):
         dialog.update_task()
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db, db:
         assert db.execute("SELECT state FROM tasks WHERE id=1").fetchone()[0] == "doing"
     dialog.close()
 
@@ -115,7 +116,7 @@ def test_task_revision_refuses_stale_writes(tmp_path):
 def test_switching_topics_clears_selected_message_details(tmp_path):
     _, CommonRoomDialog, _ = qt_components()
     root, path = room_fixture(tmp_path)
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db, db:
         db.execute(
             "INSERT INTO topics(name,goal,created_at) VALUES('later','later','now')"
         )
@@ -139,7 +140,7 @@ def test_switching_topics_clears_selected_message_details(tmp_path):
 def test_read_failure_clears_stale_room_rows_and_browser_preview(tmp_path):
     _, CommonRoomDialog, _ = qt_components()
     root, path = room_fixture(tmp_path)
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db, db:
         db.execute(
             "INSERT INTO participants(name,role,last_seen) VALUES('Human','user','now')"
         )
@@ -172,7 +173,7 @@ def test_no_topics_remain_does_not_display_previous_results(tmp_path):
     _, CommonRoomDialog, _ = qt_components()
     root, path = room_fixture(tmp_path)
     dialog = CommonRoomDialog(root)
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db, db:
         db.execute("DELETE FROM topics")
     dialog.reload()
     assert dialog.topic.currentText() == ""
@@ -199,7 +200,7 @@ def test_room_connection_releases_sqlite_handle_after_context(tmp_path):
 def test_refresh_failure_hides_stale_messages_and_topic(tmp_path):
     _, CommonRoomDialog, _ = qt_components()
     root, path = room_fixture(tmp_path)
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db, db:
         db.execute(
             "INSERT INTO participants(name,role,last_seen) VALUES('Human','user','now')"
         )

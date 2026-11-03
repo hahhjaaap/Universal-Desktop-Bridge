@@ -38,9 +38,7 @@ class Opener:
         assert request.get_header("Authorization") is None
         self.urls.append(request.full_url)
         if request.full_url == ORIGIN + "/health":
-            headers = (
-                {"X-UDB-Access-OAuth-Capable": "1"} if self.worker_capable else {}
-            )
+            headers = {"X-UDB-Access-OAuth-Capable": "1"} if self.worker_capable else {}
             return Response(
                 b'{"status":"ok","kind":"private-relay-prototype"}',
                 headers,
@@ -48,15 +46,14 @@ class Opener:
         if request.full_url.endswith("/mcp"):
             if self.edge == "managed":
                 challenge = (
-                    'Bearer resource_metadata="' + ORIGIN
-                    + '/.well-known/cloudflare-access-protected-resource/"'
+                    'Bearer resource_metadata="'\n                    + ORIGIN\n                    + '/.well-known/cloudflare-access-protected-resource/"'
                 )
                 status = 401
             elif self.edge == "jwt":
                 challenge = (
                     'Bearer resource_metadata="' + ORIGIN
                     + "/.well-known/oauth-protected-resource/v1/devices/"
-                    + DEVICE + '/mcp"'
+                    + DEVICE\n                    + '/mcp"'
                 )
                 status = 401
             else:

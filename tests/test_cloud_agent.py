@@ -50,6 +50,14 @@ def test_remote_rpc_allowlist():
             "params": {"name": "bridge_status", "arguments": None},
         }
     )
+    assert not valid_remote_rpc(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "bridge_status", "arguments": []},
+        }
+    )
 
 
 def test_token_file_and_pairing(tmp_path):

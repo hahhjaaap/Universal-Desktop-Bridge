@@ -71,6 +71,7 @@ export function validRpc(rpc) {
   if (rpc.params !== undefined && (rpc.params === null || typeof rpc.params !== "object" ||
       Array.isArray(rpc.params))) return false;
   if (rpc.method === "tools/call" && (!rpc.params || typeof rpc.params.name !== "string" ||
-      typeof rpc.params.arguments !== "object" || rpc.params.arguments === null)) return false;
+      typeof rpc.params.arguments !== "object" || rpc.params.arguments === null ||
+      Array.isArray(rpc.params.arguments))) return false;
   return true;
 }

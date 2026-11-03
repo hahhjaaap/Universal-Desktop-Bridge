@@ -30,6 +30,10 @@ test("RPC allowlist requires real request id and tools/call arguments", () => {
   assert.equal(validRpc({ ...p, id: null }), false);
   assert.equal(validRpc({ ...p, method: "tools/call", params: {} }), false);
   assert.equal(validRpc({ ...p, method: "tools/call", params: { name: "bridge_status", arguments: {} } }), true);
+  // Python's cloud agent requires a dictionary; JSON arrays must be rejected
+  // at the Cloudflare edge before reaching the device.
+  assert.equal(validRpc({ ...p, method: "tools/call", params: { name: "bridge_status", arguments: [] } }), false);
+  assert.equal(validRpc({ ...p, method: "tools/call", params: { name: "bridge_status", arguments: null } }), false);
 });
 
 test("oversized request body refused even without content-length", async () => {

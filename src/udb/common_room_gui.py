@@ -12,6 +12,7 @@ import json
 import sqlite3
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -68,19 +69,28 @@ def database_for_project(root: str | Path) -> Path:
     )
 
 
+@contextmanager
 def open_room(path: Path):
+    """Open an existing database, commit/rollback and ALWAYS release its file lock.
+
+    sqlite3.Connection.__exit__ manages transactions but does not close the
+    connection. That leaves workspace.sqlite3 locked on Windows after reloads.
+    """
     reject_links(path)
     if not path.is_file():
         raise FileNotFoundError("Common Room database không còn tồn tại.")
     connection = sqlite3.connect(path.as_uri() + "?mode=rw", uri=True, timeout=5)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys=ON")
-    if connection.execute("PRAGMA user_version").fetchone()[0] < 3:
+    try:
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys=ON")
+        if connection.execute("PRAGMA user_version").fetchone()[0] < 3:
+            raise ValueError(
+                "Common Room chưa có schema v3; hãy mở Workspace v2 để nâng cấp."
+            )
+        with connection:
+            yield connection
+    finally:
         connection.close()
-        raise ValueError(
-            "Common Room chưa có schema v3; hãy mở Workspace v2 để nâng cấp."
-        )
-    return connection
 
 
 def checked_text(value: str, length: int, field: str):

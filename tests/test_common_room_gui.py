@@ -180,3 +180,16 @@ def test_no_topics_remain_does_not_display_previous_results(tmp_path):
     assert dialog.tasks.topLevelItemCount() == 0
     assert "Chưa có chủ đề" in dialog.browser_status.text()
     dialog.close()
+
+
+def test_room_connection_releases_sqlite_handle_after_context(tmp_path):
+    from udb.common_room_gui import open_room
+
+    _, path = room_fixture(tmp_path)
+    with open_room(path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 3
+    with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+        db.execute("SELECT 1")
+    # This rename fails on Windows when an old read connection is still open.
+    moved = path.rename(path.with_suffix(".unavailable"))
+    assert moved.is_file()

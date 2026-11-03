@@ -215,9 +215,32 @@ def find_browser():
 
 
 class Browser(BrowserInputMixin):
-    def __init__(self, folder, *, persistent=False, visible=False, reuse_profile=False):
+    def __init__(
+        self,
+        folder,
+        *,
+        persistent=False,
+        visible=False,
+        reuse_profile=False,
+        startup_timeout=None,
+    ):
+        # An attended CI smoke test can afford a longer cold-start budget,
+        # without changing the production browser's hard 20-second limit.
+        if startup_timeout is not None and (
+            type(startup_timeout) is not int or not 20 <= startup_timeout <= 60
+        ):
+            raise PolicyError("Private browser startup_timeout must be 20..60 seconds")
+        startup_budget = (
+            _STARTUP_TIMEOUT if startup_timeout is None else startup_timeout
+        )
+        endpoint_budget = (
+            _ENDPOINT_TIMEOUT
+            if startup_timeout is None
+            else min(startup_timeout - 5, 55)
+        )
         self.persistent = persistent
         self.visible = visible
+        self._startup_override = startup_timeout
         self.folder = Path(folder)
         reject_links(self.folder)
         self.folder.mkdir(parents=True, exist_ok=persistent or reuse_profile)
@@ -231,7 +254,7 @@ class Browser(BrowserInputMixin):
         self.tabs = {}
         self.frozen = False
         self.freeze_errors = 0
-        self.deadline = time.monotonic() + _STARTUP_TIMEOUT
+        self.deadline = time.monotonic() + startup_budget
         try:
             endpoint = self.folder / "DevToolsActivePort"
             reject_links(endpoint)
@@ -242,7 +265,7 @@ class Browser(BrowserInputMixin):
                 self.folder,
                 LIMITS["browser_memory_mib"],
             )
-            port, path = _browser_endpoint(endpoint, self.proc, _ENDPOINT_TIMEOUT)
+            port, path = _browser_endpoint(endpoint, self.proc, endpoint_budget)
             from websocket import create_connection
 
             self.ws = create_connection(
@@ -1228,7 +1251,11 @@ class Browser(BrowserInputMixin):
             raise PolicyError("Invalid browser presentation")
         if self.visible == visible:
             return dict(visible=visible, changed=False)
-        deadline = time.monotonic() + _STARTUP_TIMEOUT
+        deadline = time.monotonic() + (
+            self._startup_override
+            if getattr(self, "_startup_override", None) is not None
+            else _STARTUP_TIMEOUT
+        )
         urls = []
         for target in self.call("Target.getTargets")["targetInfos"]:
             if target.get("type") == "page":
@@ -1264,7 +1291,11 @@ class Browser(BrowserInputMixin):
         folder, persistent = self.folder, self.persistent
         self.close(remove_profile=False)
         self.__init__(
-            folder, persistent=persistent, visible=visible, reuse_profile=True
+            folder,
+            persistent=persistent,
+            visible=visible,
+            reuse_profile=True,
+            startup_timeout=getattr(self, "_startup_override", None),
         )
         self.deadline = deadline
         if cookies:

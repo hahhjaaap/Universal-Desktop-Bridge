@@ -19,6 +19,23 @@ from pathlib import Path
 from browser_smoke_diagnostics import browser_smoke_failure
 
 
+def _last_input_tick():
+    """Windows' own timestamp for physical or synthetic input; no input is sent."""
+    import ctypes
+    from ctypes import wintypes
+
+    class LastInputInfo(ctypes.Structure):
+        _fields_ = [("cbSize", wintypes.UINT), ("dwTime", wintypes.DWORD)]
+
+    info = LastInputInfo(ctypes.sizeof(LastInputInfo), 0)
+    get_last_input = ctypes.WinDLL("user32", use_last_error=True).GetLastInputInfo
+    get_last_input.argtypes = [ctypes.POINTER(LastInputInfo)]
+    get_last_input.restype = wintypes.BOOL
+    if not get_last_input(ctypes.byref(info)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return info.dwTime
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--visible-browser", action="store_true")
@@ -77,6 +94,10 @@ def main():
                     "-NoLogo",
                     "-NoProfile",
                     "-NonInteractive",
+                    # Only this fixed-path UDB preview helper runs under the
+                    # process-scoped policy; no Windows setting is changed.
+                    "-ExecutionPolicy",
+                    "Bypass",
                     "-File",
                     str(
                         Path(virtual_pointer.__file__).with_name(
@@ -102,6 +123,7 @@ def main():
             pointer = virtual_pointer.VirtualPointer()
             try:
                 cursor, foreground = pointer.cursor(), pointer.u.GetForegroundWindow()
+                input_tick = _last_input_tick()
                 pointer.show_idle()
                 pointer.overlay.stdin.write(b"probe\n")
                 painted = queue.Queue()
@@ -112,17 +134,35 @@ def main():
                 # No registered foreground Chrome tab exists in this synthetic check.
                 assert painted.get(timeout=10).strip() == b"hidden"
                 report["native_pointer_unregistered_window_hidden"] = "PASS"
-                assert pointer.cursor() == cursor
-                assert pointer.u.GetForegroundWindow() == foreground
-                report["native_pointer_no_focus_or_mouse_takeover"] = "PASS"
+                # An occupied Windows desktop can receive genuine owner
+                # input during the smoke test. Never report a false PASS
+                # or blame UDB for the owner's movement on that machine.
+                if (
+                    _last_input_tick() != input_tick
+                    and os.environ.get("GITHUB_ACTIONS") != "true"
+                ):
+                    report["native_pointer_no_focus_or_mouse_takeover"] = (
+                        "UNVERIFIED: local input occurred during the check"
+                    )
+                else:
+                    assert pointer.cursor() == cursor
+                    assert pointer.u.GetForegroundWindow() == foreground
+                    report["native_pointer_no_focus_or_mouse_takeover"] = "PASS"
             finally:
                 pointer.close()
 
+        # CI-only cold Chrome startup can stall on shared GitHub Windows
+        # runners. Production retains the default 20-second budget.
+        ci_options = (
+            {"startup_timeout": 45}
+            if os.environ.get("GITHUB_ACTIONS") == "true"
+            else {}
+        )
         try:
-            browser = Browser(Path(folder) / "browser")
+            browser = Browser(Path(folder) / "browser", **ci_options)
         except PolicyError as exc:
             # On loaded GitHub Windows runners, Chrome can exceed its first
-            # 15-second endpoint budget. Retry only this read-only smoke test
+            # bounded endpoint budget. Retry only this read-only smoke test
             # with a fresh UDB-owned disposable profile, at most once.
             if (
                 os.environ.get("GITHUB_ACTIONS") != "true"
@@ -132,7 +172,7 @@ def main():
             print(
                 "CI transient browser startup timeout; retrying once", file=sys.stderr
             )
-            browser = Browser(Path(folder) / "browser-ci-retry")
+            browser = Browser(Path(folder) / "browser-ci-retry", **ci_options)
         try:
             tab = next(iter(browser.tabs))
             screenshot_started = time.monotonic()

@@ -12,6 +12,7 @@ import json
 import sqlite3
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -68,19 +69,28 @@ def database_for_project(root: str | Path) -> Path:
     )
 
 
+@contextmanager
 def open_room(path: Path):
+    """Open an existing database, commit/rollback and ALWAYS release its file lock.
+
+    sqlite3.Connection.__exit__ manages transactions but does not close the
+    connection. That leaves workspace.sqlite3 locked on Windows after reloads.
+    """
     reject_links(path)
     if not path.is_file():
         raise FileNotFoundError("Common Room database không còn tồn tại.")
     connection = sqlite3.connect(path.as_uri() + "?mode=rw", uri=True, timeout=5)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys=ON")
-    if connection.execute("PRAGMA user_version").fetchone()[0] < 3:
+    try:
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys=ON")
+        if connection.execute("PRAGMA user_version").fetchone()[0] < 3:
+            raise ValueError(
+                "Common Room chưa có schema v3; hãy mở Workspace v2 để nâng cấp."
+            )
+        with connection:
+            yield connection
+    finally:
         connection.close()
-        raise ValueError(
-            "Common Room chưa có schema v3; hãy mở Workspace v2 để nâng cấp."
-        )
-    return connection
 
 
 def checked_text(value: str, length: int, field: str):
@@ -224,11 +234,24 @@ class CommonRoomDialog(QDialog):
             QMessageBox.warning(self, "Common Room", str(exc))
 
     def reload(self):
-        with open_room(self.room_path) as db:
-            topics = [
-                r["name"]
-                for r in db.execute("SELECT name FROM topics ORDER BY name LIMIT 200")
-            ]
+        try:
+            with open_room(self.room_path) as db:
+                topics = [
+                    r["name"]
+                    for r in db.execute(
+                        "SELECT name FROM topics ORDER BY name LIMIT 200"
+                    )
+                ]
+        except (OSError, ValueError, sqlite3.Error) as exc:
+            # Refresh button errors otherwise left a previous topic and
+            # previously read messages visible even after the DB disappeared.
+            self._clear_content("Không đọc được Common Room: " + str(exc))
+            was_blocked = self.topic.blockSignals(True)
+            try:
+                self.topic.clear()
+            finally:
+                self.topic.blockSignals(was_blocked)
+            raise
         selected = self.topic.currentText()
         self.topic.blockSignals(True)
         self.topic.clear()
@@ -237,9 +260,19 @@ class CommonRoomDialog(QDialog):
         self.topic.blockSignals(False)
         self.load_content()
 
+    def _clear_content(self, status: str):
+        """Fail closed visually: never show stale rows from another topic/read."""
+        self.messages.clear()
+        self.message_detail.clear()
+        self.tasks.clear()
+        self.browser_image.clear()
+        self.browser_image.setText("Chưa có ảnh browser")
+        self.browser_status.setText(status)
+
     def load_content(self, *_):
         current = self.topic.currentText()
         if not current:
+            self._clear_content("Chưa có chủ đề Common Room.")
             return
         try:
             with open_room(self.room_path) as db:
@@ -255,6 +288,7 @@ class CommonRoomDialog(QDialog):
                     (current,),
                 ).fetchall()
             self.messages.clear()
+            self.message_detail.clear()
             for row in reversed(rows):
                 if term and term not in (row["body"] + " " + row["author"]).casefold():
                     continue
@@ -277,7 +311,7 @@ class CommonRoomDialog(QDialog):
                 self.tasks.addTopLevelItem(entry)
             self.load_browser()
         except (OSError, ValueError, sqlite3.Error) as exc:
-            self.browser_status.setText("Không đọc được Common Room: " + str(exc))
+            self._clear_content("Không đọc được Common Room: " + str(exc))
 
     def message_selected(self):
         selected = self.messages.selectedItems()

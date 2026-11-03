@@ -93,10 +93,7 @@ def check(relay: str, device_id: str, opener=None, *, auth_mode="jwt") -> dict:
         challenge = exc.headers.get("WWW-Authenticate", "")
         if exc.code != 401 or "resource_metadata=" not in challenge:
             raise ValueError("Expected OAuth authentication challenge") from None
-        if auth_mode == "jwt":
-            if metadata not in challenge:
-                raise ValueError("Unexpected JWT resource metadata URL") from None
-        else:
+        if auth_mode == "cloudflare-access":
             # A 403, an internal JWT challenge, or a fake string containing
             # "cloudflare" cannot establish Managed OAuth readiness. Fetch
             # the well-known resource document from this same HTTPS origin.

@@ -237,9 +237,19 @@ class CommonRoomDialog(QDialog):
         self.topic.blockSignals(False)
         self.load_content()
 
+    def _clear_content(self, status: str):
+        """Fail closed visually: never show stale rows from another topic/read."""
+        self.messages.clear()
+        self.message_detail.clear()
+        self.tasks.clear()
+        self.browser_image.clear()
+        self.browser_image.setText("Chưa có ảnh browser")
+        self.browser_status.setText(status)
+
     def load_content(self, *_):
         current = self.topic.currentText()
         if not current:
+            self._clear_content("Chưa có chủ đề Common Room.")
             return
         try:
             with open_room(self.room_path) as db:
@@ -255,6 +265,7 @@ class CommonRoomDialog(QDialog):
                     (current,),
                 ).fetchall()
             self.messages.clear()
+            self.message_detail.clear()
             for row in reversed(rows):
                 if term and term not in (row["body"] + " " + row["author"]).casefold():
                     continue
@@ -277,7 +288,7 @@ class CommonRoomDialog(QDialog):
                 self.tasks.addTopLevelItem(entry)
             self.load_browser()
         except (OSError, ValueError, sqlite3.Error) as exc:
-            self.browser_status.setText("Không đọc được Common Room: " + str(exc))
+            self._clear_content("Không đọc được Common Room: " + str(exc))
 
     def message_selected(self):
         selected = self.messages.selectedItems()

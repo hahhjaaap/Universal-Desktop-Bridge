@@ -67,7 +67,32 @@ class ManagerRefreshMixin:
                 elif name == "Dự án":
                     self.security_autonomy_status.set_status("Chưa xác minh", "neutral")
                 elif name == "Quyền AI":
+                    # Never keep a previously actionable approval visible
+                    # after the backend's latest pending-list read fails.
                     self.security_approval_status.set_status("Chưa xác minh", "neutral")
+                    self.security_approval_status.setToolTip(
+                        "Không đọc được yêu cầu chờ duyệt hiện tại."
+                    )
+                    self.pending_rows = {}
+                    self.last_pending = None
+                    self.requests.clear()
+                    self.requests.setVisible(False)
+                    self.pending_title.setText("Chưa xác minh yêu cầu chờ duyệt")
+                    self.pending_hint.setText(
+                        "Không đọc được danh sách mới. Thử Làm mới trước khi duyệt."
+                    )
+                    self.pending_code.clear()
+                    self.pending_code.setVisible(False)
+                    self.approval_empty.setVisible(True)
+                    self.approval_review.setEnabled(False)
+                    self.review_button.setEnabled(False)
+                    self.media_auto.setEnabled(False)
+                    permission_nav = self.nav_buttons[1]
+                    permission_nav.setText(
+                        "" if getattr(self, "_sidebar_compact", False) else "Quyền AI"
+                    )
+                    permission_nav.setAccessibleName("Quyền AI · Chưa xác minh")
+                    permission_nav.setToolTip("Yêu cầu chờ duyệt chưa được xác minh.")
         try:
             self._refresh_connection(source_auto_projects)
         except Exception as exc:
@@ -365,6 +390,7 @@ class ManagerRefreshMixin:
         self.approval_empty.setVisible(not rows)
         self.approval_review.setEnabled(bool(rows))
         self.review_button.setEnabled(bool(rows))
+        self.media_auto.setEnabled(not self.busy)
         permission_text = "Quyền AI" + (f"  {len(rows)}" if rows else "")
         permission_nav = self.nav_buttons[1]
         permission_nav.setText(

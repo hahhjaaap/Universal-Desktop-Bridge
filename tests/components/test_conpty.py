@@ -68,9 +68,7 @@ class Native(unittest.TestCase):
         # report 224 for the same arrow key. Both are valid extended-key codes.
         raw = self.output(sid, "UNICODE=Tiếng Việt ")
         self.assertIn("RESIZED=132,40", raw)
-        self.assertTrue(
-            "KEY_CODES=[0, 72]" in raw or "KEY_CODES=[224, 72]" in raw
-        )
+        self.assertTrue("KEY_CODES=[0, 72]" in raw or "KEY_CODES=[224, 72]" in raw)
         for _ in range(50):
             if self.rt.sessions[sid].read(0, 0)["state"] == "PASS":
                 break

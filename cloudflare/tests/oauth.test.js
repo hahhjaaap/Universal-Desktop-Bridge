@@ -37,7 +37,9 @@ test("issuer identifiers are exact, including optional trailing slash", () => {
 
 test("short-lived signed tokens from a trailing-slash issuer validate", async () => {
   const { token, jwks } = await signedToken("alice", { iss: ISSUER + "/" });
-  const cfg = { ...env, UDB_OAUTH_ISSUER: ISSUER + "/" };
+  // JWKS caching is keyed by URL; isolate this test key from later key rotation.
+  const cfg = { ...env, UDB_OAUTH_ISSUER: ISSUER + "/",
+    UDB_OAUTH_JWKS_URL: ISSUER + "/jwks-trailing-slash-test.json" };
   const request = new Request(RESOURCE, {
     headers: { Authorization: "Bearer " + token },
   });

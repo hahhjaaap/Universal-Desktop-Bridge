@@ -788,6 +788,59 @@ def test_reduced_motion_save_error_restores_previous_state(manager, monkeypatch)
     assert not (window.agent.state / "computer-access.dpapi").exists()
 
 
+def test_failed_pending_refresh_hides_stale_approvals_and_recovers(
+    manager, monkeypatch
+):
+    from PySide6.QtWidgets import QTreeWidgetItem
+
+    window, _ = manager
+    request = QTreeWidgetItem(["Stale project", "Sửa file", "100 giây"])
+    window.requests.addTopLevelItem(request)
+    window.pending_rows = {"old": {"id": "old"}}
+    window.pending_title.setText("Old approval")
+    window.pending_code.setPlainText("Old diff or script")
+    window.requests.setVisible(True)
+    window.pending_code.setVisible(True)
+    window.approval_review.setEnabled(True)
+    window.review_button.setEnabled(True)
+    original = window._refresh_requests
+
+    def unavailable():
+        raise OSError("Simulated unavailable pending request database")
+
+    monkeypatch.setattr(window, "_refresh_requests", unavailable)
+    window.refresh()
+    assert window.pending_rows == {}
+    assert window.requests.topLevelItemCount() == 0
+    assert window.pending_code.toPlainText() == ""
+    assert "Chưa xác minh" in window.pending_title.text()
+    assert not window.approval_review.isEnabled()
+    assert not window.review_button.isEnabled()
+    assert not window.media_auto.isEnabled()
+    assert "Chưa xác minh" in window.nav_buttons[1].accessibleName()
+
+    monkeypatch.setattr(window, "_refresh_requests", original)
+    window.refresh()
+    assert window.media_auto.isEnabled()
+    assert window.requests.topLevelItemCount() == 0
+
+
+def test_failed_media_autonomy_read_does_not_leave_checkbox_inert(manager, monkeypatch):
+    window, _ = manager
+    original = window.agent.media_autonomy
+
+    def unavailable():
+        raise OSError("Simulated temporary settings read failure")
+
+    monkeypatch.setattr(window.agent, "media_autonomy", unavailable)
+    window.refresh()
+    assert not window.media_auto.signalsBlocked()
+    assert not window.media_auto.isEnabled()
+    monkeypatch.setattr(window.agent, "media_autonomy", original)
+    window.refresh()
+    assert window.media_auto.isEnabled()
+    assert not window.media_auto.signalsBlocked()
+
 def test_corrupted_common_room_database_shows_local_warning(manager, monkeypatch):
     from PySide6.QtWidgets import QMessageBox
 

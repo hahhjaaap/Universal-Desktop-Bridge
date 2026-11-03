@@ -238,7 +238,9 @@ class CommonRoomDialog(QDialog):
             with open_room(self.room_path) as db:
                 topics = [
                     r["name"]
-                    for r in db.execute("SELECT name FROM topics ORDER BY name LIMIT 200")
+                    for r in db.execute(
+                        "SELECT name FROM topics ORDER BY name LIMIT 200"
+                    )
                 ]
         except (OSError, ValueError, sqlite3.Error) as exc:
             # Refresh button errors otherwise left a previous topic and

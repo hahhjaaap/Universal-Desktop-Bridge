@@ -116,7 +116,7 @@ def check(relay: str, device_id: str, opener=None, *, auth_mode="jwt") -> dict:
                 raise ValueError("Missing Cloudflare Access team domain") from None
             team_host = team.removeprefix("https://")
             if not re.fullmatch(
-                r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.cloudflareaccess\\.com",
+                r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com",
                 team_host,
             ):
                 raise ValueError("Invalid Cloudflare Access team domain") from None

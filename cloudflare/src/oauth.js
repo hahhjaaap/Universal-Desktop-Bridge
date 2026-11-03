@@ -15,7 +15,7 @@ export class AuthError extends Error {
 }
 
 function originUrl(value) {
-  if (typeof value !== "string" || value.length > 500) return null;
+  if (typeof value !== "string" || value.length > 500 || value.trim() !== value) return null;
   try {
     const parsed = new URL(value);
     if (parsed.protocol !== "https:" || parsed.username || parsed.password ||
@@ -28,7 +28,12 @@ export function oauthConfig(env) {
   const issuer = originUrl(env?.UDB_OAUTH_ISSUER);
   const jwks = originUrl(env?.UDB_OAUTH_JWKS_URL);
   if (!issuer || !jwks || issuer.hostname !== jwks.hostname) return null;
-  return { issuer: issuer.href.replace(/\/$/, ""), jwksUrl: jwks.href };
+  // RFC 8414 issuer identifiers are compared verbatim. For example Auth0
+  // requires a trailing slash; silently stripping it invalidates signed JWTs.
+  // Reject URL normalization surprises instead of changing the issuer identity.
+  if (env.UDB_OAUTH_ISSUER !== issuer.href &&
+      env.UDB_OAUTH_ISSUER !== issuer.origin) return null;
+  return { issuer: env.UDB_OAUTH_ISSUER, jwksUrl: jwks.href };
 }
 
 function decode(segment) {

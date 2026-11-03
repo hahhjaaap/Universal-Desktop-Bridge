@@ -26,6 +26,31 @@ async function signedToken(subject, claims = {}) {
   return { token: message + "." + b64(signature), jwks: { keys: [{ ...pub, kid: "trusted" }] } };
 }
 
+test("issuer identifiers are exact, including optional trailing slash", () => {
+  assert.equal(oauthConfig(env).issuer, ISSUER);
+  assert.equal(oauthConfig({ ...env, UDB_OAUTH_ISSUER: ISSUER + "/" }).issuer,
+    ISSUER + "/");
+  assert.equal(oauthConfig({ ...env, UDB_OAUTH_ISSUER: ISSUER + "/tenant" }).issuer,
+    ISSUER + "/tenant");
+  assert.equal(oauthConfig({ ...env, UDB_OAUTH_ISSUER: ISSUER + " /" }), null);
+});
+
+test("short-lived signed tokens from a trailing-slash issuer validate", async () => {
+  const { token, jwks } = await signedToken("alice", { iss: ISSUER + "/" });
+  // JWKS caching is keyed by URL; isolate this test key from later key rotation.
+  const cfg = { ...env, UDB_OAUTH_ISSUER: ISSUER + "/",
+    UDB_OAUTH_JWKS_URL: ISSUER + "/jwks-trailing-slash-test.json" };
+  const request = new Request(RESOURCE, {
+    headers: { Authorization: "Bearer " + token },
+  });
+  const fetchImpl = async () => new Response(JSON.stringify(jwks), {
+    status: 200, headers: { "content-type": "application/json" },
+  });
+  assert.deepEqual(await authorize(request, cfg, DEVICE, fetchImpl),
+    { subject: "alice", allowTools: ["bridge_status"] });
+  await assert.rejects(authorize(request, env, DEVICE, fetchImpl), AuthError);
+});
+
 test("missing OAuth configuration and owner grant fail closed", () => {
   assert.equal(oauthConfig({}), null);
   assert.deepEqual(deviceGrant({}, DEVICE, "alice"), []);

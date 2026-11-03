@@ -224,7 +224,10 @@ def main():
             # disposable owner profile; do not modify machine policy.
             assert (install / "bin/udb-launcher.ps1").is_file()
             assert not (install / "bin/udb.ps1").exists()
-            restricted_env = {**env, "PATH": str(install / "bin") + os.pathsep + env["PATH"]}
+            restricted_env = {
+                **env,
+                "PATH": str(install / "bin") + os.pathsep + env["PATH"],
+            }
             restricted = subprocess.run(
                 [
                     str(powershell),

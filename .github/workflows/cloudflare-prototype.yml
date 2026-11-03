@@ -21,6 +21,7 @@ on:
       - "tools/cloud_enroll.py"
       - "tests/test_cloud_enroll_failures.py"
       - "tests/test_cloudflare_deployment.py"
+      - "tests/test_cloudflare_access_preflight.py"
       - "tools/check_cloudflare_deployment.py"
       - ".github/workflows/cloudflare-prototype.yml"
   workflow_dispatch:
@@ -42,6 +43,6 @@ jobs:
       - name: UDB Python client tests
         run: |
           python -m pip install -e ".[dev]"
-          python -m pytest -q tests/test_cloud_agent.py tests/test_cloud_pair.py tests/test_cloud_lifecycle.py tests/test_cloud_secrets.py tests/test_cloud_backoff.py tests/test_cloud_failures.py tests/test_cloud_enroll_failures.py tests/test_cloudflare_deployment.py
+          python -m pytest -q tests/test_cloud_agent.py tests/test_cloud_pair.py tests/test_cloud_lifecycle.py tests/test_cloud_secrets.py tests/test_cloud_backoff.py tests/test_cloud_failures.py tests/test_cloud_enroll_failures.py tests/test_cloudflare_deployment.py tests/test_cloudflare_access_preflight.py
           python -m ruff check src/udb/cloud_agent.py src/udb/cloud_pair.py src/udb/cloud_secrets.py tests/test_cloud_agent.py tests/test_cloud_pair.py tests/test_cloud_lifecycle.py tests/test_cloud_secrets.py tests/test_cloud_backoff.py tests/test_cloud_failures.py tests/test_cloud_enroll_failures.py tests/test_cloudflare_deployment.py tools/cloud_enroll.py tools/check_cloudflare_deployment.py
           python -m ruff format --check src/udb/cloud_agent.py src/udb/cloud_pair.py src/udb/cloud_secrets.py tests/test_cloud_agent.py tests/test_cloud_pair.py tests/test_cloud_lifecycle.py tests/test_cloud_secrets.py tests/test_cloud_backoff.py tests/test_cloud_failures.py tests/test_cloud_enroll_failures.py tests/test_cloudflare_deployment.py tools/cloud_enroll.py tools/check_cloudflare_deployment.py

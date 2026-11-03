@@ -230,7 +230,9 @@ class Browser(BrowserInputMixin):
             type(startup_timeout) is not int or not 20 <= startup_timeout <= 60
         ):
             raise PolicyError("Private browser startup_timeout must be 20..60 seconds")
-        startup_budget = _STARTUP_TIMEOUT if startup_timeout is None else startup_timeout
+        startup_budget = (
+            _STARTUP_TIMEOUT if startup_timeout is None else startup_timeout
+        )
         endpoint_budget = (
             _ENDPOINT_TIMEOUT
             if startup_timeout is None

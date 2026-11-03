@@ -200,7 +200,9 @@ def test_refresh_failure_hides_stale_messages_and_topic(tmp_path):
     _, CommonRoomDialog, _ = qt_components()
     root, path = room_fixture(tmp_path)
     with sqlite3.connect(path) as db:
-        db.execute("INSERT INTO participants(name,role,last_seen) VALUES('Human','user','now')")
+        db.execute(
+            "INSERT INTO participants(name,role,last_seen) VALUES('Human','user','now')"
+        )
         db.execute(
             "INSERT INTO messages(request_id,topic,author,kind,body,created_at) "
             "VALUES('message3','general','Human','message','Old topic body','now')"

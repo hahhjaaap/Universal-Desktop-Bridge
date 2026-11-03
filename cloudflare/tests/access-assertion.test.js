@@ -11,11 +11,14 @@ const TEAM = "https://owner-check.cloudflareaccess.com";
 const AUD = "9a9a9a9a-1111-2222-3333-444444444444";
 const EMAIL = "owner@example.test";
 const b64 = (value) => Buffer.from(value).toString("base64url");
+// Production JWKS is cached briefly by team domain. Tests must use one stable
+// team signing key rather than minting a new key at the same certs URL.
+const pairPromise = crypto.subtle.generateKey({ name: "RSASSA-PKCS1-v1_5",
+  modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]),
+  hash: "SHA-256" }, true, ["sign", "verify"]);
 
 async function fixture() {
-  const pair = await crypto.subtle.generateKey({ name: "RSASSA-PKCS1-v1_5",
-    modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]),
-    hash: "SHA-256" }, true, ["sign", "verify"]);
+  const pair = await pairPromise;
   const publicKey = await crypto.subtle.exportKey("jwk", pair.publicKey);
   const jwks = { keys: [{ ...publicKey, kid: "access-signing-key" }] };
   const now = Math.floor(Date.now() / 1000);

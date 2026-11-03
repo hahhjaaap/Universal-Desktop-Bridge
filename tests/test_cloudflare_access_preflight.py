@@ -46,14 +46,18 @@ class Opener:
         if request.full_url.endswith("/mcp"):
             if self.edge == "managed":
                 challenge = (
-                    'Bearer resource_metadata="'\n                    + ORIGIN\n                    + '/.well-known/cloudflare-access-protected-resource/"'
+                    'Bearer resource_metadata="'
+                    + ORIGIN
+                    + '/.well-known/cloudflare-access-protected-resource/"'
                 )
                 status = 401
             elif self.edge == "jwt":
                 challenge = (
-                    'Bearer resource_metadata="' + ORIGIN
+                    'Bearer resource_metadata="'
+                    + ORIGIN
                     + "/.well-known/oauth-protected-resource/v1/devices/"
-                    + DEVICE\n                    + '/mcp"'
+                    + DEVICE
+                    + '/mcp"'
                 )
                 status = 401
             else:

@@ -19,10 +19,18 @@ controllable through the MCP gateway. It exposes only owner-granted read tools
 - Configure an Access policy that allows **only the intended owner identity**.
 - Enable **Managed OAuth** under that application's Advanced settings.
 - ChatGPT or another MCP client must perform Access OAuth login and consent.
-- Access must pass an authenticated `ctx.access` to the Worker.
-- The Worker requires `UDB_AUTH_MODE=cloudflare-access` and
-  `UDB_ACCESS_AUD=YOUR_ACCESS_APPLICATION_AUDIENCE_TAG`.
-  `UDB_ACCESS_AUD` MUST equal the application audience on `ctx.access.aud`.
+- Cloudflare Access can pass authenticated runtime identity through `ctx.access`.
+  If `ctx.access` is missing or lacks an email, UDB accepts **only a signed
+  RS256 Access assertion** in `Cf-Access-Jwt-Assertion`, verified using the
+  pinned team-domain public JWKS, issuer, audience, expiry and email. Merely
+  supplying that header, a cookie, or an opaque OAuth token is not sufficient.
+- The Worker requires `UDB_AUTH_MODE=cloudflare-access`,
+  `UDB_ACCESS_AUD=YOUR_ACCESS_APPLICATION_AUDIENCE_TAG` and
+  `UDB_ACCESS_TEAM_DOMAIN=https://YOUR_TEAM.cloudflareaccess.com`.
+  The team domain is pinned for JWT signature verification, never read from
+  request headers or an unverified token. The audience must match the Access
+  application's audience tag; the signed assertion email must match an exact
+  per-device grant. Do not use a personal email as the team domain.
 - Set `UDB_DEVICE_GRANTS` as a JSON object mapping device IDs to authenticated
   Access identity **email addresses** and approved read-only tool names:
 
@@ -46,7 +54,8 @@ configuration. Never commit secrets, personal identity grants or access tokens.
    accept Cloudflare login/consent and configure the policy.
 3. Verify a request missing Access authentication receives the expected
    managed OAuth challenge from the Cloudflare edge, **not** the Worker.
-4. Set `UDB_ACCESS_AUD`, `UDB_DEVICE_GRANTS`, and `UDB_AUTH_MODE` privately.
+4. Set `UDB_ACCESS_AUD`, `UDB_ACCESS_TEAM_DOMAIN`, `UDB_DEVICE_GRANTS`, and
+   `UDB_AUTH_MODE` privately.
    Use Wrangler secrets or private environment settings. Do not publish access
    control configuration containing personal emails to GitHub.
 5. Verify `tools/list` displays only approved read-only tools after owner
@@ -56,8 +65,8 @@ configuration. Never commit secrets, personal identity grants or access tokens.
    Complete the OAuth consent in ChatGPT. Confirm a real read-only tool call.
 
 **Not supported:** PIN-only internet authentication, auto-approving clients,
-cloud admin RPC, remote writes, shell, GUI automation, using Cloudflare Access
-identity from request headers, or bypassing the owner-local UDB grants.
+cloud admin RPC, remote writes, shell, GUI automation, trusting **unverified**
+Cloudflare Access headers, or bypassing the owner-local UDB grants.
 
 ## Rollback
 
@@ -66,4 +75,7 @@ a valid external RS256 identity provider is configured). Disable the Access
 application for the MCP path without changing the separate device WebSocket
 path. The UDB Cloud Agent may be stopped locally at any time.
 
-Reference: https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/
+References:
+- https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/
+- https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/
+- https://developers.cloudflare.com/workers/configuration/cloudflare-access/

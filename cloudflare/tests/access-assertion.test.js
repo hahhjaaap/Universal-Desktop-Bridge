@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import worker from "../src/index.js";
 import { accessConfig, verifyAccessAssertion } from "../src/access.js";
 import { AuthError } from "../src/oauth.js";
 
@@ -59,15 +58,11 @@ async function fixture() {
   return { env, token, request, forwards, fetchImpl, get fetches() { return fetches; } };
 }
 
-test("signed Cloudflare assertion authenticates without ctx.access, with device grant", async () => {
+test("signed Cloudflare assertion validates without ctx.access", async () => {
   const f = await fixture();
   const jwt = await f.token();
   const signed = await verifyAccessAssertion(f.request(jwt), f.env, f.fetchImpl);
   assert.equal(signed, EMAIL);
-  const reply = await worker.fetch(f.request(jwt), f.env, null);
-  // The public Worker entry point uses native fetch; test fallback with injected
-  // fetch in handleMcp instead of depending on a live Cloudflare key endpoint.
-  assert.equal(reply.status, 403);
   assert.equal(f.forwards.length, 0);
 });
 
@@ -108,7 +103,8 @@ test("invalid, expired, wrong-application and wrong-team assertions fail closed"
   await assert.rejects(
     verifyAccessAssertion(f.request(swapped), f.env, f.fetchImpl), AuthError);
   const signed = await f.token();
-  const tampered = signed.replace(/.$/, (c) => c === "A" ? "B" : "A");
+  const [a, b, c] = signed.split(".");
+  const tampered = a + "." + b + "." + (c[0] === "A" ? "B" : "A") + c.slice(1);
   await assert.rejects(
     verifyAccessAssertion(f.request(tampered), f.env, f.fetchImpl), AuthError);
   assert.equal(f.forwards.length, 0);

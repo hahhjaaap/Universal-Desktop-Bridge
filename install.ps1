@@ -301,8 +301,21 @@ try {
     exit $LASTEXITCODE
 } catch { [Console]::Error.WriteLine('UDB launcher failed. Re-run the installer to repair it.'); exit 1 }
 '@
-    Write-AtomicText (Join-Path $bin 'udb.ps1') $launcher
-    Write-AtomicText (Join-Path $bin 'udb.cmd') "@echo off`r`n`"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`" -NoLogo -NoProfile -ExecutionPolicy Bypass -File `"%~dp0udb.ps1`" %*`r`nexit /b %errorlevel%`r`n"
+    # PowerShell prefers udb.ps1 over udb.cmd for the bare 'udb' command.
+    # On owner Windows machines with Restricted ExecutionPolicy this made a
+    # healthy installation unusable. Keep the helper at a *different* name.
+    $legacy = Assert-LocalPath (Join-Path $bin 'udb.ps1')
+    if (Test-Path -LiteralPath $legacy) {
+        # Only remove the EXACT UDB v0.10.0 managed helper. Refuse any
+        # modified/unrecognized owner script; never silently delete it.
+        if (!(Test-Path -LiteralPath $legacy -PathType Leaf) -or
+            [IO.File]::ReadAllText($legacy) -cne $launcher) {
+            throw 'Unrecognized udb.ps1 in the managed bin folder. Preserve it and resolve the name collision locally before updating.'
+        }
+    }
+    Write-AtomicText (Join-Path $bin 'udb-launcher.ps1') $launcher
+    Write-AtomicText (Join-Path $bin 'udb.cmd') "@echo off`r`n`"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`" -NoLogo -NoProfile -ExecutionPolicy Bypass -File `"%~dp0udb-launcher.ps1`" %*`r`nexit /b %errorlevel%`r`n"
+    if (Test-Path -LiteralPath $legacy) { Remove-Item -LiteralPath $legacy -Force }
     $record = @{product='UniversalDesktopBridge';schema=1;version=$version;exe=$exe;home=$DataHome;archive_sha256=$expected}
     if ($previous) {
         if ($previous.exe -eq $exe) { $record = $previous }

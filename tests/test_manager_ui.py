@@ -850,8 +850,8 @@ def test_failed_selected_project_permission_read_disables_grant_toggles(
     manager, monkeypatch, method
 ):
     window, _ = manager
-    root = window.agent.home / "owned-permission-project"
-    root.mkdir()
+    root = window.agent.home / "projects" / "owned-permission-project"
+    root.mkdir(parents=True)
     window.agent.register_local("owner-test", str(root), True)
     window._refresh_projects()
     assert window.selected_project

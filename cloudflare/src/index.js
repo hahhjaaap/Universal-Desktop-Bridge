@@ -23,10 +23,15 @@ async function forward(stub, request) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    if (url.pathname === "/health" && request.method === "GET")
-      return json({ status: "ok", kind: "private-relay-prototype" });
+    if (url.pathname === "/health" && request.method === "GET") {
+      const response = json({ status: "ok", kind: "private-relay-prototype" });
+      // Capability only, not authentication or enabled-mode status.
+      // A local operator must not activate Access mode against an older Worker.
+      response.headers.set("X-UDB-Access-OAuth-Capable", "1");
+      return response;
+    }
     if (url.pathname === "/v1/admin/pairings" && request.method === "POST") {
       if (!adminAuthorized(request, env)) return failure(401, "admin_auth_required");
       const { device_id, pairing_code, pairing_token_sha256 } = await newPairing();
@@ -71,7 +76,7 @@ export default {
       if (!env.DEVICES?.get || !env.DEVICES?.idFromName)
         return failure(503, "relay_not_configured");
       const stub = env.DEVICES.get(env.DEVICES.idFromName(mcpMatch[1]));
-      return handleMcp(request, env, mcpMatch[1], stub);
+      return handleMcp(request, env, mcpMatch[1], stub, fetch, ctx?.access);
     }
     const adminMatch = /^\/v1\/admin\/devices\/([a-f0-9]{32})(\/rpc|\/status)?$/.exec(url.pathname);
     if (!adminMatch) return failure(404, "not_found");

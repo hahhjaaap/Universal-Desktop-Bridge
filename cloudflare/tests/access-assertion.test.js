@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import worker from "../src/index.js";
 import { accessConfig, verifyAccessAssertion } from "../src/access.js";
 import { AuthError } from "../src/oauth.js";
 
@@ -67,6 +68,24 @@ test("signed Cloudflare assertion validates without ctx.access", async () => {
   const signed = await verifyAccessAssertion(f.request(jwt), f.env, f.fetchImpl);
   assert.equal(signed, EMAIL);
   assert.equal(f.forwards.length, 0);
+});
+
+test("Worker routes signed Access assertions end to end without ctx.access", async () => {
+  const f = await fixture();
+  const previous = globalThis.fetch;
+  globalThis.fetch = f.fetchImpl;
+  try {
+    const response = await worker.fetch(f.request(await f.token()), f.env);
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).result.tools.map((t) => t.name),
+      ["bridge_status"]);
+    const other = new Request(ROOT + "/v1/devices/" + OTHER + "/mcp", {
+      method: "POST", headers: { "Cf-Access-Jwt-Assertion": await f.token() },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    });
+    assert.equal((await worker.fetch(other, f.env)).status, 403);
+    assert.equal(f.forwards.length, 1);
+  } finally { globalThis.fetch = previous; }
 });
 
 test("signed assertion can call only read tools via the real MCP handler", async () => {

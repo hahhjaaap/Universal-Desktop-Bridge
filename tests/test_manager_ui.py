@@ -841,6 +841,7 @@ def test_failed_media_autonomy_read_does_not_leave_checkbox_inert(manager, monke
     assert window.media_auto.isEnabled()
     assert not window.media_auto.signalsBlocked()
 
+
 def test_corrupted_common_room_database_shows_local_warning(manager, monkeypatch):
     from PySide6.QtWidgets import QMessageBox
 

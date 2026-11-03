@@ -786,3 +786,24 @@ def test_reduced_motion_save_error_restores_previous_state(manager, monkeypatch)
     assert len(warnings) == 1
     assert "trước đó" in warnings[0]
     assert not (window.agent.state / "computer-access.dpapi").exists()
+
+
+def test_corrupted_common_room_database_shows_local_warning(manager, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    window, _ = manager
+    root = window.agent.home / "corrupted-project"
+    room = root / "chatgpt-workspace"
+    room.mkdir(parents=True)
+    database = room / "workspace.sqlite3"
+    database.write_bytes(b"not a valid SQLite database")
+    window.selected_project = {"id": "owned-demo"}
+    monkeypatch.setattr(window.agent, "project", lambda _id: (None, root))
+    warnings = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args: warnings.append(args[2]))
+
+    window.open_common_room()
+
+    assert len(warnings) == 1
+    assert database.read_bytes() == b"not a valid SQLite database"
+    assert list(room.glob("workspace*.sqlite3")) == [database]

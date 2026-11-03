@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -1108,7 +1109,9 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
 
             dialog = CommonRoomDialog(root, self)
             dialog.exec()
-        except (OSError, ValueError) as exc:
+        except (OSError, ValueError, sqlite3.Error) as exc:
+            # A corrupt or partly migrated project database must be shown as
+            # a local owner error, never crash the Qt action or be replaced.
             QMessageBox.warning(self, "Common Room", str(exc))
 
     def project_selected(self):

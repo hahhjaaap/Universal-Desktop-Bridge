@@ -77,6 +77,10 @@ def main():
                     "-NoLogo",
                     "-NoProfile",
                     "-NonInteractive",
+                    # Only this fixed-path UDB preview helper runs under the
+                    # process-scoped policy; no Windows setting is changed.
+                    "-ExecutionPolicy",
+                    "Bypass",
                     "-File",
                     str(
                         Path(virtual_pointer.__file__).with_name(
@@ -118,11 +122,18 @@ def main():
             finally:
                 pointer.close()
 
+        # CI-only cold Chrome startup can stall on shared GitHub Windows
+        # runners. Production retains the default 20-second budget.
+        ci_options = (
+            {"startup_timeout": 45}
+            if os.environ.get("GITHUB_ACTIONS") == "true"
+            else {}
+        )
         try:
-            browser = Browser(Path(folder) / "browser")
+            browser = Browser(Path(folder) / "browser", **ci_options)
         except PolicyError as exc:
             # On loaded GitHub Windows runners, Chrome can exceed its first
-            # 15-second endpoint budget. Retry only this read-only smoke test
+            # bounded endpoint budget. Retry only this read-only smoke test
             # with a fresh UDB-owned disposable profile, at most once.
             if (
                 os.environ.get("GITHUB_ACTIONS") != "true"
@@ -132,7 +143,7 @@ def main():
             print(
                 "CI transient browser startup timeout; retrying once", file=sys.stderr
             )
-            browser = Browser(Path(folder) / "browser-ci-retry")
+            browser = Browser(Path(folder) / "browser-ci-retry", **ci_options)
         try:
             tab = next(iter(browser.tabs))
             screenshot_started = time.monotonic()

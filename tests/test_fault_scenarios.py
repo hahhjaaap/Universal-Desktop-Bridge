@@ -576,3 +576,40 @@ def test_browser_endpoint_stops_waiting_when_owned_process_exits():
 
     with pytest.raises(PolicyError, match="exited during startup"):
         _browser_endpoint(None, SimpleNamespace(alive=lambda: False), 1)
+
+
+@pytest.mark.parametrize("invalid", [True, False, -1, 0, 19, 61, 70, 45.0, "45"])
+def test_browser_ci_startup_override_is_bounded_before_launch(tmp_path, invalid):
+    from udb.host_browser import Browser
+
+    folder = tmp_path / "browser"
+    with pytest.raises(PolicyError, match="startup_timeout must be 20..60"):
+        Browser(folder, startup_timeout=invalid)
+    assert not folder.exists()
+
+
+def test_browser_ci_budget_does_not_change_production_default(monkeypatch, tmp_path):
+    from udb import host_browser
+
+    seen = []
+
+    class Dummy:
+        def close(self):
+            pass
+
+    class StopBeforeWebsocket(Exception):
+        pass
+
+    monkeypatch.setattr(host_browser, "find_browser", lambda: tmp_path / "chrome.exe")
+    monkeypatch.setattr(host_browser, "OwnedProcess", lambda *_a, **_k: Dummy())
+
+    def endpoint(_path, _proc, timeout):
+        seen.append(timeout)
+        raise StopBeforeWebsocket
+
+    monkeypatch.setattr(host_browser, "_browser_endpoint", endpoint)
+    with pytest.raises(StopBeforeWebsocket):
+        host_browser.Browser(tmp_path / "cold-browser", startup_timeout=45)
+    with pytest.raises(StopBeforeWebsocket):
+        host_browser.Browser(tmp_path / "normal-browser")
+    assert seen == [40, host_browser._ENDPOINT_TIMEOUT]

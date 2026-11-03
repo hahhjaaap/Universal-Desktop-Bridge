@@ -788,7 +788,9 @@ def test_reduced_motion_save_error_restores_previous_state(manager, monkeypatch)
     assert not (window.agent.state / "computer-access.dpapi").exists()
 
 
-def test_failed_pending_refresh_hides_stale_approvals_and_recovers(manager, monkeypatch):
+def test_failed_pending_refresh_hides_stale_approvals_and_recovers(
+    manager, monkeypatch
+):
     from PySide6.QtWidgets import QTreeWidgetItem
 
     window, _ = manager
@@ -823,9 +825,7 @@ def test_failed_pending_refresh_hides_stale_approvals_and_recovers(manager, monk
     assert window.requests.topLevelItemCount() == 0
 
 
-def test_failed_media_autonomy_read_does_not_leave_checkbox_inert(
-    manager, monkeypatch
-):
+def test_failed_media_autonomy_read_does_not_leave_checkbox_inert(manager, monkeypatch):
     window, _ = manager
     original = window.agent.media_autonomy
 

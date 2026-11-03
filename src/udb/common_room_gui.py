@@ -234,11 +234,22 @@ class CommonRoomDialog(QDialog):
             QMessageBox.warning(self, "Common Room", str(exc))
 
     def reload(self):
-        with open_room(self.room_path) as db:
-            topics = [
-                r["name"]
-                for r in db.execute("SELECT name FROM topics ORDER BY name LIMIT 200")
-            ]
+        try:
+            with open_room(self.room_path) as db:
+                topics = [
+                    r["name"]
+                    for r in db.execute("SELECT name FROM topics ORDER BY name LIMIT 200")
+                ]
+        except (OSError, ValueError, sqlite3.Error) as exc:
+            # Refresh button errors otherwise left a previous topic and
+            # previously read messages visible even after the DB disappeared.
+            self._clear_content("Không đọc được Common Room: " + str(exc))
+            was_blocked = self.topic.blockSignals(True)
+            try:
+                self.topic.clear()
+            finally:
+                self.topic.blockSignals(was_blocked)
+            raise
         selected = self.topic.currentText()
         self.topic.blockSignals(True)
         self.topic.clear()

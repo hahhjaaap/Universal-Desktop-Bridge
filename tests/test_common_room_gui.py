@@ -194,3 +194,25 @@ def test_room_connection_releases_sqlite_handle_after_context(tmp_path):
     # This rename fails on Windows when an old read connection is still open.
     moved = path.rename(path.with_suffix(".unavailable"))
     assert moved.is_file()
+
+
+def test_refresh_failure_hides_stale_messages_and_topic(tmp_path):
+    _, CommonRoomDialog, _ = qt_components()
+    root, path = room_fixture(tmp_path)
+    with sqlite3.connect(path) as db:
+        db.execute("INSERT INTO participants(name,role,last_seen) VALUES('Human','user','now')")
+        db.execute(
+            "INSERT INTO messages(request_id,topic,author,kind,body,created_at) "
+            "VALUES('message3','general','Human','message','Old topic body','now')"
+        )
+    dialog = CommonRoomDialog(root)
+    assert dialog.messages.topLevelItemCount() == 1
+    path.rename(path.with_suffix(".gone"))
+    with pytest.raises(FileNotFoundError):
+        dialog.reload()
+    assert dialog.topic.currentText() == ""
+    assert dialog.messages.topLevelItemCount() == 0
+    assert dialog.message_detail.toPlainText() == ""
+    assert "Không đọc được" in dialog.browser_status.text()
+    assert not dialog.topic.signalsBlocked()
+    dialog.close()

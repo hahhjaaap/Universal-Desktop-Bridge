@@ -240,6 +240,7 @@ class Browser(BrowserInputMixin):
         )
         self.persistent = persistent
         self.visible = visible
+        self._startup_override = startup_timeout
         self.folder = Path(folder)
         reject_links(self.folder)
         self.folder.mkdir(parents=True, exist_ok=persistent or reuse_profile)
@@ -1250,7 +1251,11 @@ class Browser(BrowserInputMixin):
             raise PolicyError("Invalid browser presentation")
         if self.visible == visible:
             return dict(visible=visible, changed=False)
-        deadline = time.monotonic() + _STARTUP_TIMEOUT
+        deadline = time.monotonic() + (
+            self._startup_override
+            if getattr(self, "_startup_override", None) is not None
+            else _STARTUP_TIMEOUT
+        )
         urls = []
         for target in self.call("Target.getTargets")["targetInfos"]:
             if target.get("type") == "page":
@@ -1286,7 +1291,11 @@ class Browser(BrowserInputMixin):
         folder, persistent = self.folder, self.persistent
         self.close(remove_profile=False)
         self.__init__(
-            folder, persistent=persistent, visible=visible, reuse_profile=True
+            folder,
+            persistent=persistent,
+            visible=visible,
+            reuse_profile=True,
+            startup_timeout=getattr(self, "_startup_override", None),
         )
         self.deadline = deadline
         if cookies:

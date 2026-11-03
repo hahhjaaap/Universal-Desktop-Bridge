@@ -613,3 +613,36 @@ def test_browser_ci_budget_does_not_change_production_default(monkeypatch, tmp_p
     with pytest.raises(StopBeforeWebsocket):
         host_browser.Browser(tmp_path / "normal-browser")
     assert seen == [40, host_browser._ENDPOINT_TIMEOUT]
+
+
+def test_ci_browser_timeout_survives_disposable_visible_handoff(monkeypatch, tmp_path):
+    from udb.host_browser import Browser
+
+    browser = Browser.__new__(Browser)
+    browser.visible = False
+    browser.persistent = False
+    browser.folder = tmp_path / "profile"
+    browser._startup_override = 45
+    browser.tabs = {"tab": "session"}
+    captured = []
+
+    def fake_call(self, method, *args, **kwargs):
+        if method == "Target.getTargets":
+            return {"targetInfos": [{"type": "page", "url": "about:blank"}]}
+        if method == "Storage.getCookies":
+            return {"cookies": []}
+        raise AssertionError("Unexpected CDP method: " + method)
+
+    def fake_init(self, folder, **kwargs):
+        captured.append(kwargs)
+        self.tabs = {"new-tab": "session"}
+        self.visible = kwargs["visible"]
+        self._startup_override = kwargs["startup_timeout"]
+
+    monkeypatch.setattr(Browser, "call", fake_call)
+    monkeypatch.setattr(Browser, "close", lambda *_a, **_k: None)
+    monkeypatch.setattr(Browser, "__init__", fake_init)
+    monkeypatch.setattr(Browser, "navigate", lambda *_a, **_k: None)
+    result = browser.switch_presentation(True)
+    assert result["changed"] and result["tab_ids_invalidated"]
+    assert captured[0]["startup_timeout"] == 45

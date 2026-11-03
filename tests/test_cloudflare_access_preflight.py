@@ -45,7 +45,10 @@ class Opener:
                 b'{"status":"ok","kind":"private-relay-prototype"}',
                 headers,
             )
-        if request.full_url == ORIGIN + "/.well-known/cloudflare-access-protected-resource/":
+        if (
+            request.full_url
+            == ORIGIN + "/.well-known/cloudflare-access-protected-resource/"
+        ):
             value = {
                 "protected": self.metadata_valid,
                 "resource": ORIGIN,

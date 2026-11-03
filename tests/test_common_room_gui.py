@@ -116,7 +116,9 @@ def test_switching_topics_clears_selected_message_details(tmp_path):
     _, CommonRoomDialog, _ = qt_components()
     root, path = room_fixture(tmp_path)
     with sqlite3.connect(path) as db:
-        db.execute("INSERT INTO topics(name,goal,created_at) VALUES('later','later','now')")
+        db.execute(
+            "INSERT INTO topics(name,goal,created_at) VALUES('later','later','now')"
+        )
         db.execute(
             "INSERT INTO participants(name,role,last_seen) VALUES('Human','user','now')"
         )

@@ -18,7 +18,7 @@ def test_non_ascii_powershell_scripts_have_utf8_bom():
         # Reject invalid source encoding even if no Unicode character is used.
         data.decode("utf-8-sig")
         if any(byte >= 128 for byte in data):
-            assert data.startswith(b"\\xef\\xbb\\xbf"), (
+            assert data.startswith(bytes((0xEF, 0xBB, 0xBF))), (
                 f"{script.relative_to(ROOT)} contains non-ASCII UTF-8 but lacks "
                 "a BOM required by Windows PowerShell 5.1"
             )

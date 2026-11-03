@@ -33,6 +33,8 @@ def test_native_overlay_follows_registered_tab_without_input(tmp_path, monkeypat
             system_executable("powershell.exe"),
             "-NoProfile",
             "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",  # The checked-in fixture only; no persistent policy change.
             "-Sta",
             "-File",
             str(Path(__file__).parent / "fixtures/native_tab_identity.ps1"),

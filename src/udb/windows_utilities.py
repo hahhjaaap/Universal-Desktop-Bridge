@@ -47,6 +47,10 @@ class WindowsBackend:
                 "-NoLogo",
                 "-NoProfile",
                 "-NonInteractive",
+                # Process-scoped allowance for this packaged, fixed-path helper.
+                # The owner's machine/user ExecutionPolicy is never changed.
+                "-ExecutionPolicy",
+                "Bypass",
                 "-File",
                 str(Path(__file__).with_name("windows_utilities.ps1")),
             ],

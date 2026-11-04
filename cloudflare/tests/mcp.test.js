@@ -45,7 +45,7 @@ test("only owner-approved read tools appear or execute", async () => {
     const rpc = await req.json();
     forwarded.push(rpc);
     return new Response(JSON.stringify({ jsonrpc: "2.0", id: rpc.id, result:
-      rpc.method === "tools/list" ? { tools: [
+      rpc.method === "initialize" ? { protocolVersion: "2025-11-25" } : rpc.method === "tools/list" ? { tools: [
         { name: "bridge_status", description: "Safe status" },
         { name: "computer_terminal", description: "Not authorized" },
       ] } : { ok: true } }));
@@ -58,7 +58,7 @@ test("only owner-approved read tools appear or execute", async () => {
     method: "tools/call", params: { name: "computer_terminal", arguments: {} } }),
   env, id, stub, fetchImpl);
   assert.equal(forbidden.status, 403);
-  assert.equal(forwarded.length, 0);
+  assert.equal(forwarded.length, 1);
   const catalog = await handleMcp(request({ jsonrpc: "2.0", id: 3,
     method: "tools/list" }), env, id, stub, fetchImpl);
   assert.equal(catalog.status, 200);
@@ -70,7 +70,33 @@ test("only owner-approved read tools appear or execute", async () => {
   env, id, stub, fetchImpl);
   assert.equal(call.status, 200);
   assert.deepEqual((await call.json()).result, { ok: true });
-  assert.equal(forwarded.length, 2);
+  assert.equal(forwarded.length, 3);
+});
+
+test("initialize fails closed if the local device is offline or rejects initialization", async () => {
+  // Use the trusted runtime identity to avoid coupling this test to the JWT JWKS cache.
+  const accessEnv = { UDB_AUTH_MODE: "cloudflare-access",
+    UDB_ACCESS_AUD: "application-audience-test",
+    UDB_DEVICE_GRANTS: JSON.stringify({ [id]: { "owner@example.test": ["bridge_status"] } }) };
+  const access = { aud: "application-audience-test",
+    getIdentity: async () => ({ email: "owner@example.test" }) };
+  const rpc = { jsonrpc: "2.0", id: 5, method: "initialize",
+    params: { protocolVersion: "2025-11-25", capabilities: {},
+      clientInfo: { name: "udb-test", version: "1" } } };
+  const request = () => new Request(resource, { method: "POST",
+    headers: { "content-type": "application/json" }, body: JSON.stringify(rpc) });
+  const offline = await handleMcp(request(), accessEnv, id, {
+    fetch: async () => new Response(JSON.stringify({ error: "device_offline" }), {
+      status: 503, headers: { "content-type": "application/json" },
+    }),
+  }, fetch, access);
+  assert.equal(offline.status, 503);
+  const rejected = await handleMcp(request(), accessEnv, id, {
+    fetch: async () => new Response(JSON.stringify({
+      jsonrpc: "2.0", id: 5, error: { code: -32000, message: "not ready" },
+    }), { headers: { "content-type": "application/json" } }),
+  }, fetch, access);
+  assert.equal(rejected.status, 502);
 });
 
 test("origin mismatch and unsupported protocol cannot reach a device", async () => {

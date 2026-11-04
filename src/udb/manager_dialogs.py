@@ -171,7 +171,9 @@ class ConnectionDialog(QDialog):
             QApplication.instance().setProperty("motion", self.motion.isChecked())
             self.accept()
         except Exception:
-            self.error.setText("Không lưu được tùy chọn giao diện. Kiểm tra quyền ghi cục bộ.")
+            self.error.setText(
+                "Không lưu được tùy chọn giao diện. Kiểm tra quyền ghi cục bộ."
+            )
 
 
 class ApprovalDialog(QDialog):

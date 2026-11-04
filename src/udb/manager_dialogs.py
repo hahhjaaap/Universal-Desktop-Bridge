@@ -133,7 +133,9 @@ class ConnectionDialog(QDialog):
         pairing = Path(controller.agent.home) / "cloud-pairing.json"
         self.cloud_selected = pairing.exists() or pairing.is_symlink()
         self.setWindowTitle(
-            "Kết nối Cloudflare MCP" if self.cloud_selected else "Cài đặt OpenAI Tunnel cũ"
+            "Kết nối Cloudflare MCP"
+            if self.cloud_selected
+            else "Cài đặt OpenAI Tunnel cũ"
         )
         self.setMinimumWidth(580)
         lay = QVBoxLayout(self)
@@ -141,8 +143,10 @@ class ConnectionDialog(QDialog):
         lay.setSpacing(16)
         lay.addWidget(
             label(
-                "Cloudflare MCP đã ghép nối" if self.cloud_selected
-                else "OpenAI Tunnel (chế độ tương thích)", "H2"
+                "Cloudflare MCP đã ghép nối"
+                if self.cloud_selected
+                else "OpenAI Tunnel (chế độ tương thích)",
+                "H2",
             )
         )
         if self.cloud_selected:
@@ -151,7 +155,8 @@ class ConnectionDialog(QDialog):
                     "Cấu hình ghép nối Cloudflare được giữ nguyên. "
                     "Bật Cloud Agent ở trang Kết nối và kiểm tra plugin ChatGPT. "
                     "Không nhập URL Cloudflare vào ô Tunnel ID.",
-                    "Muted", True,
+                    "Muted",
+                    True,
                 )
             )
         lay.addWidget(

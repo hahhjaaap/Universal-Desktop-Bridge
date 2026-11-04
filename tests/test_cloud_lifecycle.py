@@ -1,6 +1,7 @@
 """Cloud lifecycle tests: the desktop only starts an explicitly paired agent."""
 
 import json
+import threading
 import uuid
 from types import SimpleNamespace
 
@@ -13,6 +14,9 @@ from udb.desktop import DesktopController
 def controller_for_test(home):
     controller = DesktopController.__new__(DesktopController)
     controller.agent = SimpleNamespace(home=home)
+    controller.lock = threading.RLock()
+    controller.cloud_wanted = False
+    controller.error = ""
     controller.spawned = []
 
     def start(name, argv):

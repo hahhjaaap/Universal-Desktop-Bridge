@@ -118,7 +118,6 @@ def run(settings, *, edit=False, local=False):
     if edit and local:
         raise ValueError("Choose either Cloudflare pairing or offline diagnostics")
     from . import owner_command
-    from .config import prepare_workspace
 
     checked(settings.home / "state/startup-preferences.json")
     print("UDB Cloudflare setup. No OpenAI Tunnel or runtime API key is used.")
@@ -164,7 +163,10 @@ def run(settings, *, edit=False, local=False):
             "Cloud Agent launch is not proof of ChatGPT authorization. "
             "Verify bridge_status from the udb-cloudflare plugin."
         )
-        if input("Open the computer-access consent prompt? [y/N]: ").strip().lower() == "y":
+        if (
+            input("Open the computer-access consent prompt? [y/N]: ").strip().lower()
+            == "y"
+        ):
             args.extend(["--access", "computer"])
     else:
         args.append("--offline")

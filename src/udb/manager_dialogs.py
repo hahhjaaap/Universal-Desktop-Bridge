@@ -15,8 +15,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QDialog,
-    QFormLayout,
-    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMessageBox,
@@ -126,43 +124,30 @@ class SourceDialog(QDialog):
 
 
 class ConnectionDialog(QDialog):
+    """Local visual preferences; Cloudflare pairing is a separate owner action."""
+
     def __init__(self, controller, parent=None):
         super().__init__(parent)
         self.controller = controller
-        self.setWindowTitle("Cài đặt kết nối")
+        self.setWindowTitle("Cài đặt UDB Cloudflare")
         self.setMinimumWidth(580)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(27, 27, 27, 27)
         lay.setSpacing(16)
-        lay.addWidget(label("Kết nối riêng với ChatGPT", "H2"))
+        lay.addWidget(label("Cloudflare là đường kết nối ChatGPT duy nhất", "H2"))
         lay.addWidget(
             label(
-                "Runtime key chỉ lưu trong Windows Credential Manager. Không đưa key vào Chat.",
+                "Ghép nối thiết bị bằng mã mời ngắn hạn trong mục Kết nối. "
+                "Khóa được giữ trong Windows Credential Manager. "
+                "Tắt hoặc bật Cloud Agent không tự cấp quyền điều khiển máy.",
                 "Muted",
-                True,
-            )
-        )
-        form = QFormLayout()
-        form.setVerticalSpacing(12)
-        self.tunnel = QLineEdit(controller.config().get("tunnel_id", ""))
-        self.tunnel.setPlaceholderText("tunnel_…")
-        form.addRow("Tunnel ID", self.tunnel)
-        self.key = QLineEdit()
-        self.key.setEchoMode(QLineEdit.EchoMode.Password)
-        self.key.setPlaceholderText("Để trống nếu giữ key đã lưu")
-        form.addRow("Runtime API key", self.key)
-        lay.addLayout(form)
-        lay.addWidget(
-            label(
-                "Quyền cần thiết: Tunnels Read + Use. Không cần key cho model API.",
-                "Fine",
                 True,
             )
         )
         settings = controller.settings()
         self.motion = QCheckBox("Bật chuyển động nhẹ")
         self.motion.setChecked(settings.get("motion", True))
-        self.auto = QCheckBox("Tự kết nối khi mở ứng dụng")
+        self.auto = QCheckBox("Tự bật Cloud Agent khi mở ứng dụng")
         self.auto.setChecked(settings.get("autoconnect", False))
         lay.addWidget(self.motion)
         lay.addWidget(self.auto)
@@ -176,8 +161,6 @@ class ConnectionDialog(QDialog):
 
     def save(self):
         try:
-            self.controller.configure(self.tunnel.text(), self.key.text())
-            self.key.clear()
             self.controller.save_settings(
                 {
                     "motion": self.motion.isChecked(),
@@ -187,12 +170,8 @@ class ConnectionDialog(QDialog):
             )
             QApplication.instance().setProperty("motion", self.motion.isChecked())
             self.accept()
-        except Exception as e:
-            self.error.setText(str(e))
-
-    def done(self, result):
-        self.key.clear()
-        super().done(result)
+        except Exception:
+            self.error.setText("Không lưu được tùy chọn giao diện. Kiểm tra quyền ghi cục bộ.")
 
 
 class ApprovalDialog(QDialog):

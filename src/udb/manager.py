@@ -164,12 +164,12 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.header_title.setAccessibleName("Trang đang xem")
         header_row.addWidget(self.header_title)
         header_row.addStretch()
-        self.header_connection = StatusPill("Tunnel chưa kiểm tra", "neutral")
+        self.header_connection = StatusPill("Cloud Agent chưa kiểm tra", "neutral")
         self.header_connection.setAccessibleDescription(
-            "Chỉ là trạng thái tunnel, không xác minh công cụ ChatGPT."
+            "Chỉ là trạng thái cloud, không xác minh công cụ ChatGPT."
         )
         self.header_connection.setToolTip(
-            "Kết nối tunnel không xác minh ChatGPT đã gọi được công cụ."
+            "Kết nối cloud không xác minh ChatGPT đã gọi được công cụ."
         )
         header_row.addWidget(self.header_connection)
         self.header_privilege = StatusPill("Quyền máy: chưa xác minh", "neutral")
@@ -267,7 +267,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         info.setSpacing(4)
         info.addWidget(label("Trạng thái kết nối UDB", "H2"))
         self.connection_hint = label(
-            "Tunnel và ChatGPT là hai bước xác minh riêng biệt.",
+            "Cloud Agent đang chạy không có nghĩa ChatGPT đã xác thực; hãy gọi bridge_status.",
             "Muted",
             True,
         )
@@ -277,13 +277,13 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.configure_button.clicked.connect(self.configure)
         heading.addWidget(self.configure_button)
         self.connect_button = MotionButton("Kết nối", "power", "primary")
-        self.connect_button.clicked.connect(self.toggle_tunnel)
+        self.connect_button.clicked.connect(self.toggle_cloud)
         heading.addWidget(self.connect_button)
         band.addLayout(heading)
         health = QHBoxLayout()
         health.setSpacing(8)
         self.local_health = StatusPill("Chưa kiểm tra", "neutral")
-        self.tunnel_health = StatusPill("Chưa kiểm tra", "neutral")
+        self.cloud_health = StatusPill("Chưa kiểm tra", "neutral")
         self.chatgpt_health = StatusPill("Chưa xác minh", "neutral")
         for title, pill, description in (
             (
@@ -292,14 +292,14 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
                 "Trạng thái tác nhân UDB trên máy tính này.",
             ),
             (
-                "Tunnel",
-                self.tunnel_health,
+                "Cloudflare",
+                self.cloud_health,
                 "Tình trạng đường truyền MCP trên máy tính này.",
             ),
             (
                 "ChatGPT",
                 self.chatgpt_health,
-                "Không thể xác minh công cụ ChatGPT từ trạng thái tunnel.",
+                "Chỉ lời gọi MCP có xác thực từ ChatGPT mới xác minh được kết nối.",
             ),
         ):
             title_label = label(title, "Fine")
@@ -609,7 +609,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
     def build_connection(self):
         p, lay = self.page(
             "Kết nối & cài đặt",
-            "Kết nối ChatGPT Chat qua tunnel riêng. API key không xuất hiện trong giao diện hay log.",
+            "Kết nối ChatGPT chỉ kết nối qua Cloudflare Access OAuth; khóa thiết bị không hiển thị.",
         )
         setup = panel()
         setup_layout = QVBoxLayout(setup)
@@ -625,7 +625,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             )
         )
         self.setup_agent_health = StatusPill("Chưa kiểm tra", "neutral")
-        self.setup_tunnel_health = StatusPill("Chưa kiểm tra", "neutral")
+        self.setup_cloud_health = StatusPill("Chưa kiểm tra", "neutral")
         self.setup_chatgpt_health = StatusPill("Chưa xác minh", "neutral")
         for heading, description, pill in (
             (
@@ -634,9 +634,9 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
                 self.setup_agent_health,
             ),
             (
-                "2 · Kết nối Tunnel",
-                "Dùng Kết nối bên dưới. Tunnel xanh chưa chứng minh ChatGPT gọi được.",
-                self.setup_tunnel_health,
+                "2 · Kết nối Cloud Agent",
+                "Bật Cloud Agent đã ghép nối. Chỉ lời gọi MCP mới chứng minh kết nối.",
+                self.setup_cloud_health,
             ),
             (
                 "3 · Xác minh tại ChatGPT",
@@ -656,12 +656,12 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         cl = QVBoxLayout(card)
         cl.setContentsMargins(23, 23, 23, 23)
         cl.setSpacing(15)
-        cl.addWidget(label("Secure MCP Tunnel", "H2"))
+        cl.addWidget(label("Cloudflare MCP", "H2"))
         cl.addWidget(
             label(
-                "1. Kiểm tra tác nhân cục bộ → 2. Kiểm tra Tunnel → "
+                "1. Ghép nối Cloudflare → 2. Bật Cloud Agent → "
                 "3. Gọi một công cụ chỉ đọc trong ChatGPT. "
-                "Màu xanh ở Tunnel không chứng minh ChatGPT đã truy cập.",
+                "Tiến trình Cloud Agent đang chạy không chứng minh đã đăng nhập ChatGPT.",
                 "Muted",
                 True,
             )
@@ -693,7 +693,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         cloud_layout.setContentsMargins(23, 20, 23, 20)
         cloud_layout.setSpacing(12)
         cloud_layout.addWidget(
-            label("Cloudflare · Ghép nối thiết bị (thử nghiệm)", "H2")
+            label("Cloudflare · Ghép nối thiết bị", "H2")
         )
         cloud_layout.addWidget(
             label(
@@ -717,24 +717,8 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         )
         cloud_layout.addWidget(self.cloud_session_status)
         lay.addWidget(cloud_panel)
-        local = panel()
-        ll = QVBoxLayout(local)
-        ll.setContentsMargins(23, 23, 23, 23)
-        ll.setSpacing(14)
-        ll.addWidget(label("MCP cục bộ · chẩn đoán nâng cao", "H2"))
-        ll.addWidget(
-            label(
-                "127.0.0.1:17843/mcp · bearer-protected. Không cần bật mục này khi dùng tuyến tunnel STDIO.",
-                "Muted",
-                True,
-            )
-        )
-        self.local_button = MotionButton("Bật MCP cục bộ", "power")
-        self.local_button.clicked.connect(self.toggle_local)
-        ll.addLayout(row(self.local_button, None))
-        lay.addWidget(local)
         help_text = label(
-            "Sau khi Windows khởi động lại: mở Bridge và Kết nối. Trong Chat mới, chọn @Universal Desktop Bridge. Nếu cần chạy mã, gửi đề xuất từ Chat rồi duyệt script chính xác ở Phê duyệt.\n\nBản cài không gọi model API và không tự mua hay nâng cấp dịch vụ. ChatGPT và tunnel vẫn có điều kiện, hạn mức riêng.",
+            "Sau khi Windows khởi động lại: mở Bridge và Kết nối. Trong Chat mới, chọn @Universal Desktop Bridge. Nếu cần chạy mã, gửi đề xuất từ Chat rồi duyệt script chính xác ở Phê duyệt.\n\nBản cài không gọi model API và không tự mua hay nâng cấp dịch vụ. Cloudflare và ChatGPT có điều kiện, hạn mức riêng.",
             "Muted",
             True,
         )
@@ -993,21 +977,6 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         worker.signals.error.connect(failed, Qt.ConnectionType.QueuedConnection)
         QThreadPool.globalInstance().start(worker)
 
-    def toggle_tunnel(self):
-        if self.controller.tunnel_wanted:
-            self.run_background(lambda: self.controller.stop_process("tunnel"))
-        else:
-            self.run_background(self.controller.start_tunnel)
-
-    def toggle_local(self):
-        self.run_background(
-            lambda: (
-                self.controller.stop_process("mcp")
-                if self.controller.alive("mcp")
-                else self.controller.start_local()
-            )
-        )
-
     def configure(self):
         if not self.busy:
             ConnectionDialog(self.controller, self).exec()
@@ -1022,10 +991,10 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         answer = QMessageBox.question(
             self,
             "UDB Cloud · Bật phiên thử nghiệm",
-            "Bật phiên Cloud Agent ra Internet cho máy Windows này?\\n"
+            "Bật Cloud Agent để nhận lệnh MCP đã xác thực qua Cloudflare?\\n"
             "Cloudflare có thể chuyển các yêu cầu được xác thực về UDB.\\n"
             "Chỉ bật khi bạn tin tưởng chủ hệ thống và đã ghép nối máy.\\n"
-            "UDB vẫn kiểm tra quyền máy tính riêng và tự tắt phiên khi thoát ứng dụng.",
+            "UDB vẫn kiểm tra quyền máy tính riêng và đóng Agent khi thoát ứng dụng.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -1499,7 +1468,7 @@ def make_app():
     return app
 
 
-def run(home: Path, start_tunnel=False, screenshot=None):
+def run(home: Path, start_cloud=False, screenshot=None):
     if os.name == "nt":
         import ctypes
 
@@ -1537,8 +1506,8 @@ def run(home: Path, start_tunnel=False, screenshot=None):
         window.quick_controls.show_panel()
     else:
         window.show()
-    if start_tunnel or settings.get("autoconnect", False):
-        QTimer.singleShot(350, window.toggle_tunnel)
+    if start_cloud or settings.get("autoconnect", False):
+        QTimer.singleShot(350, window.toggle_cloud)
     if screenshot:
         dest = Path(screenshot)
 
@@ -1547,7 +1516,7 @@ def run(home: Path, start_tunnel=False, screenshot=None):
                 raise OSError("GUI screenshot failed")
             app.quit()
 
-        QTimer.singleShot(7000 if start_tunnel else 550, capture)
+        QTimer.singleShot(7000 if start_cloud else 550, capture)
     code = app.exec()
     controller.close()
     lock.unlock()

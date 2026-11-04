@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QSplitter,
     QTabWidget,
     QVBoxLayout,
+    QWidget,
 )
 
 from .manager_widgets import DiffHighlighter, MotionButton, Worker, icon, label, row
@@ -129,12 +130,35 @@ class ConnectionDialog(QDialog):
     def __init__(self, controller, parent=None):
         super().__init__(parent)
         self.controller = controller
-        self.setWindowTitle("Cài đặt kết nối")
+        pairing = Path(controller.agent.home) / "cloud-pairing.json"
+        self.cloud_selected = pairing.exists() or pairing.is_symlink()
+        self.setWindowTitle(
+            "Kết nối Cloudflare MCP"
+            if self.cloud_selected
+            else "Cài đặt OpenAI Tunnel cũ"
+        )
         self.setMinimumWidth(580)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(27, 27, 27, 27)
         lay.setSpacing(16)
-        lay.addWidget(label("Kết nối riêng với ChatGPT", "H2"))
+        lay.addWidget(
+            label(
+                "Cloudflare MCP đã ghép nối"
+                if self.cloud_selected
+                else "OpenAI Tunnel (chế độ tương thích)",
+                "H2",
+            )
+        )
+        if self.cloud_selected:
+            lay.addWidget(
+                label(
+                    "Cấu hình ghép nối Cloudflare được giữ nguyên. "
+                    "Bật Cloud Agent ở trang Kết nối và kiểm tra plugin ChatGPT. "
+                    "Không nhập URL Cloudflare vào ô Tunnel ID.",
+                    "Muted",
+                    True,
+                )
+            )
         lay.addWidget(
             label(
                 "Runtime key chỉ lưu trong Windows Credential Manager. Không đưa key vào Chat.",
@@ -142,23 +166,28 @@ class ConnectionDialog(QDialog):
                 True,
             )
         )
-        form = QFormLayout()
+        legacy_form = QWidget(self)
+        form = QFormLayout(legacy_form)
         form.setVerticalSpacing(12)
-        self.tunnel = QLineEdit(controller.config().get("tunnel_id", ""))
+        self.tunnel = QLineEdit(
+            "" if self.cloud_selected else controller.config().get("tunnel_id", "")
+        )
         self.tunnel.setPlaceholderText("tunnel_…")
         form.addRow("Tunnel ID", self.tunnel)
         self.key = QLineEdit()
         self.key.setEchoMode(QLineEdit.EchoMode.Password)
         self.key.setPlaceholderText("Để trống nếu giữ key đã lưu")
         form.addRow("Runtime API key", self.key)
-        lay.addLayout(form)
-        lay.addWidget(
-            label(
-                "Quyền cần thiết: Tunnels Read + Use. Không cần key cho model API.",
-                "Fine",
-                True,
+        lay.addWidget(legacy_form)
+        legacy_form.setVisible(not self.cloud_selected)
+        if not self.cloud_selected:
+            lay.addWidget(
+                label(
+                    "Quyền cần thiết: Tunnels Read + Use. Không cần key cho model API.",
+                    "Fine",
+                    True,
+                )
             )
-        )
         settings = controller.settings()
         self.motion = QCheckBox("Bật chuyển động nhẹ")
         self.motion.setChecked(settings.get("motion", True))
@@ -166,6 +195,7 @@ class ConnectionDialog(QDialog):
         self.auto.setChecked(settings.get("autoconnect", False))
         lay.addWidget(self.motion)
         lay.addWidget(self.auto)
+        self.auto.setVisible(not self.cloud_selected)
         self.error = label("", "Warning", True)
         lay.addWidget(self.error)
         cancel = MotionButton("Hủy")
@@ -176,7 +206,8 @@ class ConnectionDialog(QDialog):
 
     def save(self):
         try:
-            self.controller.configure(self.tunnel.text(), self.key.text())
+            if not self.cloud_selected:
+                self.controller.configure(self.tunnel.text(), self.key.text())
             self.key.clear()
             self.controller.save_settings(
                 {

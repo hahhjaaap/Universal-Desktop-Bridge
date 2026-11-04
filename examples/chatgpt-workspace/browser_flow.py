@@ -1,4 +1,4 @@
-"""Owned headless Edge worker: bounded action chains and a ready-to-read 1 FPS image cache."""
+"""Owned headless Chromium worker: bounded action chains and a ready-to-read 1 FPS image cache."""
 
 import argparse
 import asyncio
@@ -7,19 +7,37 @@ import hashlib
 import http.server
 import json
 import os
-from pathlib import Path
 import sqlite3
 import sys
 import tempfile
 import threading
 import time
 import uuid
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import room
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "browser_deps"))
+
+
+async def launch_supported_browser(chromium):
+    """Use Edge when installed, otherwise Chrome; never mask other launch errors."""
+    try:
+        return await chromium.launch(channel="msedge", headless=True)
+    except Exception as exc:
+        if "distribution 'msedge' is not found" not in str(exc):
+            raise
+    try:
+        return await chromium.launch(channel="chrome", headless=True)
+    except Exception as exc:
+        if "distribution 'chrome' is not found" in str(exc):
+            raise RuntimeError(
+                "UDB browser requires Microsoft Edge or Google Chrome to be installed."
+            ) from exc
+        raise
+
 
 FIELDS = {
     "navigate": {"op", "url"},
@@ -68,7 +86,7 @@ def validate(req):
         op = step["op"]
         if set(step) - FIELDS[op]:
             raise ValueError("Unknown fields for " + op)
-        for key, value in step.items():
+        for value in step.values():
             if not isinstance(value, str) or len(value) > 16000:
                 raise ValueError("Step fields must be bounded strings")
         if op == "navigate":
@@ -134,9 +152,7 @@ class BrowserWorker:
         from playwright.async_api import async_playwright
 
         self.playwright = await async_playwright().start()
-        self.browser = await self.playwright.chromium.launch(
-            channel="msedge", headless=True
-        )
+        self.browser = await launch_supported_browser(self.playwright.chromium)
         self.context = await self.browser.new_context(
             viewport={"width": 1280, "height": 720},
             device_scale_factor=1,

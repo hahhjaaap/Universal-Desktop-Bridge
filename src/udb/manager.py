@@ -277,7 +277,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.configure_button.clicked.connect(self.configure)
         heading.addWidget(self.configure_button)
         self.connect_button = MotionButton("Kết nối", "power", "primary")
-        self.connect_button.clicked.connect(self.toggle_tunnel)
+        self.connect_button.clicked.connect(self.toggle_connection)
         heading.addWidget(self.connect_button)
         band.addLayout(heading)
         health = QHBoxLayout()
@@ -607,9 +607,13 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         return p
 
     def build_connection(self):
+        pairing_path = Path(self.agent.home) / "cloud-pairing.json"
+        self.cloud_preferred = pairing_path.exists() or pairing_path.is_symlink()
         p, lay = self.page(
             "Kết nối & cài đặt",
-            "Kết nối ChatGPT Chat qua tunnel riêng. API key không xuất hiện trong giao diện hay log.",
+            "Đã chọn Cloudflare MCP. Bật Cloud Agent và xác minh công cụ trong ChatGPT."
+            if self.cloud_preferred
+            else "Kết nối ChatGPT qua OpenAI Tunnel cũ hoặc ghép Cloudflare bên dưới.",
         )
         setup = panel()
         setup_layout = QVBoxLayout(setup)
@@ -634,8 +638,10 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
                 self.setup_agent_health,
             ),
             (
-                "2 · Kết nối Tunnel",
-                "Dùng Kết nối bên dưới. Tunnel xanh chưa chứng minh ChatGPT gọi được.",
+                "2 · Cloudflare Agent" if self.cloud_preferred else "2 · OpenAI Tunnel",
+                "Bật Cloud Agent; tiến trình chạy không chứng minh MCP đã kết nối."
+                if self.cloud_preferred
+                else "Dùng Kết nối bên dưới. Tunnel xanh chưa chứng minh ChatGPT gọi được.",
                 self.setup_tunnel_health,
             ),
             (
@@ -656,10 +662,18 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         cl = QVBoxLayout(card)
         cl.setContentsMargins(23, 23, 23, 23)
         cl.setSpacing(15)
-        cl.addWidget(label("Secure MCP Tunnel", "H2"))
         cl.addWidget(
             label(
-                "1. Kiểm tra tác nhân cục bộ → 2. Kiểm tra Tunnel → "
+                "Cloudflare MCP" if self.cloud_preferred else "OpenAI Tunnel (cũ)", "H2"
+            )
+        )
+        cl.addWidget(
+            label(
+                "1. Kiểm tra tác nhân UDB → 2. Bật Cloud Agent → "
+                "3. Gọi công cụ chỉ đọc trong ChatGPT. Cloud Agent chạy "
+                "không chứng minh ChatGPT đã truy cập."
+                if self.cloud_preferred
+                else "1. Kiểm tra tác nhân cục bộ → 2. Kiểm tra Tunnel → "
                 "3. Gọi một công cụ chỉ đọc trong ChatGPT. "
                 "Màu xanh ở Tunnel không chứng minh ChatGPT đã truy cập.",
                 "Muted",
@@ -705,6 +719,11 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         )
         self.cloud_pair_button = MotionButton("Nhập mã mời Cloud", "settings")
         self.cloud_pair_button.clicked.connect(self.cloud_pair)
+        if self.cloud_preferred:
+            self.cloud_pair_button.setEnabled(False)
+            self.cloud_pair_button.setToolTip(
+                "Thiết bị đã có ghép nối Cloudflare; không ghép lại hoặc xóa khóa."
+            )
         self.cloud_session_button = MotionButton("Bật Cloud Agent", "power")
         self.cloud_session_button.clicked.connect(self.toggle_cloud)
         cloud_layout.addLayout(
@@ -992,6 +1011,14 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         worker.signals.done.connect(complete, Qt.ConnectionType.QueuedConnection)
         worker.signals.error.connect(failed, Qt.ConnectionType.QueuedConnection)
         QThreadPool.globalInstance().start(worker)
+
+    def toggle_connection(self):
+        """Use the paired Cloudflare transport; never ask it for a Tunnel ID."""
+        pairing = Path(self.agent.home) / "cloud-pairing.json"
+        if pairing.exists() or pairing.is_symlink():
+            self.toggle_cloud()
+        else:
+            self.toggle_tunnel()
 
     def toggle_tunnel(self):
         if self.controller.tunnel_wanted:

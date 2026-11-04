@@ -16,6 +16,20 @@ KEYS_URL = "https://platform.openai.com/settings/organization/api-keys"
 CHATGPT_URL = "https://chatgpt.com/plugins"
 
 
+def paired_cloud(home):
+    """Return validated public pairing metadata, without reading device secrets.
+
+    A malformed pairing must fail closed, never fall back to Tunnel setup.
+    """
+    path = home / "cloud-pairing.json"
+    if not path.exists() and not path.is_symlink():
+        return None
+    from .cloud_agent import load_pairing
+
+    relay, device_id, _token_path = load_pairing(home)
+    return relay, device_id
+
+
 def _console_stream(stream):
     if os.name != "nt" or stream is None:
         return False
@@ -147,6 +161,19 @@ def run(settings, *, edit=False, local=False):
                 "Runtime check failed. Reinstall the complete Windows standalone release before entering connection details."
             ) from None
     print("Runtime check complete. Step 1: choose online or local mode.")
+    # Cloudflare pairing and OpenAI Tunnel are distinct transports. A paired
+    # machine should never be asked for a legacy Tunnel ID or runtime API key.
+    pairing = None if local else paired_cloud(settings.home)
+    if pairing is not None:
+        relay, device_id = pairing
+        print("Cloudflare MCP is already paired with this Windows profile.")
+        print("Relay: " + relay + " | Device suffix: " + device_id[-8:])
+        print(
+            "Open UDB Manager and choose 'Bật Cloud Agent', or run 'udb cloud-agent'."
+        )
+        print("Then reconnect the exact MCP URL in " + CHATGPT_URL)
+        print("This setup check does not start Cloud Agent or change any grant/key.")
+        return 0
     current = None if local else saved_connection(settings, repair=edit)
     connect = not local and bool(current or edit)
     if not local and not connect:

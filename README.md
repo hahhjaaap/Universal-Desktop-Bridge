@@ -19,12 +19,20 @@
 
 The local HTTP MCP boundary requires authorization, accepts loopback clients only, rejects ambiguous authentication headers and bounds request bodies. These controls do not protect against a compromised Windows account or malicious authorized client. See [ARCHITECTURE.md](ARCHITECTURE.md) for ownership, dispatch and isolation.
 
-## Experimental Cloudflare relay (development branch only)
+## Cloudflare MCP (paired devices)
 
-A private Cloudflare Worker + Durable Object relay and an outbound Windows agent
-are in prototype development. This is **not** a one-click installer or usable
-ChatGPT plugin yet. OAuth and GUI pairing are still pending. See
-[Cloudflare relay prototype](docs/cloudflare-relay-prototype.md).
+UDB includes an opt-in Cloudflare Worker/Durable Object relay, owner-attended
+device pairing, and a Windows outbound Cloud Agent. A paired Windows profile
+uses Cloudflare as its **primary** connection path in the console setup and GUI;
+the older OpenAI Tunnel remains a compatibility fallback for unpaired profiles.
+The Cloudflare connection is **not** automatically deployed or authorized.
+
+For an existing pairing, open UDB Manager → **Kết nối** → **Bật Cloud Agent**.
+Do **not** paste a workers.dev URL into the legacy OpenAI Tunnel ID prompt.
+The Cloudflare Worker deployment, OAuth configuration, device grant and ChatGPT
+tool discovery must each be verified independently: see
+[Cloudflare project-read acceptance](docs/cloudflare-project-read-acceptance.md)
+and [owner pairing guide](docs/pairing-checklist-vi.md).
 
 ### Optional Render observer (development branch only)
 
@@ -86,7 +94,12 @@ udb logs
 udb stop
 ```
 
-To connect a supported ChatGPT workspace, run `udb setup` in your own terminal and follow the displayed tunnel/account instructions. A working local agent is **not** proof that a ChatGPT workspace is connected. Connection secrets are entered in hidden local prompts, not CLI arguments; owner grants are separate from connection settings.
+On a **Cloudflare-paired** Windows profile, `udb setup` and `udb setup --edit`
+recognize the pairing and no longer ask for a legacy Tunnel ID. Open the UDB
+Manager and explicitly enable Cloud Agent; connect the matching MCP endpoint
+through ChatGPT Plugins. On **unpaired** profiles, the old OpenAI Tunnel setup
+remains as a compatibility option. A healthy local agent is **not** proof that
+ChatGPT can invoke its MCP tools. Secret entry and owner grants remain local.
 
 For use from a second device, or when a ChatGPT plugin claims to be Connected but a tool returns `Session terminated`, see [Remote-device diagnostics](docs/remote-device-troubleshooting.md). Check the local tunnel and the ChatGPT session independently; never blindly replay a timed-out mutation.
 

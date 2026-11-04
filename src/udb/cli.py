@@ -274,6 +274,11 @@ def _run_setup(args: argparse.Namespace, settings: Settings) -> int:
 def _prepare_startup(args: argparse.Namespace, settings: Settings) -> int | None:
     from . import onboarding
 
+    # Keep the local manager available without accidentally booting an obsolete
+    # OpenAI Tunnel when a Cloudflare device is already paired. Cloud Agent
+    # still requires the owner's separate attended opt-in.
+    if not (args.offline or args.online) and onboarding.paired_cloud(settings.home):
+        args.offline = True
     startup_state = {}
     if not (args.offline or args.online):
         preferred = onboarding.saved_mode(settings)

@@ -169,7 +169,9 @@ class ConnectionDialog(QDialog):
         legacy_form = QWidget(self)
         form = QFormLayout(legacy_form)
         form.setVerticalSpacing(12)
-        self.tunnel = QLineEdit(controller.config().get("tunnel_id", ""))
+        self.tunnel = QLineEdit(
+            "" if self.cloud_selected else controller.config().get("tunnel_id", "")
+        )
         self.tunnel.setPlaceholderText("tunnel_…")
         form.addRow("Tunnel ID", self.tunnel)
         self.key = QLineEdit()

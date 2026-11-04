@@ -7,13 +7,13 @@ import hashlib
 import http.server
 import json
 import os
-from pathlib import Path
 import sqlite3
 import sys
 import tempfile
 import threading
 import time
 import uuid
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import room
@@ -68,7 +68,7 @@ def validate(req):
         op = step["op"]
         if set(step) - FIELDS[op]:
             raise ValueError("Unknown fields for " + op)
-        for key, value in step.items():
+        for value in step.values():
             if not isinstance(value, str) or len(value) > 16000:
                 raise ValueError("Step fields must be bounded strings")
         if op == "navigate":

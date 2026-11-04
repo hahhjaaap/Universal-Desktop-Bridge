@@ -43,7 +43,9 @@ class TaskPool:
                     path = self.folder / f"slot-{number}.lock"
                     reject_links(path)
                     fd = os.open(
-                        path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600
+                        path,
+                        os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0),
+                        0o600,
                     )
                     stream = os.fdopen(fd, "r+b", buffering=0)
                     try:

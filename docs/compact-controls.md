@@ -13,7 +13,7 @@ first; closing the compact panel returns to it.
 has a collapsible **200 px → 72 px** left sidebar with stable accessible route
 names and tooltips. Under **Kết nối → Giao diện ứng dụng**, choose
 **Theo hệ thống Windows**, **Sáng**, or **Tối**. The choice is a local
-appearance preference; no permissions or tunnel credentials are changed.
+appearance preference; no permissions or Cloudflare device credentials are changed.
 The Windows system color scheme is checked at startup and when Qt reports
 a color-scheme change; unsupported platforms retain startup detection. See the
 [Desktop GUI guide](gui-user-guide.md) for details.
@@ -22,7 +22,7 @@ a color-scheme change; unsupported platforms retain startup detection. See the
 
 | Action | Scope |
 | --- | --- |
-| Kết nối / Ngắt kết nối | The existing ChatGPT tunnel controls |
+| Kết nối / Ngắt kết nối | The local owner-controlled Cloud Agent on/off control |
 | Tạm dừng / Tiếp tục Windows | The local input-pause latch; grants remain unchanged |
 | Tôi đăng nhập browser / Trả về cho AI | The existing UDB-owned browser handoff; disabled during unavailable capacity or another local operation |
 | Đóng phiên nền | Disable new host sessions and close UDB browser/workspace sessions |

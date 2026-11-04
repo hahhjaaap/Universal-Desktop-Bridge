@@ -197,7 +197,11 @@ def main() -> int:
             "oauth_challenge_missing_or_wrong_status",
             "Access-aware Worker code has not been deployed",
         }
-        reason = str(exc) if isinstance(exc, ValueError) and str(exc) in known else type(exc).__name__
+        reason = (
+            str(exc)
+            if isinstance(exc, ValueError) and str(exc) in known
+            else type(exc).__name__
+        )
         print(json.dumps({"result": "failed", "reason": reason}))
         return 1
 

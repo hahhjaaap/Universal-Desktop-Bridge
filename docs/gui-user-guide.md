@@ -108,8 +108,8 @@ updates from other chats, and check task revisions before modifying state.
 The Common Room panel does not run scripts from the registered project, start a
 browser worker, grant desktop control or authenticate chat identities. Its
 status labels distinguish cache freshness from live connectivity. It opens
-only after the local owner chooses a project. It is not included in the old
-published v0.10.0 installer.
+only after the local owner chooses a project. Availability in an installed executable depends on its exact release; check
+`udb --version` and the installed GUI rather than inferring it from source.
 
 ## Navigation and quick controls
 
@@ -134,13 +134,14 @@ session/job controls when necessary.
 
 ## First-run onboarding in Connection settings
 
-The **Kết nối** page displays a three-step status guide: **Agent trên
-Windows** (local worker heartbeat), **Kết nối Tunnel** (transport state),
-and **Xác minh tại ChatGPT** (requires a separate read-only UDB tool call
-from ChatGPT). The first two indicators track actual local status and switch
-to unknown if their sources fail. The third deliberately remains
-**Chưa xác minh** because tunnel health cannot authenticate a ChatGPT
-invocation. The guide does not store a password, test a remote endpoint,
+The **Kết nối** page displays three distinct steps: **Agent trên Windows**
+(local worker heartbeat), **Cloud Agent** on already paired Cloudflare
+profiles (or **Kết nối Tunnel** on unpaired legacy profiles), and
+**Xác minh tại ChatGPT** (requires a separate read-only UDB tool call).
+The Cloud Agent indicator reports its **local process** state, not a verified
+remote WebSocket/OAuth session. The ChatGPT step stays **Chưa xác minh**
+until tested from the actual conversation. Unreadable local status must not
+retain a stale positive state. The guide does not store a password, test a remote endpoint,
 start a browser, approve an operation or grant computer permissions.
 The existing **Sao chép lệnh kiểm tra** control only copies the local
 diagnostics command.
@@ -152,28 +153,42 @@ The top of **Dự án** displays three compact indicators:
 | Indicator | What it verifies | What it does not verify |
 | --- | --- | --- |
 | **Agent** | Host worker reported a local readiness heartbeat | Authorized computer access or ChatGPT RPC |
-| **Tunnel** | Local tunnel health/transport is running and ready | Whether ChatGPT discovered any tools |
+| **Cloud Agent / legacy Tunnel** | Cloud Agent process state on paired profiles; Tunnel health on unpaired profiles | Whether Worker is deployed, OAuth/grants are valid or ChatGPT discovered tools |
 | **ChatGPT** | Always **Chưa xác minh** (unverified) in this GUI release | No GUI-side network test is invented |
 
-On a failed status refresh, the corresponding Agent or Tunnel indicator falls
-back to **Chưa xác định** rather than displaying its previous green value.
+On a failed local status refresh, the corresponding Agent/transport indicator
+must not retain a stale verified-ready state.
 Status is read-only; this feature sends no remote probe, stores no credential
 and grants no access. To verify end-to-end ChatGPT connectivity, run an actual
 **read-only** UDB tool in ChatGPT.
 
+
+
+For an already paired device, the main **Kết nối** action starts/stops the
+**Cloud Agent** flow rather than asking for an OpenAI Tunnel ID. The attended
+`udb setup --edit` command recognizes the pairing; **do not paste a
+workers.dev URL into a legacy Tunnel prompt**. The pairing and device token
+are not erased when the GUI changes transport. A missing or invalid pairing
+must not silently be treated as authorized. The Cloudflare `udb:read`
+gateway only exposes explicitly granted metadata/project read tools; no
+write, terminal or desktop access follows automatically.
+
 ## Connection status is not authorization
 
 - **Local agent:** the worker is reachable on this PC.
-- **Tunnel ready:** this PC's outbound tunnel is ready; this does *not* prove a
-  ChatGPT workspace can discover and call UDB tools.
+- **Cloud Agent / legacy Tunnel:** process running or Tunnel ready is a local
+  transport observation. It does *not* prove that Cloudflare Worker, device
+  OAuth/grants, MCP discovery or ChatGPT tool invocation succeeded.
 - **ChatGPT invocation:** confirm in ChatGPT with a *read-only* status tool.
 - **Permission grant:** separately authorized by the owner on the Windows
   machine; not inferred from any connected indicator.
 
 The current source does **not** implement production one-plugin Multi-PC
 selection. Do not infer another PC from a green connection label; distinguish
-separate MCP connections and tunnel IDs. See
-[remote-device troubleshooting](remote-device-troubleshooting.md).
+the exact Cloudflare device ID and owner grants on paired devices (or
+separate Tunnel IDs in legacy mode). See
+[remote-device troubleshooting](remote-device-troubleshooting.md) and
+[Cloudflare deployment acceptance](cloudflare-project-read-acceptance.md).
 
 ## Security page: distinguish actual protection boundaries
 

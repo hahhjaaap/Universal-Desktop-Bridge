@@ -302,10 +302,20 @@ def remote_session_action(report: dict, *, offline: bool) -> str:
 
 def doctor(home: Path, report: dict) -> list[dict]:
     from .config import effective
-    from .onboarding import saved_mode
+    from .onboarding import paired_cloud, saved_mode
 
     checks = []
     settings = effective(home)
+    pair_path = home / "cloud-pairing.json"
+    has_pairing = pair_path.exists() or pair_path.is_symlink()
+    cloud_paired = False
+    if has_pairing:
+        try:
+            cloud_paired = paired_cloud(home) is not None
+        except (OSError, ValueError, KeyError, TypeError):
+            # Keep diagnostics read-only. A corrupt or linked pairing must not
+            # be treated as a working device or silently fall back to Tunnel.
+            pass
     try:
         mode = saved_mode(settings)
         mode_valid = True
@@ -324,16 +334,22 @@ def doctor(home: Path, report: dict) -> list[dict]:
             else "Run udb setup to select a valid startup mode.",
         )
     )
-    try:
-        cfg = read_object(home / "state" / "connection.json")
-        valid = is_tunnel_id(cfg.get("tunnel_id"))
-    except (OSError, ValueError, CommandError):
-        valid = False
+    valid = cloud_paired
+    if not has_pairing:
+        try:
+            cfg = read_object(home / "state" / "connection.json")
+            valid = is_tunnel_id(cfg.get("tunnel_id"))
+        except (OSError, ValueError, CommandError):
+            valid = False
     checks.append(
         dict(
             check="connection_configuration",
-            ok=None if offline else valid,
-            action="Already configured."
+            ok=valid if has_pairing else None if offline else valid,
+            action="Cloudflare pairing metadata valid; OAuth, grants and live MCP not verified."
+            if cloud_paired
+            else "Cloudflare pairing invalid; inspect it on the original Windows computer."
+            if has_pairing
+            else "Already configured."
             if valid
             else "Not required in local mode."
             if offline
@@ -350,8 +366,12 @@ def doctor(home: Path, report: dict) -> list[dict]:
     checks.append(
         dict(
             check="local_tunnel",
-            ok=None if offline else report["local_tunnel_ready"],
-            action="Not required in local mode." if offline else report["next_action"],
+            ok=None if has_pairing or offline else report["local_tunnel_ready"],
+            action="Not used for Cloudflare; enable Cloud Agent and verify MCP separately."
+            if has_pairing
+            else "Not required in local mode."
+            if offline
+            else report["next_action"],
         )
     )
     from .components import runtime_report
@@ -372,8 +392,10 @@ def doctor(home: Path, report: dict) -> list[dict]:
         checks.append(
             dict(
                 check="tunnel_component",
-                ok=None if offline else bundled,
-                action="Available."
+                ok=None if has_pairing or offline else bundled,
+                action="Legacy Tunnel helper not required for Cloudflare."
+                if has_pairing
+                else "Available."
                 if bundled
                 else "Install the Windows standalone release to include tunnel-client.",
             )
@@ -447,14 +469,18 @@ def doctor(home: Path, report: dict) -> list[dict]:
         dict(
             check="credentials",
             ok=None,
-            action="Keys are not read by doctor. If authentication fails, use udb setup --edit in your own terminal.",
+            action="Cloudflare device tokens and OAuth credentials are not inspected by doctor."
+            if has_pairing
+            else "Keys are not read by doctor. If authentication fails, use udb setup --edit in your own terminal.",
         )
     )
     checks.append(
         dict(
             check="chatgpt_session",
             ok=None,
-            action=remote_session_action(report, offline=offline),
+            action="Cloudflare MCP not verified. Check the paired Cloud Agent, Worker, OAuth and device grant; invoke bridge_status in ChatGPT."
+            if has_pairing
+            else remote_session_action(report, offline=offline),
         )
     )
     return checks

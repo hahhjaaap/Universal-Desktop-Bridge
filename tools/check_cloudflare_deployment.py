@@ -21,7 +21,14 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
-def check(relay: str, device_id: str, opener=None, *, auth_mode="jwt") -> dict:
+def check(
+    relay: str,
+    device_id: str,
+    opener=None,
+    *,
+    auth_mode="jwt",
+    require_project_read=False,
+) -> dict:
     if auth_mode not in {"jwt", "cloudflare-access"}:
         raise ValueError("Unknown authentication mode")
     # Reject unexpected origins before making any unauthenticated network call.
@@ -68,6 +75,10 @@ def check(relay: str, device_id: str, opener=None, *, auth_mode="jwt") -> dict:
         if headers.get("X-UDB-Project-Read-Capable") == "1"
         else "not_advertised"
     )
+    if require_project_read and report["project_read_capability"] != "deployed":
+        # Do not turn an obsolete public Worker health response into an
+        # apparent acceptance success. This says nothing about owner grants.
+        raise ValueError("project_read_not_advertised")
 
     if auth_mode == "jwt":
         metadata_value, _ = read_json(metadata)
@@ -97,7 +108,7 @@ def check(relay: str, device_id: str, opener=None, *, auth_mode="jwt") -> dict:
     except HTTPError as exc:
         challenge = exc.headers.get("WWW-Authenticate", "")
         if exc.code != 401 or "resource_metadata=" not in challenge:
-            raise ValueError("Expected OAuth authentication challenge") from None
+            raise ValueError("oauth_challenge_missing_or_wrong_status") from None
         if auth_mode == "cloudflare-access":
             # A 403, an internal JWT challenge, or a fake string containing
             # "cloudflare" cannot establish Managed OAuth readiness. Fetch
@@ -159,16 +170,35 @@ def main() -> int:
         default="jwt",
         help="Identity layer to check (default: jwt)",
     )
+    parser.add_argument(
+        "--require-project-read",
+        action="store_true",
+        help="Fail unless deployed Worker advertises project-read support",
+    )
     args = parser.parse_args()
     try:
         print(
             json.dumps(
-                check(args.relay, args.device_id, auth_mode=args.auth_mode), indent=2
+                check(
+                    args.relay,
+                    args.device_id,
+                    auth_mode=args.auth_mode,
+                    require_project_read=args.require_project_read,
+                ),
+                indent=2,
             )
         )
         return 0
     except (ValueError, HTTPError, URLError, OSError) as exc:
-        print(json.dumps({"result": "failed", "reason": type(exc).__name__}))
+        # Only expose audited, fixed diagnostic codes. Never echo responses,
+        # headers, device IDs, URLs, tokens or arbitrary upstream messages.
+        known = {
+            "project_read_not_advertised",
+            "oauth_challenge_missing_or_wrong_status",
+            "Access-aware Worker code has not been deployed",
+        }
+        reason = str(exc) if isinstance(exc, ValueError) and str(exc) in known else type(exc).__name__
+        print(json.dumps({"result": "failed", "reason": reason}))
         return 1
 
 

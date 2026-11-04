@@ -96,9 +96,7 @@ class SourceDialog(QDialog):
             self.files.addItem(item)
         if listing.get("next_offset") is not None:
             more = QListWidgetItem("Xem thêm tệp…")
-            more.setData(
-                Qt.ItemDataRole.UserRole, {"more": listing["next_offset"]}
-            )
+            more.setData(Qt.ItemDataRole.UserRole, {"more": listing["next_offset"]})
             self.files.addItem(more)
 
     def open_item(self, item):

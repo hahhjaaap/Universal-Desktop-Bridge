@@ -155,7 +155,7 @@ def standalone_package(base, destination, asset_root, components):
         "Stop it before changing connection modes or opening the settings GUI. "
         "To use optional computer access, run .\\udb.exe --access computer in your own attended terminal; "
         "no permission is granted by installation or tests.\n\n"
-        "ChatGPT connectivity still needs network access, account configuration and the supported tunnel service. "
+        "ChatGPT connectivity requires a paired device, Cloudflare Access and a running UDB cloud agent. "
         "Bundled helper versions/hashes are listed by runtime and build-info. "
         "Private credentials, grants and journals are stored in the owner's application data, never in this EXE or ZIP. "
         "An existing portable installation retains its selected home and settings. "

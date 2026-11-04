@@ -251,11 +251,11 @@ def test_controller_shutdown_still_stops_other_children_after_host_failure(
             raise OSError("Simulated host close failure")
 
     controller.host_service = Host()
-    controller.children = {"tunnel": object(), "mcp": object()}
+    controller.children = {"cloud": object(), "mcp": object()}
     monkeypatch.setattr(controller, "stop_process", lambda name: attempts.append(name))
     with pytest.raises((OSError, PolicyError)):
         controller.close()
-    assert attempts == ["host", "tunnel", "mcp"]
+    assert attempts == ["host", "cloud", "mcp"]
     controller.host_service = None
     controller.children.clear()
     controller.close()

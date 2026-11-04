@@ -36,16 +36,19 @@ def cloud_indicator(state: Mapping[str, object]) -> HealthIndicator:
     wanted = state.get("cloud_wanted") is True
     if running:
         return HealthIndicator(
-            "Đang chạy", "ready",
+            "Đang chạy",
+            "ready",
             "Tiến trình Cloud Agent đang chạy; cần gọi bridge_status tại ChatGPT để xác minh.",
         )
     if wanted:
         return HealthIndicator(
-            "Đang thử lại", "paused",
+            "Đang thử lại",
+            "paused",
             "Cloud Agent tạm dừng hoặc đang thử kết nối lại, không tự phát lại công cụ.",
         )
     return HealthIndicator(
-        "Đang tắt", "neutral",
+        "Đang tắt",
+        "neutral",
         "Cloud Agent chưa bật. Ghép nối thiết bị rồi bật để sử dụng ChatGPT.",
     )
 

@@ -23,9 +23,12 @@ Agent process readiness does not prove an authenticated ChatGPT tool call.
 
 1. On the original Windows computer, run `udb status --json` and
    `udb doctor --json` in a local terminal. Neither command creates grants.
-2. Check `manager_running`, `local_tunnel_ready`, and the
-   `chatgpt_session` doctor check separately. A successful local health probe
-   cannot validate the ChatGPT session from another device.
+2. Check `manager_running`, the **selected transport** and the
+   `chatgpt_session` doctor check separately. On paired Cloudflare devices,
+   `local_tunnel` and `tunnel_component` are not applicable; a valid
+   `connection_configuration` only confirms pairing metadata, not OAuth
+   or the live connection. A local health probe cannot validate the ChatGPT
+   session from another device.
 3. From the remote device, call `bridge_status` in ChatGPT. When it succeeds,
    verify the reported version and project scope before attempting other tools.
 4. If a plugin reports **Connected** but tool calls return
@@ -33,9 +36,11 @@ Agent process readiness does not prove an authenticated ChatGPT tool call.
    retry the **read-only** `bridge_status` check. If it still fails, inspect
    `udb doctor --json` and redacted `udb logs --details` on the original
    computer. Do not share keys or raw private logs in chat.
-5. If the local tunnel is unavailable, troubleshoot the Windows agent and
-   network first. A plugin UI badge alone is not sufficient evidence of
-   connectivity.
+5. If Cloudflare is selected, inspect **Cloud Agent**, Worker deployment,
+   Access/OAuth grants and the current plugin catalog separately. A Worker
+   `/health` 200 or a Cloud Agent running indicator is insufficient. In
+   legacy Tunnel mode, troubleshoot its distinct local Tunnel state and
+   network. A plugin badge alone never proves end-to-end connectivity.
 
 ## When two computers use the same ChatGPT account
 
@@ -44,33 +49,28 @@ Windows **host machine** are different identities. A green local UDB status on
 two computers does **not** establish that one ChatGPT connection can
 distinguish them.
 
-For the currently published UDB release, prefer this isolation test:
+Use an **explicit device-based** isolation test (no automatic host routing):
 
-1. On each PC, run `udb status --json` and `udb doctor --json` locally.
-   Confirm each machine's agent and local tunnel readiness separately.
-2. In the attended `udb setup --edit` connection settings, verify that each
-   intended machine has its **own** Tunnel ID. Do not paste any Tunnel ID or
-   API key into a public issue or chat.
-3. Create two distinguishable MCP connections in the appropriate ChatGPT
-   workspace, each pointing to its matching tunnel. Enable the intended
-   connection in the new conversation before discovery.
-4. Call `bridge_status` as a read-only test on *each connection*.
-   Confirm machine identity separately in local redacted UDB activity logs;
-   the current `bridge_status` payload does not guarantee a unique public
-   machine ID.
-5. If only PC A responds while PC B says `Session terminated`, check PC B's
-   tunnel, plugin binding and discovery. The symptom alone does **not**
-   establish a specific collision in OpenAI's infrastructure.
+1. On each computer, run `udb status --json` and `udb doctor --json`
+   locally, and confirm its configured transport and paired device.
+2. On Cloudflare-paired hosts, check the **distinct MCP device URL**
+   (`/v1/devices/DEVICE_ID/mcp`) and the approved subject/device tool grant.
+   Start only the intended Cloud Agent. Do not expose device credentials in
+   chat. For unpaired legacy Tunnel hosts, use separate Tunnel IDs and
+   distinguishable connections.
+3. In ChatGPT, connect to the **specific** MCP endpoint and refresh its tool
+   catalog; a Connected badge does not prove tool invocation.
+4. Call read-only `bridge_status` and (when separately granted) scoped
+   `list_projects` or `read_file` to distinguish the machines. Verify the
+   actual selected project and read result rather than assuming a unique
+   public machine identifier from `bridge_status`.
+5. If one host responds and another does not, diagnose the failed host's
+   Cloud Agent/Worker/OAuth/grant/plugin path (or legacy Tunnel binding) in
+   order. Do not infer a routing collision without evidence.
 
-Do not run two UDB installations with the same Tunnel ID and assume that ChatGPT
-will load-balance, switch or choose the intended machine. Do not turn off
-endpoint authentication or share credentials as a workaround.
-
-For a single plugin selecting machines on different Wi-Fi networks, see
-[experimental Multi-PC work in draft PR #34](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/34).
-Its Tailscale-based router is **not** in the published installer or current
-`main`; use only after separate Windows and two-host verification. Tailscale
-networking alone does not implement MCP routing.
+Do not reuse device credentials or legacy Tunnel IDs between machines, or
+disable endpoint authentication to make a test pass. **The current source
+does not guarantee a production one-plugin Multi-PC router.**
 
 A computer that is powered off, asleep or disconnected from the Internet
 cannot serve remote requests. Network access from a second device is a

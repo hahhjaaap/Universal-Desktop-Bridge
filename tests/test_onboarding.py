@@ -357,3 +357,37 @@ def test_malformed_cloud_pairing_never_falls_back_to_tunnel_prompt(
     with pytest.raises((ValueError, KeyError)):
         onboarding.run(Settings(home, home / "work"), edit=True)
     assert calls == []
+
+
+def test_paired_cloudflare_default_start_keeps_local_agent_without_legacy_tunnel(
+    tmp_path, monkeypatch
+):
+    home = tmp_path / "owner"
+    home.mkdir()
+    (home / "cloud-pairing.json").write_text(
+        '{"relay":"https://example.workers.dev","device_id":"' + "a" * 32 + '"}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        owner_command, "headless_state", lambda _: {"connection_mode": "online"}
+    )
+    args = SimpleNamespace(
+        offline=False, online=False, detach=False, json=False, access=None
+    )
+    assert cli._prepare_startup(args, Settings(home, home / "work")) is None
+    assert args.offline is True
+    assert args.online is False
+
+
+def test_paired_cloudflare_keeps_explicit_legacy_online_override(tmp_path):
+    home = tmp_path / "owner"
+    home.mkdir()
+    (home / "cloud-pairing.json").write_text(
+        '{"relay":"https://example.workers.dev","device_id":"' + "a" * 32 + '"}',
+        encoding="utf-8",
+    )
+    args = SimpleNamespace(
+        offline=False, online=True, detach=False, json=False, access=None
+    )
+    assert cli._prepare_startup(args, Settings(home, home / "work")) is None
+    assert args.online is True and args.offline is False

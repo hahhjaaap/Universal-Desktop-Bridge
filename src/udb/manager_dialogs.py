@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QSplitter,
     QTabWidget,
     QVBoxLayout,
+    QWidget,
 )
 
 from .manager_widgets import DiffHighlighter, MotionButton, Worker, icon, label, row

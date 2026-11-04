@@ -19,12 +19,30 @@
 
 The local HTTP MCP boundary requires authorization, accepts loopback clients only, rejects ambiguous authentication headers and bounds request bodies. These controls do not protect against a compromised Windows account or malicious authorized client. See [ARCHITECTURE.md](ARCHITECTURE.md) for ownership, dispatch and isolation.
 
-## Experimental Cloudflare relay (development branch only)
+## Cloudflare-only connection
 
-A private Cloudflare Worker + Durable Object relay and an outbound Windows agent
-are in prototype development. This is **not** a one-click installer or usable
-ChatGPT plugin yet. OAuth and GUI pairing are still pending. See
-[Cloudflare relay prototype](docs/cloudflare-relay-prototype.md).
+UDB uses one remote connection path: **ChatGPT → Cloudflare Access (OAuth) →
+private Cloudflare Worker/Durable Object → outbound Windows Cloud Agent →
+local MCP stdio proxy**. The stdio proxy is internal to UDB; it is **not**
+a second remote tunnel or a separate user-configurable connection.
+
+- Run `udb cloud-pair` once in an attended local terminal using an invitation
+  issued by the owner of the Cloudflare deployment. Device tokens are stored
+  in Windows Credential Manager; the pairing file contains only relay origin
+  and device ID. Re-pairing an existing device requires owner revocation.
+- Start with `udb start`, or run `udb cloud-agent` directly as a separate
+  explicitly managed process. `udb status` reports that the process is
+  running; this does not establish successful OAuth or ChatGPT authorization.
+- Cloudflare Access restricts the MCP endpoint to an approved identity and
+  device. Its public tool catalog includes only `bridge_status` and
+  `list_projects` unless the owner updates audited grants. Local computer
+  permissions remain separate.
+- For troubleshooting, test a real read-only tool in ChatGPT. Unknown outcomes
+  must never be retried automatically, especially for actions with side effects.
+
+No OpenAI Tunnel ID, OpenAI Tunnel API key, `tunnel-client.exe` or direct local
+MCP connector configuration is needed. The Cloudflare relay and its owner-only
+policies must already be deployed; installation alone does not provision it.
 
 ### Optional Render observer (development branch only)
 
@@ -86,33 +104,25 @@ udb logs
 udb stop
 ```
 
-To connect a supported ChatGPT workspace, run `udb setup` in your own terminal and follow the displayed tunnel/account instructions. A working local agent is **not** proof that a ChatGPT workspace is connected. Connection secrets are entered in hidden local prompts, not CLI arguments; owner grants are separate from connection settings.
+To connect ChatGPT, run `udb setup` in an attended terminal, then pair
+with Cloudflare, start the Cloud Agent and select `udb-cloudflare` in ChatGPT.
+A running Cloud Agent is **not** proof of an authorized ChatGPT connection.
+See [Remote-device diagnostics](docs/remote-device-troubleshooting.md).
 
-For use from a second device, or when a ChatGPT plugin claims to be Connected but a tool returns `Session terminated`, see [Remote-device diagnostics](docs/remote-device-troubleshooting.md). Check the local tunnel and the ChatGPT session independently; never blindly replay a timed-out mutation.
-
-**Multiple Windows computers:** Logging into the same ChatGPT account does not make an existing MCP connection select a different PC automatically. For two live PCs, use separate tunnel IDs and distinguishable MCP connections until an explicit device router is installed and verified. **Experimental one-plugin Multi-PC routing** is being developed separately in [draft PR #34](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/34) for owner-managed Tailscale connections across different Wi-Fi networks. It is **not part of the published v0.10.0 installer or current `main`**, and has not been verified end-to-end across two real networks.
+Multiple PCs require separate Cloudflare device IDs and grants. A ChatGPT
+account alone cannot select or route between PCs; specify the intended device
+endpoint in the plugin. Do not reuse a device token between machines.
 
 ### When ChatGPT cannot call UDB tools
 
-A green local health indicator and an active tunnel do **not** prove that the
-current ChatGPT conversation has discovered the MCP tool catalog. Troubleshoot
-in order, without resetting credentials or loosening permissions:
-
-1. Run `udb status --json` and `udb doctor --json` on the intended computer.
-   Check local agent, tunnel and connection diagnostics separately.
-2. In ChatGPT, confirm that the **intended** UDB connection is enabled and that
-   UDB tools are actually available to the conversation. A Connected label alone
-   is not an end-to-end tool invocation test.
-3. Test a read-only UDB status tool before file writes or terminal commands.
-   Record whether discovery or invocation failed; these are different problems.
-4. If two computers use UDB, verify which machine the current connection targets.
-   Never infer the selected host from a local readiness indicator on either PC.
-5. Collect redacted `udb logs` and diagnostic output for a bug report. Never
-   paste access tokens, tunnel secrets, or private file contents into an issue.
-
-The manager's **Tunnel đã kết nối** indicator means only the tunnel is ready;
-end-to-end ChatGPT tool discovery must be checked from the ChatGPT side.
-
+1. Run `udb status --json` and `udb doctor --json` locally. Check the
+   Cloud Agent process and owner pairing separately; never paste device tokens.
+2. In ChatGPT confirm the intended `udb-cloudflare` plugin lists
+   `bridge_status` and `list_projects`. Connected does not mean tools loaded.
+3. Invoke `bridge_status` from ChatGPT. If discovery fails, check Cloudflare
+   Access OAuth and the Worker; if the device is offline, check the Cloud Agent.
+4. Do not automatically replay a timed-out action. Verify the result first.
+5. Collect redacted logs; do not share account credentials or private files.
 
 ### Common commands
 
@@ -126,7 +136,7 @@ end-to-end ChatGPT tool discovery must be checked from the ChatGPT side.
 | `udb update --check` | Check the latest published stable release |
 | `udb update` / `udb rollback` | Managed installation update / previous-release rollback |
 | `udb autostart enable` / `udb autostart disable` | Opt in/out of startup at Windows sign-in |
-| `udb mcp-config --home PATH --root PATH` | Print a local stdio MCP configuration |
+| `udb cloud-pair` / `udb cloud-agent` | Attended Cloudflare pairing and outbound device connection |
 | `udb --access computer` | Attended local owner opt-in to broader computer access |
 
 Updates and rollback must be started **outside UDB's own running tool job**. They preserve the owner's state, not a snapshot of that state. Keep independent backups. Never assume a timed-out update failed; inspect `udb --version` and `udb status` first.
@@ -191,7 +201,7 @@ udb status --watch --json --interval 1 --count 10
 udb reconnect --wait 30 --json
 ```
 
-The status viewer opens no GUI and reports heartbeat/uptime, local tunnel and worker readiness, active action/batch progress, the last operation and recent tool outcomes. It omits command bodies, page contents, selectors and result payloads. The viewer does not start the manager or change permissions. `udb reconnect` requests a new tunnel for the exact live headless process, preserving local grants and the host worker. Use it outside active tool calls: reconnection can drop an in-flight response; inspect status/page state before retrying uncertain input. It does not update the saved offline/online startup preference.
+The status viewer opens no GUI and reports heartbeat/uptime, Cloud Agent process and worker readiness, active action/batch progress, the last operation and recent tool outcomes. It omits command bodies, page contents, selectors and result payloads. The viewer does not start the manager or change permissions. `udb reconnect` requests a fresh Cloud Agent process for the exact live headless manager, preserving local grants and the host worker. Use it outside active tool calls: reconnection can drop an in-flight response; inspect status/page state before retrying uncertain input. It does not update the saved offline/online startup preference.
 
 `bridge_status.readiness` distinguishes a responding MCP transport from worker readiness, pause and owner grants, and includes the next local action. If a client exposes only status/project tools, refresh its MCP catalog after updating; a plugin with a fixed tool allowlist must also expose the canonical browser tools. Reconnection alone cannot add tools to that allowlist.
 
@@ -289,12 +299,12 @@ changes computer permissions, credentials or MCP access. The desktop shell
 uses shared Qt theme tokens and visible keyboard focus states, but it has not
 yet completed all enterprise GUI / accessibility milestones.
 
-The Overview status strip separately reports the local **Agent**, **Tunnel**
+The Overview status strip separately reports the local **Agent**, **Cloud Agent**
 and **ChatGPT** verification levels. ChatGPT remains **Chưa xác minh**
 (unverified) until independently tested from the ChatGPT conversation. A
-failed local/tunnel status read becomes **Chưa xác định** rather than
-retaining a stale green indicator. The **Tunnel đã kết nối** indicator
-means the local tunnel is ready, **not** that ChatGPT has verified MCP
+failed local/Cloud Agent status read becomes **Chưa xác định** rather than
+retaining a stale green indicator. The **Cloud Agent đang chạy** indicator
+means the Cloud Agent is ready, **not** that ChatGPT has verified MCP
 tool discovery and invocation. The emergency
 Windows pause controls stay distinct from background browser and job lifecycle.
 For the complete user-facing behavior and security limitations, read
@@ -324,7 +334,7 @@ the existing allow-listed `motion` preference in `gui.json`; it cannot
 change browser, project or computer permissions.
 
 The full manager also includes a persistent themed page header with an
-explicit **Tunnel** (not ChatGPT) indicator. The **Hoạt động MCP** tab
+explicit **Cloud Agent** (not ChatGPT) indicator. The **Hoạt động MCP** tab
 displays a bounded, sanitized tool activity timeline. Owner-triggered audit
 export writes only timestamps, tool labels and statuses to a new JSON file,
 after confirmation, and never overwrites an existing file.
@@ -345,15 +355,15 @@ assessment or the state of every background process. Failed reads show
 **Chưa xác minh** instead of retaining stale positive states.
 
 The **Kết nối** page now has a native three-step onboarding panel showing
-separately whether (1) the local Agent responds, (2) the local Tunnel is
-ready, and (3) ChatGPT has actually called an UDB tool. The third step stays
+separately whether (1) the local Agent responds, (2) the Cloud Agent is
+running, and (3) ChatGPT has actually called an UDB tool. The third step stays
 **Chưa xác minh** until verified directly in ChatGPT; no remote grant or
 invented end-to-end success state is introduced. Failed local reads clear
 stale ready indicators.
 
 The app header now also carries an always-visible, read-only **Windows
 privilege** warning: an enabled broad unsandboxed computer grant is distinct
-from project permissions and Tunnel readiness. Unknown/unreadable grant
+from project permissions and Cloud Agent status. Unknown/unreadable grant
 states appear neutral, never as a verified safe or authorized result.
 
 The **Bảo vệ** page now shows a read-only indicator of optional full Windows

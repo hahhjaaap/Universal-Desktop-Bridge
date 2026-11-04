@@ -24,8 +24,15 @@ Cloudflare deployment. ChatGPT registration is **not** automatic.
 }
 ```
 
-- Only `bridge_status` and `list_projects` are permitted across this experimental
-  gateway, regardless of any other entries in the environment.
+- The remote `udb:read` scope permits **only** these explicitly granted,
+  registered-project read tools: `bridge_status`, `list_projects`, `list_files`,
+  `read_file`, `search_files`, `check_python_syntax`. An authenticated owner must
+  opt each tool into the device/subject `UDB_DEVICE_GRANTS` configuration;
+  absent entries remain inaccessible. File access is scoped by the local UDB
+  project registry and protected-path checks.
+- Write, terminal, desktop, host-computer, legacy alias and approval tools
+  remain unavailable through this read-only Cloudflare gateway. Do not bypass
+  this restriction by adding them to the `udb:read` allowlist.
 - All unconfigured or unauthorized requests are denied. Local UDB owner grants
   still apply independently. There is no anonymous mode or remote write access.
 - A health check on Render confirms only the Cloudflare health endpoint, not

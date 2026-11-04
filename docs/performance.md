@@ -110,3 +110,54 @@ This reduces idle disk reads and unnecessary text processing when the owner
 leaves the manager open on an already-completed task. It does not change job
 execution or log retention. The regression suite checks that terminal jobs
 skip repeated detail IO while live jobs are not throttled.
+
+## Common Room snapshot fitting (merged PR #88, source 2026-11-04)
+
+The optional `examples/chatgpt-workspace/fast_live.py` mirror publishes a
+bounded preview (`latest.json`, at most 48,000 UTF-8 bytes; maximum 16
+messages plus truncated topic/participant metadata). On large metadata, the
+old trimming loop repeatedly serialized the entire snapshot after removing
+**one** record at a time. The replacement searches the largest fitting
+participant/topic/message count with binary search. It retains the original
+priority of removal, ordering, preview flags and message cursor. The
+`history_truncated` lookup is now inside the same SQLite read transaction as
+the selected rows to avoid contradictory metadata when writers commit.
+
+An isolated local benchmark on one Windows machine, with **100 topics, 100
+participants and 32 synthetic messages** (large goals/roles), measured:
+
+| Metric | Before | After |
+| --- | ---: | ---: |
+| Forced-snapshot time, p50 | 124.174 ms | 16.493 ms |
+| Forced-snapshot time, p95 | 176.921 ms | 19.891 ms |
+| JSON serializations per forced snapshot | 177 | 18 |
+| Output snapshot size | 47,616 bytes | 47,616 bytes |
+| Truncation/cursor/output | Baseline | Identical |
+
+The p50 difference is about **87%** (approximately **7.5× faster**) on
+this workload, **not** for all UDB operations or idle GUI updates. A
+repeated patched-source run measured p50 **17.905 ms** and p95 **23.820
+ms**. The benchmark created a temporary SQLite database, did not read the
+owner's workspace, and timed forced rebuilds rather than ordinary no-change
+polls. CI does not enforce a hardware-dependent latency threshold.
+
+Reproducible semantic tests from a source checkout:
+
+```sh
+python -m pytest -q tests/test_workspace_mirror_budget.py
+python -B examples/chatgpt-workspace/fast_live.py selftest
+```
+
+The test suite compares 50 randomized Unicode snapshots byte-for-byte
+against the previous linear fitting algorithm and verifies that the history
+query executes inside the read transaction. Do not substitute a green test
+for an end-to-end ChatGPT/Cloudflare deployment check.
+
+## Windows packaged CLI cold start (open issue #89)
+
+A separate Windows 0.11.0 managed EXE check timed three `udb --version`
+calls at **8.68, 10.37 and 9.49 seconds**. This is a measured usability
+bottleneck, not a proven root cause. Profiling the shell launcher,
+executable unpacking, imports, antivirus and process startup is required
+before selecting a distribution change. See [issue #89](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/89).
+No onedir migration or sub-2-second startup is claimed yet.

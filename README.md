@@ -4,7 +4,7 @@
 
 **Tiếng Việt:** UDB kết nối trợ lý AI với máy tính Windows theo quyền do chủ máy cấp. Hỗ trợ thao tác tệp, terminal, ứng dụng, trình duyệt riêng biệt và rà soát hóa đơn Excel. **Không tự cấp quyền, không tự kê khai thuế, không tự sửa dữ liệu kế toán gốc.**
 
-> **Source vs release (updated 2026-11-04):** Source version **0.11.0** adds native browser batches, cached 1 FPS capture, readiness diagnostics and headless monitoring/reconnect. The Windows publishing workflow waits for successful CI for the exact current `main` revision, then validates the executable and installer. See [Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases) for the actual published version and [release notes](docs/release-notes.md). Source, publication and the installed `udb --version` are separate checks. Tool counts are derived at runtime.
+> **Source, release and installation (2026-11-04):** The source package still reports **0.11.0**. Merged [PR #87](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/87) unifies Cloudflare-first setup and repairs Workspace browser fallback; merged [PR #88](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/88) improves Common Room snapshot generation and SQLite read consistency. A merged PR or green CI **does not publish a release or deploy Cloudflare Worker**. Check [GitHub Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases), [release notes](docs/release-notes.md), and your installed `udb --version` separately. `udb tools` reports the runtime tool catalog.
 
 ## What UDB does
 
@@ -34,6 +34,16 @@ tool discovery must each be verified independently: see
 [Cloudflare project-read acceptance](docs/cloudflare-project-read-acceptance.md)
 and [owner pairing guide](docs/pairing-checklist-vi.md).
 
+**Cloudflare connection checklist:** (1) the Windows owner starts Cloud Agent;
+(2) the deployed Worker advertises the expected read-only features;
+(3) Cloudflare Access/OAuth identifies the owner and `UDB_DEVICE_GRANTS` allows
+the requested tool on that device; (4) ChatGPT refreshes the exact MCP catalog
+and invokes a read-only tool. A green `/health` or Cloud Agent process alone
+does **not** prove end-to-end readiness. See the
+[deployment acceptance runbook](docs/cloudflare-project-read-acceptance.md).
+The Cloudflare `udb:read` gateway does **not** authorize remote terminal,
+file writes or desktop control.
+
 ### Optional Render observer (development branch only)
 
 An optional **read-only Render Free dashboard** can check the public Cloudflare
@@ -57,7 +67,8 @@ revision checks, and view verified browser-cache previews.
 - Chat participants are self-declared labels, not authenticated identities.
 - Messages and tasks are user-initiated local edits; `done` is not execution proof.
 - Browser images are cached previews, not live tool permissions or browser control.
-- This source feature is **not available in the older published v0.10.0 installer**.
+- A source feature is not automatically present in every installed or published
+  executable; verify the exact installed release and its Common Room GUI.
 
 Windows Start/Search is populated by a **per-user Start Menu shortcut**, not by
 extracting a portable ZIP. The managed installer creates/updates a UDB-owned
@@ -101,18 +112,27 @@ through ChatGPT Plugins. On **unpaired** profiles, the old OpenAI Tunnel setup
 remains as a compatibility option. A healthy local agent is **not** proof that
 ChatGPT can invoke its MCP tools. Secret entry and owner grants remain local.
 
-For use from a second device, or when a ChatGPT plugin claims to be Connected but a tool returns `Session terminated`, see [Remote-device diagnostics](docs/remote-device-troubleshooting.md). Check the local tunnel and the ChatGPT session independently; never blindly replay a timed-out mutation.
+For use from a second device, or when a ChatGPT plugin claims Connected
+but a tool returns `Session terminated`, see [remote-device diagnostics](docs/remote-device-troubleshooting.md).
+Diagnose the selected transport (Cloudflare or legacy Tunnel), the Windows
+agent and ChatGPT invocation independently; never blindly replay a
+timed-out mutation.
 
-**Multiple Windows computers:** Logging into the same ChatGPT account does not make an existing MCP connection select a different PC automatically. For two live PCs, use separate tunnel IDs and distinguishable MCP connections until an explicit device router is installed and verified. **Experimental one-plugin Multi-PC routing** is being developed separately in [draft PR #34](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/34) for owner-managed Tailscale connections across different Wi-Fi networks. It is **not part of the published v0.10.0 installer or current `main`**, and has not been verified end-to-end across two real networks.
+**Multiple Windows computers:** Signing into the same ChatGPT account does
+not automatically switch an MCP connection to another PC. Cloudflare endpoints
+include an explicit device ID; each device/subject needs its own approved grant.
+Legacy Tunnel compatibility instead uses separate Tunnel IDs. Do not assume
+production one-plugin Multi-PC routing or infer the host from local health.
 
 ### When ChatGPT cannot call UDB tools
 
-A green local health indicator and an active tunnel do **not** prove that the
-current ChatGPT conversation has discovered the MCP tool catalog. Troubleshoot
+A green local indicator, a ready Tunnel or a running Cloud Agent do **not**
+prove that the current ChatGPT conversation has discovered the MCP catalog. Troubleshoot
 in order, without resetting credentials or loosening permissions:
 
 1. Run `udb status --json` and `udb doctor --json` on the intended computer.
-   Check local agent, tunnel and connection diagnostics separately.
+   Check local agent, selected transport and connection diagnostics separately.
+   Cloudflare-paired devices do not require a legacy Tunnel ID.
 2. In ChatGPT, confirm that the **intended** UDB connection is enabled and that
    UDB tools are actually available to the conversation. A Connected label alone
    is not an end-to-end tool invocation test.
@@ -123,8 +143,9 @@ in order, without resetting credentials or loosening permissions:
 5. Collect redacted `udb logs` and diagnostic output for a bug report. Never
    paste access tokens, tunnel secrets, or private file contents into an issue.
 
-The manager's **Tunnel đã kết nối** indicator means only the tunnel is ready;
-end-to-end ChatGPT tool discovery must be checked from the ChatGPT side.
+The manager shows **Cloud Agent process status** on paired profiles or legacy
+**Tunnel** state on unpaired profiles. Neither proves authenticated MCP
+discovery: verify a read-only invocation in ChatGPT.
 
 
 ### Common commands
@@ -278,7 +299,7 @@ Existing `virtual_pointer` move/click actions remain bounded Win32
 messages; compatibility depends on the application, and an independent
 visual cursor is **not** a second hardware/system mouse.
 
-## Desktop interface — source GUI (2026-11-01)
+## Desktop interface — source GUI (Cloudflare-first)
 
 `udb gui` opens a compact native control panel when a system tray is
 available. It offers connection, local Windows pause/resume, browser login
@@ -302,34 +323,15 @@ changes computer permissions, credentials or MCP access. The desktop shell
 uses shared Qt theme tokens and visible keyboard focus states, but it has not
 yet completed all enterprise GUI / accessibility milestones.
 
-The Overview status strip separately reports the local **Agent**, **Tunnel**
-and **ChatGPT** verification levels. ChatGPT remains **Chưa xác minh**
-(unverified) until independently tested from the ChatGPT conversation. A
-failed local/tunnel status read becomes **Chưa xác định** rather than
-retaining a stale green indicator. The **Tunnel đã kết nối** indicator
-means the local tunnel is ready, **not** that ChatGPT has verified MCP
-tool discovery and invocation. The emergency
+The overview reports the local **Agent**, the selected **Cloud Agent or
+legacy Tunnel** state, and separate **ChatGPT** verification. ChatGPT remains
+**Chưa xác minh** until a read-only tool is actually invoked in the
+conversation. A failed local status read cannot retain a stale green
+indicator. Neither transport state proves ChatGPT tool discovery. The emergency
 Windows pause controls stay distinct from background browser and job lifecycle.
 For the complete user-facing behavior and security limitations, read
 [Desktop GUI guide](docs/gui-user-guide.md) and the
 [enterprise UI/security roadmap](docs/gui-enterprise-roadmap.md).
-
-Developer-only disposable visual review:
-
-```powershell
-python -m ruff check src tools tests
-python -m ruff format --check .
-python -m pytest tests/test_ui_theme.py tests/test_manager_ui.py tests/test_quick_controls.py
-python -c "from udb.manager import self_test; self_test('ui-previews')"
-```
-
-The GUI self-test captures six existing pages under light/dark palettes and
-does not approve any file mutations. For headless Linux install
-`PySide6-Essentials==6.10.2` and set `QT_QPA_PLATFORM=offscreen`.
-For native Windows pointer preview use
-`python tools/check_windows_workflows.py --pointer-preview PATH.png`.
-Passing CI and screenshots does not replace real Windows accessibility or
-security assessment. The published v0.10.0 installer is still the old release.
 
 The **Kết nối → Giao diện ứng dụng** settings now expose a local
 **Giảm chuyển động** option. This changes only animations and persists as
@@ -337,7 +339,7 @@ the existing allow-listed `motion` preference in `gui.json`; it cannot
 change browser, project or computer permissions.
 
 The full manager also includes a persistent themed page header with an
-explicit **Tunnel** (not ChatGPT) indicator. The **Hoạt động MCP** tab
+transport-specific **Cloud Agent/Tunnel** (not ChatGPT) indicator. The **Hoạt động MCP** tab
 displays a bounded, sanitized tool activity timeline. Owner-triggered audit
 export writes only timestamps, tool labels and statuses to a new JSON file,
 after confirmation, and never overwrites an existing file.
@@ -358,15 +360,15 @@ assessment or the state of every background process. Failed reads show
 **Chưa xác minh** instead of retaining stale positive states.
 
 The **Kết nối** page now has a native three-step onboarding panel showing
-separately whether (1) the local Agent responds, (2) the local Tunnel is
-ready, and (3) ChatGPT has actually called an UDB tool. The third step stays
+separately whether (1) the local Agent responds, (2) Cloud Agent is running
+or the legacy Tunnel is ready, and (3) ChatGPT has actually called a UDB tool. The third step stays
 **Chưa xác minh** until verified directly in ChatGPT; no remote grant or
 invented end-to-end success state is introduced. Failed local reads clear
 stale ready indicators.
 
 The app header now also carries an always-visible, read-only **Windows
 privilege** warning: an enabled broad unsandboxed computer grant is distinct
-from project permissions and Tunnel readiness. Unknown/unreadable grant
+from project permissions and transport readiness. Unknown/unreadable grant
 states appear neutral, never as a verified safe or authorized result.
 
 The **Bảo vệ** page now shows a read-only indicator of optional full Windows
@@ -393,7 +395,7 @@ does not approve any file mutations. For headless Linux install
 For native Windows pointer preview use
 `python tools/check_windows_workflows.py --pointer-preview PATH.png`.
 Passing CI and screenshots does not replace real Windows accessibility or
-security assessment. The published v0.10.0 installer is still the old release.
+security assessment. Source changes do not imply an installed release; verify the executable and its feature set.
 
 
 ## Build from source (developers)
@@ -432,7 +434,8 @@ for each Linux/Windows Python matrix job.
 The [Common Room example](examples/chatgpt-workspace/README.md) adds a native
 Windows dashboard for shared discussions, topic search, replies and revision-checked
 task assignments. It includes batched room/browser commands and a separate
-headless Edge worker with a bounded 1 FPS screenshot cache. Long messages wrap
+headless Edge-or-Chrome worker (Edge preferred, Chrome fallback when Edge is
+missing) with a bounded 1 FPS screenshot cache. Long messages wrap
 and remain readable in full.
 
 This optional source example requires Python and its listed image/browser

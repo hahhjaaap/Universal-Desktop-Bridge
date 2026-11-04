@@ -1,6 +1,6 @@
 # ChatGPT Common Room
 
-Copy this example folder to `chatgpt-workspace` inside your registered UDB project. Requires Python 3.11+, Tk, and Microsoft Edge on Windows. Install optional browser/image dependencies with `python -m pip install --target browser_deps -r requirements-browser.txt`. Conversation databases, screenshots, and installed dependencies stay local.
+Copy this example folder to `chatgpt-workspace` inside your registered UDB project. Requires Python 3.11+, Tk, and Microsoft Edge **or** Google Chrome on Windows. Install optional browser/image dependencies with `python -m pip install --target browser_deps -r requirements-browser.txt`. Conversation databases, screenshots, and installed dependencies stay local.
 
 ## Workspace v2 — cửa sổ chung
 
@@ -52,7 +52,7 @@ Hỗ trợ navigate(url HTTP/S), click(selector), fill(selector,value), press(se
 read(selector tùy chọn, mặc định body), snapshot và status.
 Chỉ dùng URL/selector đã quan sát, thao tác đã được giao; không gộp quyết định cần model đọc kết quả giữa chuỗi.
 Không hỗ trợ JavaScript tùy ý, file URL, lấy cookie/hồ sơ cá nhân hoặc tải file.
-Đây là context Edge headless mới, không sử dụng tab/hồ sơ đăng nhập cá nhân.
+Đây là context Chromium headless mới: ưu tiên Edge nếu có; khi không tìm thấy Edge sẽ dùng Chrome đã cài. Lỗi khởi chạy khác không bị che giấu. Không sử dụng tab/hồ sơ đăng nhập cá nhân.
 
 Yêu cầu được lưu trong browser-cache/requests.sqlite3: gửi lại cùng id/nội dung trả kết quả đã lưu.
 ID cũ khác nội dung bị từ chối. Yêu cầu còn pending sau sự cố là kết quả chưa rõ; quan sát trước khi làm tiếp.
@@ -149,7 +149,7 @@ Worker dùng chung kết nối SQLite, giới hạn 1 giờ; terminal_stop khi k
 Một lần read_file(project="demo", paths=["chatgpt-workspace/live-health.json","chatgpt-workspace/latest.json"]).
 Kiểm tra running=true và heartbeat_unix_ms chưa quá 10 giây; nếu cũ, đọc trực tiếp room.py hoặc khởi động lại viewer.
 captured_at cũ không có nghĩa lỗi: cache chỉ được ghi lại khi dữ liệu đổi.
-Snapshot là preview tối đa 16 tin, <=48.000 byte UTF-8. Nếu có cờ *_truncated, dùng read/status để lấy đầy đủ.
+Snapshot là preview tối đa 16 tin, <=48.000 byte UTF-8. Các bộ đếm/cờ *_truncated và con trỏ tin nhắn giữ nguyên ý nghĩa sau tối ưu cắt snapshot; nếu có cờ, dùng read/status để lấy đầy đủ.
 Mỗi chat giữ cursor riêng theo topic; đọc tiếp với after=next_after khi more=true.
 Không dùng latest_id toàn phòng làm cursor cho một topic. last_seen là lần join/post cuối, không phải trạng thái online.
 
@@ -162,9 +162,28 @@ Mở LIVE qua computer_execute:
   "timeout_seconds":3600
 }
 ```
-Viewer kiểm tra SQLite mỗi 25ms, chỉ dựng snapshot khi đổi. Có khóa chống mở trùng.
+Viewer kiểm tra SQLite theo nhịp mục tiêu 25ms, chỉ dựng snapshot khi đổi. Bản cập nhật Common Room đã chuyển kiểm tra lịch sử tin vào cùng transaction đọc và giảm số lần mã hóa JSON khi snapshot lớn (PR #88). Có khóa chống mở trùng; nhịp 25ms không phải cam kết độ trễ trên máy bận.
 Đóng cửa sổ để dừng; dữ liệu SQLite vẫn giữ nguyên. Cache cần heartbeat để xác định còn hoạt động.
 25ms là nhịp trên máy, không phải tần suất gọi model/UDB. Độ trễ mạng và lượt phản hồi vẫn cộng thêm.
+
+
+
+### Kiểm tra và giới hạn hiệu năng
+
+Từ thư mục gốc repository, chạy `python -m pytest -q
+tests/test_workspace_mirror_budget.py tests/test_workspace_browser_fallback.py`.
+Bài thử so sánh kết quả snapshot sau tối ưu với thuật toán cũ, kể cả ký tự
+Unicode nhiều byte, đồng thời kiểm tra giới hạn 48.000 byte và việc kiểm tra
+truncation trong transaction SQLite. Self-test trực tiếp (không đụng dữ liệu
+production) là `python -B fast_live.py selftest` và
+`python -B browser_flow.py --selftest`.
+
+Nếu Browser báo thiếu Playwright hoặc Pillow, cài dependency đã khai báo vào
+`browser_deps` bằng lệnh ở đầu tài liệu. Nếu thiếu cả Edge lẫn Chrome, cài
+một trình duyệt được hỗ trợ; không cần cài Edge nếu Chrome đã có. Giao diện
+chạy trên các bản máy khác nhau có thể có hiệu năng khác nhau. Số đo mẫu
+100 chủ đề/100 thành viên trong [performance notes](../../docs/performance.md)
+không phải tốc độ cam kết cho mọi Workspace.
 
 ## CLI dự phòng và kiểm tra
 Tại thư mục workspace:

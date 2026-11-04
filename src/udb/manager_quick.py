@@ -54,7 +54,7 @@ class QuickControls(QDialog):
             )
         )
         self.connect_button = MotionButton("Kết nối", "power")
-        self.connect_button.clicked.connect(owner.toggle_tunnel)
+        self.connect_button.clicked.connect(owner.toggle_cloud)
         self.settings_button = MotionButton("Cài đặt", "settings")
         self.settings_button.clicked.connect(owner.configure)
         lay.addLayout(row(self.connect_button, self.settings_button))

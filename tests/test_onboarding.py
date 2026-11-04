@@ -311,6 +311,7 @@ def test_windows_nul_is_not_an_attended_console():
 def test_owner_setup_links_to_chatgpt_plugins_instead_of_legacy_connector_settings():
     assert onboarding.CHATGPT_URL == "https://chatgpt.com/plugins"
 
+
 def test_paired_cloudflare_setup_edit_does_not_request_legacy_tunnel_or_key(
     tmp_path, monkeypatch, capsys
 ):
@@ -327,7 +328,8 @@ def test_paired_cloudflare_setup_edit_does_not_request_legacy_tunnel_or_key(
     legacy.write_text('{"tunnel_id":"tunnel_' + "b" * 32 + '"}')
     calls = local(monkeypatch, [])
     monkeypatch.setattr(
-        onboarding.getpass, "getpass",
+        onboarding.getpass,
+        "getpass",
         lambda _: pytest.fail("Cloudflare setup cannot request a Tunnel key"),
     )
     assert onboarding.run(Settings(home, home / "work"), edit=True) == 0
@@ -348,7 +350,8 @@ def test_malformed_cloud_pairing_never_falls_back_to_tunnel_prompt(
     (home / "cloud-pairing.json").write_text('{"relay":"invalid"}', encoding="utf-8")
     calls = local(monkeypatch, [])
     monkeypatch.setattr(
-        onboarding.getpass, "getpass",
+        onboarding.getpass,
+        "getpass",
         lambda _: pytest.fail("Invalid pairing must not trigger Tunnel key prompt"),
     )
     with pytest.raises((ValueError, KeyError)):

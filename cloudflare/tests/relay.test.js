@@ -15,10 +15,11 @@ function harness() {
     getWebSockets: () => [ws],
     storage: { get: async () => undefined },
   }, {});
-  const send = (id = 1) => relay.fetch(new Request("https://internal/rpc", {
-    method: "POST",
-    body: JSON.stringify({ jsonrpc: "2.0", id, method: "tools/list" }),
-  }));
+  const send = (id = 1, method = "tools/list", params = {}) =>
+    relay.fetch(new Request("https://internal/rpc", {
+      method: "POST",
+      body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+    }));
   return { relay, ws, frames, closed, send };
 }
 
@@ -34,7 +35,8 @@ test("one pending desktop request at a time, with exact response ID", async () =
   const h = harness();
   const first = h.send();
   const forwarded = await sent(h);
-  const second = await h.send(2);
+  const second = await h.send(2, "tools/call",
+    { name: "terminal_start", arguments: {} });
   assert.equal(second.status, 429);
   assert.equal(h.frames.length, 1);
   h.relay.webSocketMessage(h.ws, JSON.stringify({
@@ -48,6 +50,40 @@ test("one pending desktop request at a time, with exact response ID", async () =
     jsonrpc: "2.0", id: 1, result: { tools: [] },
   });
   assert.equal(h.relay.pending.size, 0);
+});
+
+test("one additional read-only request waits for the current RPC", async () => {
+  const h = harness();
+  const first = h.send();
+  const forwarded = await sent(h);
+  const second = h.send(2, "initialize", { protocolVersion: "2025-11-25" });
+  for (let i = 0; i < 30 && h.relay.queuedReads === 0; i++)
+    await setImmediate();
+  assert.equal(h.relay.queuedReads, 1);
+  assert.equal(h.frames.length, 1);
+  const third = await h.send(3, "tools/list");
+  assert.equal(third.status, 429, "A second waiting read is refused");
+  const mutation = await h.send(4, "tools/call",
+    { name: "terminal_start", arguments: {} });
+  assert.equal(mutation.status, 429, "Mutations never enter the read queue");
+  h.relay.webSocketMessage(h.ws, JSON.stringify({
+    kind: "rpc_result", id: forwarded.id,
+    rpc: { jsonrpc: "2.0", id: 1, result: { tools: [] } },
+  }));
+  assert.equal((await first).status, 200);
+  for (let i = 0; i < 30 && h.frames.length < 2; i++)
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(h.frames.length, 2);
+  assert.equal(h.frames[1].rpc.method, "initialize");
+  h.relay.webSocketMessage(h.ws, JSON.stringify({
+    kind: "rpc_result", id: h.frames[1].id,
+    rpc: { jsonrpc: "2.0", id: 2,
+      result: { protocolVersion: "2025-11-25" } },
+  }));
+  const response = await second;
+  assert.equal(response.status, 200);
+  assert.equal(h.relay.pending.size, 0);
+  assert.equal(h.relay.queuedReads, 0);
 });
 
 test("mismatched RPC IDs are rejected and connection is closed", async () => {

@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from contextlib import contextmanager
 
 from ._version import VERSION
-from .config import Settings, activate, checked, load, serve_options
+from .config import Settings, activate, checked, load
 
 
 @contextmanager
@@ -115,7 +115,6 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         "build",
         "build-info",
         "manifest",
-        "mcp-config",
     )
     for name in command_names:
         command = subcommands.add_parser(name)
@@ -191,7 +190,7 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
             mode.add_argument(
                 "--local",
                 action="store_true",
-                help="Remember local mode without a ChatGPT connection",
+                help="Remember offline diagnostics (no remote connection)",
             )
         if name == "runtime":
             command.add_argument("--probe", action="store_true")
@@ -257,7 +256,7 @@ def _initialize_config(args: argparse.Namespace, settings: Settings) -> int:
 def _run_setup(args: argparse.Namespace, settings: Settings) -> int:
     if args.json or args.access or args.offline or args.online:
         raise ValueError(
-            "Use udb setup directly in your own terminal without --json/--access/--offline"
+            "Use udb setup in your own attended terminal without --json or --access"
         )
     from .onboarding import run
 
@@ -296,28 +295,6 @@ def _prepare_startup(args: argparse.Namespace, settings: Settings) -> int | None
             except KeyboardInterrupt:
                 print("\nSetup canceled.", file=sys.stderr)
                 return 130
-
-
-def _print_mcp_config(args: argparse.Namespace, settings: Settings) -> int:
-    from .launcher import command
-
-    with _settings_scope(settings):
-        argv = command(serve_options(settings.home))
-    print(
-        json.dumps(
-            {
-                "mcpServers": {
-                    "universal-desktop-bridge": {
-                        "type": "stdio",
-                        "command": argv[0],
-                        "args": argv[1:],
-                    }
-                }
-            },
-            indent=2,
-        )
-    )
-    return 0
 
 
 def _run_gui(args: argparse.Namespace, settings: Settings) -> int:
@@ -398,7 +375,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--wait", type=int, default=30)
     connection_mode = parser.add_mutually_exclusive_group()
     connection_mode.add_argument(
-        "--offline", action="store_true", help="Start local agent without a tunnel"
+        "--offline", action="store_true", help="Run offline diagnostics without Cloudflare"
     )
     connection_mode.add_argument(
         "--online",
@@ -460,8 +437,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             startup_result = _prepare_startup(args, settings)
             if startup_result is not None:
                 return startup_result
-        if action == "mcp-config":
-            return _print_mcp_config(args, settings)
         if (args.offline or args.online) and action != "start":
             raise ValueError("--offline/--online apply only to start")
         if action == "init":

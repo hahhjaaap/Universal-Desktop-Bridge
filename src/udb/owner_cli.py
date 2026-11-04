@@ -17,7 +17,15 @@ def parse_args(argv=None):
         "action",
         nargs="?",
         default="start",
-        choices=("start", "stop", "status", "doctor", "test", "revoke-access"),
+        choices=(
+            "start",
+            "stop",
+            "status",
+            "reconnect",
+            "doctor",
+            "test",
+            "revoke-access",
+        ),
     )
     parser.add_argument(
         "--access",
@@ -70,6 +78,12 @@ def render_report(report, as_json=False):
 def report_healthy(action, report):
     if action == "stop":
         return not report["manager_running"]
+    if action == "reconnect":
+        return (
+            report.get("reconnect_acknowledged") is True
+            and report["local_tunnel_ready"]
+            and not report.get("reconnect_pending", False)
+        )
     running = report["local_tunnel_ready"] or (
         report["manager_running"] and report.get("connection_mode") == "offline"
     )

@@ -1,67 +1,97 @@
 name: one-command-windows-release
 on:
-  push:
+  workflow_run:
+    workflows: [package-and-regressions]
+    types: [completed]
     branches: [main]
-    paths: [src/udb/_version.py, .github/workflows/one-command-release.yml]
   workflow_dispatch:
 permissions:
   contents: write
+  actions: read
 concurrency:
   group: one-command-windows-release
   cancel-in-progress: false
 jobs:
   release:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: windows-latest
     timeout-minutes: 40
+    env:
+      UDB_RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.UDB_RELEASE_SHA }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install ".[office,dev,freeze]"
-      - name: Read the canonical release version
-        id: version
+      - name: Gate publication on complete CI for the exact main revision
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UDB_CI_RUN_ID: ${{ github.event.workflow_run.id }}
         shell: pwsh
         run: |
-          $version = (python -c "from udb._version import VERSION; print(VERSION)").Trim()
-          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid canonical version' }
-          "value=$version" >> $env:GITHUB_OUTPUT
-      - run: python -m ruff check .
-      - run: python -m pytest
-      - run: python tools/fetch_build_assets.py
-      - run: udb build --exe
-      - run: python tools/check_frozen.py dist/udb.exe
-      - run: python tools/check_installer.py install.ps1 dist/udb-${{ steps.version.outputs.value }}-windows-standalone.zip
+          $arguments = @('tools/release_gate.py', '--repository', $env:GITHUB_REPOSITORY, '--sha', $env:UDB_RELEASE_SHA)
+          if ($env:UDB_CI_RUN_ID) { $arguments += @('--run-id', $env:UDB_CI_RUN_ID) }
+          python @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'Release CI gate failed.' }
+      - if: steps.gate.outputs.publish == 'true'
+        run: python -m pip install ".[office,dev,freeze]"
+      - name: Build standalone Windows package
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          python tools/fetch_build_assets.py
+          if ($LASTEXITCODE -ne 0) { throw 'Helper verification failed.' }
+          udb build --exe
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone build failed.' }
+      - name: Validate the exact executable and installer before publication
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          python tools/check_frozen.py dist/udb.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Frozen acceptance failed.' }
+          python tools/check_installer.py install.ps1 dist/udb-${{ steps.gate.outputs.version }}-windows-standalone.zip
+          if ($LASTEXITCODE -ne 0) { throw 'Installer acceptance failed.' }
       - name: Prepare download assets
+        if: steps.gate.outputs.publish == 'true'
         shell: pwsh
         env:
-          UDB_RELEASE_VERSION: ${{ steps.version.outputs.value }}
+          UDB_RELEASE_VERSION: ${{ steps.gate.outputs.version }}
         run: |
           Copy-Item ("dist/udb-" + $env:UDB_RELEASE_VERSION + "-windows-standalone.zip") dist/udb-windows-x64.zip
           $hash = (Get-FileHash dist/udb-windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
           [IO.File]::WriteAllText((Join-Path $PWD 'dist/SHA256SUMS'),$hash + '  udb-windows-x64.zip' + "`n",[Text.Encoding]::ASCII)
           Copy-Item install.ps1 dist/install.ps1 -Force
-      - name: Publish verified installer
+      - name: Recheck main and publish immutable versioned assets
+        if: steps.gate.outputs.publish == 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          UDB_RELEASE_VERSION: ${{ steps.version.outputs.value }}
+          UDB_RELEASE_VERSION: ${{ steps.gate.outputs.version }}
+          UDB_CI_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
+          $arguments = @('tools/release_gate.py', '--repository', $env:GITHUB_REPOSITORY, '--sha', $env:UDB_RELEASE_SHA)
+          if ($env:UDB_CI_RUN_ID) { $arguments += @('--run-id', $env:UDB_CI_RUN_ID) }
+          $gateJson = python @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'Final release CI gate failed.' }
+          $gate = $gateJson | ConvertFrom-Json
+          if (-not $gate.publish) { throw $gate.reason }
           $tag = 'v' + $env:UDB_RELEASE_VERSION
-          gh release view $tag --json tagName *> $null
-          if ($LASTEXITCODE -eq 0) { throw 'Release already exists; inspect before publishing another build.' }
-          @'
-          Windows x64 standalone UDB. No Python, Node.js or Desktop Commander installation is required.
-
-          Run in your own PowerShell terminal:
-          irm https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases/latest/download/install.ps1 | iex
-
-          UDB now recovers an owned tunnel that remains unready for 90 seconds, with a fresh grace period after a long monitor gap. First-run setup checks the bundled runtime before accepting connection details. Optional udb autostart enable starts it hidden at Windows sign-in; udb autostart disable removes that entry. Use udb update --check, udb update, and udb rollback for managed installations. Updates preserve owner data and restore the previous release if activation fails. udb doctor reports runtime, startup mode, heartbeat, tunnel, installation and startup-entry checks without reading keys. No tool call is automatically replayed. The existing OpenAI tunnel/account setup remains required; no relay provider or hosted service is added.
-
-          Verified by pytest, copied-EXE worker/lifecycle checks, actual HTTP installer/reinstall/failure tests, and a public HTTPS install on a disposable Windows runner. SHA256 detects corruption; this build is not code-signed.
-          '@ | Set-Content release-notes.md -Encoding utf8
-          gh release create $tag dist/udb-windows-x64.zip dist/SHA256SUMS dist/install.ps1 --target "$env:GITHUB_SHA" --title "UDB $env:UDB_RELEASE_VERSION - Reliable Windows lifecycle" --notes-file release-notes.md
+          gh release create $tag dist/udb-windows-x64.zip dist/SHA256SUMS dist/install.ps1 --target "$env:UDB_RELEASE_SHA" --title "UDB $env:UDB_RELEASE_VERSION" --notes-file docs/release-notes.md
           if ($LASTEXITCODE -ne 0) { throw 'Release publication failed.' }
       - name: Verify the newly published HTTPS installer
-        run: python tools/check_public_installer.py --release-tag v${{ steps.version.outputs.value }} --report reports/public-installer.json
+        if: steps.gate.outputs.publish == 'true'
+        run: python tools/check_public_installer.py --release-tag v${{ steps.gate.outputs.version }} --report reports/public-installer.json
+      - name: Retain public installer acceptance report
+        if: always() && steps.gate.outputs.publish == 'true'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-installer-acceptance
+          path: reports/public-installer.json
+          retention-days: 7

@@ -99,6 +99,7 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         "cloud-pair",
         "fleet-agent",
         "status",
+        "reconnect",
         "logs",
         "stop",
         "doctor",
@@ -136,7 +137,15 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
                 action="store_true",
                 help="Check latest version without installing",
             )
-        if name in ("start", "status", "stop", "doctor", "test", "revoke-access"):
+        if name in (
+            "start",
+            "status",
+            "reconnect",
+            "stop",
+            "doctor",
+            "test",
+            "revoke-access",
+        ):
             command.add_argument(
                 "--json", action="store_true", default=argparse.SUPPRESS
             )
@@ -158,6 +167,19 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
             )
             connection_mode.add_argument(
                 "--online", action="store_true", default=argparse.SUPPRESS
+            )
+        if name == "status":
+            command.add_argument(
+                "--watch",
+                action="store_true",
+                help="Watch metadata-only headless status",
+            )
+            command.add_argument("--interval", type=float, default=1.0)
+            command.add_argument(
+                "--count",
+                type=int,
+                default=0,
+                help="Number of samples; 0 watches until Ctrl+C",
             )
         if name == "setup":
             mode = command.add_mutually_exclusive_group()
@@ -504,6 +526,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             "--wait",
             str(getattr(args, "wait", 30)),
         ]
+        if action == "status" and args.watch:
+            if args.access:
+                raise ValueError("Status monitoring cannot activate owner access")
+            from .status_monitor import watch
+
+            return watch(
+                settings.home,
+                owner_command.executable(settings.home),
+                interval=args.interval,
+                count=args.count,
+                as_json=args.json,
+            )
         if getattr(args, "json", False):
             legacy_args.append("--json")
         if args.detach:

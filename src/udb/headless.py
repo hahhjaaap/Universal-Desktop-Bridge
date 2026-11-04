@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import sys
 import threading
@@ -18,10 +19,11 @@ from pathlib import Path
 from . import __version__
 from .core import PolicyError, reject_links
 from .desktop import DesktopController
-from .host_client import atomic_json
+from .host_client import _read_json, atomic_json
 
 STATUS_NAME = "headless-status.json"
 STOP_NAME = "headless-stop.json"
+RECONNECT_NAME = "headless-reconnect.json"
 HEARTBEAT_SECONDS = 1.0
 
 
@@ -86,13 +88,26 @@ def publish(controller, instance: str, phase="running"):
             instance=instance,
             at=time.time(),
             phase=phase,
-            gui_loaded="PySide6.QtWidgets" in sys.modules,
+            # This lifecycle creates no GUI. Imported test/library modules do
+            # not mean a headless manager owns a window.
+            gui_loaded=False,
+            qt_widgets_imported="PySide6.QtWidgets" in sys.modules,
+            uptime_seconds=max(
+                0,
+                round(
+                    time.monotonic()
+                    - getattr(controller, "_headless_started", time.monotonic()),
+                    1,
+                ),
+            ),
             tunnel_ready=connection["ready"],
             tunnel_running=connection["tunnel_running"],
             connecting=connection["connecting"],
             recovery_count=connection.get("recovery_count", 0),
             last_recovery=connection.get("last_recovery", ""),
             retry_in_seconds=connection.get("retry_in_seconds", 0),
+            reconnect_request=getattr(controller, "_last_reconnect_request", ""),
+            reconnect_pending=getattr(controller, "_reconnect_pending", False),
             connection_mode="offline"
             if getattr(controller, "offline_mode", False)
             else "online",
@@ -105,16 +120,27 @@ def publish(controller, instance: str, phase="running"):
 def run_loop(controller, instance, stop_event, connect=True, interval=0.3):
     """Separate lifecycle so failures and cancellation can be tested without Qt."""
     controller.offline_mode = not connect
+    controller._headless_started = time.monotonic()
+    controller._last_reconnect_request = ""
+    controller._reconnect_pending = False
+
+    def begin(reconnect=False):
+        try:
+            if reconnect:
+                controller.stop_process("tunnel")
+            if not stop_event.is_set():
+                controller.offline_mode = False
+                controller.start_tunnel()
+        except (PolicyError, OSError):
+            pass  # Existing controller schedules bounded retries, not tool replay.
+        finally:
+            controller._reconnect_pending = False
+
     try:
         controller.start_host()
         if connect:
+            controller._reconnect_pending = True
             # Launch/retry asynchronously; local stop stays responsive during init.
-            def begin():
-                try:
-                    controller.start_tunnel()
-                except PolicyError:
-                    pass  # Existing controller schedules bounded retries.
-
             threading.Thread(
                 target=begin, daemon=True, name="UDB initial connection"
             ).start()
@@ -126,6 +152,26 @@ def run_loop(controller, instance, stop_event, connect=True, interval=0.3):
                 next_publish = now + HEARTBEAT_SECONDS
             if stop_requested(controller.agent.state / STOP_NAME, instance):
                 break
+            request = controller.agent.state / RECONNECT_NAME
+            if not controller._reconnect_pending and stop_requested(request, instance):
+                try:
+                    data = _read_json(request, 4096)
+                    rid = data.get("request_id")
+                    if (
+                        isinstance(rid, str)
+                        and re.fullmatch(r"[a-f0-9]{32}", rid)
+                        and rid != controller._last_reconnect_request
+                    ):
+                        controller._last_reconnect_request = rid
+                        controller._reconnect_pending = True
+                        threading.Thread(
+                            target=begin,
+                            args=(True,),
+                            daemon=True,
+                            name="UDB owner reconnect",
+                        ).start()
+                except (OSError, ValueError, PolicyError):
+                    pass
             stop_event.wait(interval)
     finally:
         controller.close()

@@ -697,10 +697,15 @@ class Agent(AutonomyMixin):
         from .headless import manager_status
 
         computer = computer_summary(self)
+        from .readiness import report as readiness_report
+
+        manager = manager_status(self.state)
+        projects = self.projects()
         return {
             "name": "Universal Desktop Bridge",
             "version": __version__,
-            "manager": manager_status(self.state),
+            "manager": manager,
+            "readiness": readiness_report(manager, hs, computer, projects),
             "computer_access": computer,
             "host_background": {
                 "enabled": hs["enabled"],
@@ -718,6 +723,6 @@ class Agent(AutonomyMixin):
             "approvals": "Existing project/Sandbox grants retained. Optional computer access requires attended local owner opt-in; no MCP setter.",
             "sandbox_autonomy_projects": self.sandbox_autonomy_projects(),
             "protected_data": "Scoped APIs enforce protected paths; optional computer commands are current-user and unsandboxed",
-            "projects": len(self.projects()),
+            "projects": len(projects),
             "rdc_dependency": False,
         }

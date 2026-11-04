@@ -13,6 +13,15 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  cloudflare-and-observer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # No credentials, deployment, external npm dependencies or private device.
+      - run: node --test cloudflare/tests/*.test.js render/tests/*.test.mjs
   test:
     strategy:
       fail-fast: false

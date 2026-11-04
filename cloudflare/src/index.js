@@ -3,6 +3,7 @@
 import { DEVICE_ID, HASH, bearer, adminAuthorized, digest, readJson, validRpc, fixedEqual } from "./auth.js";
 import { newPairing, PAIRING_TTL_MS } from "./pairing.js";
 import { handleMcp, protectedResource } from "./mcp.js";
+import { isReadTool } from "./read-tools.js";
 
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store",
@@ -17,7 +18,7 @@ const READ_QUEUE_WAIT_MS = 8000;
 const isReadRpc = (rpc) => (
   ["initialize", "tools/list", "ping"].includes(rpc.method) ||
   (rpc.method === "tools/call" &&
-    ["bridge_status", "list_projects"].includes(rpc.params?.name))
+    isReadTool(rpc.params?.name))
 );
 const MAX_REPLY_BYTES = 1024 * 1024;
 const encoder = new TextEncoder();
@@ -37,6 +38,7 @@ export default {
       // Capability only, not authentication or enabled-mode status.
       // A local operator must not activate Access mode against an older Worker.
       response.headers.set("X-UDB-Access-OAuth-Capable", "1");
+      response.headers.set("X-UDB-Project-Read-Capable", "1");
       return response;
     }
     if (url.pathname === "/v1/admin/pairings" && request.method === "POST") {
@@ -215,7 +217,8 @@ export class DeviceRelay {
       return new Response(null, { status: 101, webSocket: client });
     }
     if (path === "/rpc" && request.method === "POST") {
-      if (!this.deviceSocket()) return failure(503, "device_offline");
+      const connection = this.deviceSocket();
+      if (!connection) return failure(503, "device_offline");
       const rpc = await readJson(request);
       if (!validRpc(rpc)) return failure(400, "invalid_rpc");
       if (this.pending.size >= MAX_PENDING_PER_DEVICE) {
@@ -228,6 +231,8 @@ export class DeviceRelay {
                  Date.now() < deadline) {
             await new Promise((resolve) => setTimeout(resolve, 75));
             if (!this.deviceSocket()) return failure(503, "device_offline");
+            if (this.deviceSocket() !== connection)
+              return failure(503, "device_connection_changed");
           }
         } finally {
           this.queuedReads--;
@@ -238,6 +243,7 @@ export class DeviceRelay {
       // Recheck after waiting: the device may have disconnected or reconnected.
       const ws = this.deviceSocket();
       if (!ws) return failure(503, "device_offline");
+      if (ws !== connection) return failure(503, "device_connection_changed");
       const requestId = crypto.randomUUID();
       return await new Promise((resolve) => {
         const timeout = setTimeout(() => {

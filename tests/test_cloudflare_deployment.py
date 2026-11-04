@@ -57,11 +57,24 @@ def test_cloudflare_probe_checks_only_public_metadata_and_unauthenticated_denial
     opener = FakeOpener()
     report = check("https://example.workers.dev", "a" * 32, opener)
     assert report["health"] == "ok"
+    assert report["project_read_capability"] == "not_advertised"
     assert report["oauth_metadata"] == "ok"
     assert report["unauthorized_access"] == "blocked"
     assert report["windows_device"] == "not_tested"
     assert report["chatgpt_oauth"] == "not_tested"
     assert len(opener.urls) == 3
+
+
+def test_project_read_capability_does_not_claim_authenticated_device_access():
+    class CurrentWorker(FakeOpener):
+        def open(self, request, timeout):
+            response = super().open(request, timeout)
+            response.headers = {"X-UDB-Project-Read-Capable": "1"}
+            return response
+
+    report = check("https://example.workers.dev", "a" * 32, CurrentWorker())
+    assert report["project_read_capability"] == "deployed"
+    assert report["windows_device"] == report["chatgpt_oauth"] == "not_tested"
 
 
 def test_cloudflare_probe_rejects_external_origin_before_network():

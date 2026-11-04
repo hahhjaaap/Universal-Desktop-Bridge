@@ -1,14 +1,11 @@
 // Fail-closed OAuth resource-server validation for the optional UDB MCP gateway.
 // The OAuth authorization-code + PKCE flow is owned by the configured external IdP.
 // This module never issues tokens or substitutes an admin/device key for user identity.
+import { READ_TOOLS, isReadTool } from "./read-tools.js";
 const ID = /^[a-f0-9]{32}$/;
 // Strictly project-scoped read-only tools. Writes, host operations, desktop
 // control and legacy aliases are never permitted by the udb:read scope.
 // The owner's per-device/per-subject UDB_DEVICE_GRANTS must still name each tool.
-const SAFE_TOOLS = new Set([
-  "bridge_status", "list_projects", "list_files", "read_file",
-  "search_files", "check_python_syntax",
-]);
 const MAX_TOKEN = 8192;
 const MAX_JWKS = 16384;
 let cachedJwks = { url: "", until: 0, keys: [] };
@@ -99,8 +96,8 @@ export function deviceGrant(env, deviceId, subject) {
     if (!users || typeof users !== "object" || Array.isArray(users) ||
         !Object.hasOwn(users, subject)) return [];
     const tools = users[subject];
-    if (!Array.isArray(tools) || tools.length > SAFE_TOOLS.size) return [];
-    return [...new Set(tools.filter((name) => typeof name === "string" && SAFE_TOOLS.has(name)))];
+    if (!Array.isArray(tools) || tools.length > READ_TOOLS.length) return [];
+    return [...new Set(tools.filter((name) => typeof name === "string" && isReadTool(name)))];
   } catch { return []; }
 }
 

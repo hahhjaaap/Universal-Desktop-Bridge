@@ -1152,7 +1152,9 @@ class Browser(BrowserInputMixin):
                 result = self.evaluate(
                     tab,
                     expression,
-                    timeout=min(10.25, remaining + 0.25),
+                    # Subtracting large monotonic floats can round remaining
+                    # above the original duration. Keep the caller's hard cap.
+                    timeout=min(10.25, timeout_ms / 1000 + 0.25, remaining + 0.25),
                     await_promise=True,
                 )
             except PolicyError as exc:

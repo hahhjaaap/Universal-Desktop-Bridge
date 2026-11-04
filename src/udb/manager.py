@@ -662,7 +662,11 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         cl = QVBoxLayout(card)
         cl.setContentsMargins(23, 23, 23, 23)
         cl.setSpacing(15)
-        cl.addWidget(label("Cloudflare MCP" if self.cloud_preferred else "OpenAI Tunnel (cũ)", "H2"))
+        cl.addWidget(
+            label(
+                "Cloudflare MCP" if self.cloud_preferred else "OpenAI Tunnel (cũ)", "H2"
+            )
+        )
         cl.addWidget(
             label(
                 "1. Kiểm tra tác nhân UDB → 2. Bật Cloud Agent → "

@@ -37,9 +37,7 @@ def checks(home):
 
 def test_valid_cloud_pairing_does_not_require_legacy_tunnel(tmp_path):
     (tmp_path / "cloud-pairing.json").write_text(
-        json.dumps(
-            {"relay": "https://example.workers.dev", "device_id": "a" * 32}
-        ),
+        json.dumps({"relay": "https://example.workers.dev", "device_id": "a" * 32}),
         encoding="utf-8",
     )
     result = checks(tmp_path)

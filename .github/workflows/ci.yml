@@ -68,6 +68,19 @@ jobs:
       - run: udb build
       - shell: bash
         run: python tools/check_wheel.py dist/*.whl
+      - name: Verify source archive excludes regression-only files
+        shell: bash
+        run: |
+          python - <<'PY'
+          import glob
+          import tarfile
+          archives = glob.glob("dist/*.tar.gz")
+          assert len(archives) == 1, archives
+          with tarfile.open(archives[0], "r:gz") as archive:
+              names = archive.getnames()
+          assert not any("/tests/" in name for name in names), "Tests were packaged into sdist"
+          print("Source archive contains no regression suite")
+          PY
       - uses: actions/upload-artifact@v4
         id: artifact_upload
         continue-on-error: true

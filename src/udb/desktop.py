@@ -211,7 +211,9 @@ class DesktopController:
                         continue
                     if code == 2:
                         self.cloud_wanted = False
-                        self.error = "Cloud Agent rejected pairing; check credentials locally."
+                        self.error = (
+                            "Cloud Agent rejected pairing; check credentials locally."
+                        )
                         continue
                     if time.monotonic() < self._cloud_retry_at:
                         continue
@@ -224,7 +226,9 @@ class DesktopController:
                     self._cloud_recovery_count += 1
                 except Exception:
                     # Authentication and runtime failures are not exposed to MCP.
-                    self.error = "Cloud Agent stopped; use udb doctor to inspect pairing."
+                    self.error = (
+                        "Cloud Agent stopped; use udb doctor to inspect pairing."
+                    )
             except Exception:
                 self.error = "Cloud Agent monitor could not check the process."
 
@@ -238,7 +242,9 @@ class DesktopController:
             "cloud_connection_verified": False,
             "cloud_retry_in_seconds": max(
                 0, round(self._cloud_retry_at - time.monotonic(), 1)
-            ) if self.cloud_wanted and not self.alive("cloud") else 0,
+            )
+            if self.cloud_wanted and not self.alive("cloud")
+            else 0,
             "connection_error": self.error,
             "recovery_count": self._cloud_recovery_count,
             "local_running": self.alive("mcp"),

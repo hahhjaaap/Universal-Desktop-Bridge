@@ -91,3 +91,18 @@ def test_entering_another_folder_clears_old_code_and_hash():
 
 def test_chatgpt_plugins_link_is_not_tied_to_one_private_account():
     assert PLUGIN_URL == "https://chatgpt.com/plugins"
+
+
+def test_browser_launch_failure_explains_how_to_open_chatgpt(monkeypatch):
+    from PySide6.QtGui import QDesktopServices
+    from udb.manager import MainWindow
+
+    warnings = []
+    monkeypatch.setattr(QDesktopServices, "openUrl", lambda _url: False)
+    monkeypatch.setattr(
+        QMessageBox, "warning",
+        lambda _parent, _title, detail: warnings.append(detail),
+    )
+    MainWindow.open_url(None, PLUGIN_URL)
+    assert warnings and PLUGIN_URL in warnings[0]
+    assert "trình duyệt" in warnings[0]

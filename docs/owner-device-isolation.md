@@ -155,5 +155,6 @@ Unit test security matrix (all `403` or no granted tools unless allowed):
 5. Add abuse/rate limiting, privacy retention policy and human-reviewed
    security assessment before an open public beta.
 
-Read [project-read deployment acceptance](cloudflare-project-read-acceptance.md)
-and [public-release roadmap](../ARCHITECTURE.md) before considering deployment.
+Read [project-read deployment acceptance](cloudflare-project-read-acceptance.md),
+[release-signing and security requirements](release-security.md) and the
+[UDB architecture](../ARCHITECTURE.md) before considering deployment.

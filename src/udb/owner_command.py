@@ -232,7 +232,9 @@ def inspect(home: Path, exe: Path, running=manager_running) -> dict:
         cloud_agent_running=cloud_running,
         cloud_connection_verified=False,
         background=background_state(home),
-        connection_mode=hidden.get("connection_mode", "online") if hidden else "unknown",
+        connection_mode=hidden.get("connection_mode", "online")
+        if hidden
+        else "unknown",
         chatgpt_connection_verified=False,
         cloud_recovery={
             "count": count,
@@ -304,7 +306,8 @@ def doctor(home: Path, report: dict) -> list[dict]:
             check="cloud_pairing",
             ok=None if offline else paired,
             action="Device paired locally; secret never printed."
-            if paired else "Run udb cloud-pair in an attended terminal.",
+            if paired
+            else "Run udb cloud-pair in an attended terminal.",
         )
     )
     checks.append(
@@ -319,7 +322,8 @@ def doctor(home: Path, report: dict) -> list[dict]:
             check="cloud_agent",
             ok=None if offline else report["cloud_agent_running"],
             action="Cloud Agent process running; test bridge_status in ChatGPT."
-            if report["cloud_agent_running"] else "Run udb start after pairing.",
+            if report["cloud_agent_running"]
+            else "Run udb start after pairing.",
         )
     )
     from .components import runtime_report
@@ -327,7 +331,9 @@ def doctor(home: Path, report: dict) -> list[dict]:
     try:
         runtime = runtime_report()
         checks.append(
-            dict(check="runtime_integrity", ok=True, action="Runtime inventory verified.")
+            dict(
+                check="runtime_integrity", ok=True, action="Runtime inventory verified."
+            )
         )
         checks.append(
             dict(

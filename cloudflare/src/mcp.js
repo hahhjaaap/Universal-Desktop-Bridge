@@ -74,11 +74,26 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
     return new Response(null, { status: 202, headers: { "cache-control": "no-store" } });
   if (!((typeof rpc.id === "string" && rpc.id !== "") || Number.isSafeInteger(rpc.id)))
     return error(400, "invalid_rpc_id");
-  if (rpc.method === "initialize")
+  if (rpc.method === "initialize") {
+    // The Windows stdio proxy must receive initialize before tools/list.
+    // Otherwise this edge handshake succeeds while the first discovery call
+    // fails with "MCP not initialized" and ChatGPT displays zero tools.
+    const upstream = await relay(stub, rpc);
+    if (!upstream.ok)
+      return error([429, 502, 503, 504].includes(upstream.status)
+        ? upstream.status : 503, "device_initialize_unavailable");
+    let answer;
+    try { answer = await upstream.json(); }
+    catch { return error(502, "invalid_device_initialize_response"); }
+    if (answer?.jsonrpc !== "2.0" || answer.id !== rpc.id ||
+        !answer.result || typeof answer.result.protocolVersion !== "string" ||
+        answer.error)
+      return error(502, "device_initialize_rejected");
     return json({ jsonrpc: "2.0", id: rpc.id, result: {
       protocolVersion: version, capabilities: { tools: { listChanged: false } },
       serverInfo: { name: "udb-cloud-readonly", version: "0.1.0" },
     } });
+  }
   if (rpc.method === "ping") return json({ jsonrpc: "2.0", id: rpc.id, result: {} });
   if (!["tools/list", "tools/call"].includes(rpc.method) || !validRpc(rpc))
     return error(400, "unsupported_rpc");

@@ -50,7 +50,7 @@ def test_paired_cloud_dialog_never_requests_or_overwrites_tunnel_key(tmp_path):
         agent = SimpleNamespace(home=home)
 
         def config(self):
-            return {"tunnel_id": "tunnel_" + "a" * 32}
+            pytest.fail("Paired Cloudflare dialog must not read legacy Tunnel state")
 
         def settings(self):
             return {"motion": True, "autoconnect": False, "theme": "system"}

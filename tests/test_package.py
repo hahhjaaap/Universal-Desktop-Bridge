@@ -81,30 +81,10 @@ def test_frozen_spec_bundles_guest_source_as_a_byte_readable_payload(monkeypatch
     compile(payloads[0][0].read_bytes(), "desktop_guest.py", "exec")
 
 
-def test_mcp_config_generates_current_stdio_command(tmp_path):
-    home = tmp_path / "home"
-    project = tmp_path / "project"
-    home.mkdir()
-    project.mkdir()
-    result = run(
-        "mcp-config",
-        "--home",
-        str(home),
-        "--root",
-        str(project),
-        "--enable-terminal",
-        cwd=tmp_path,
-    )
-    assert result.returncode == 0, result.stderr
-    payload = json.loads(result.stdout)
-    server = payload["mcpServers"]["universal-desktop-bridge"]
-    assert server["type"] == "stdio"
-    assert Path(server["command"]).resolve() == Path(sys.executable).resolve()
-    assert server["args"][:3] == ["-m", "udb", "serve"]
-    assert str(home.resolve()) in server["args"]
-    assert str(project.resolve()) in server["args"]
-    assert "--enable-terminal" in server["args"]
-    assert not (home / "state").exists()
+def test_cloud_only_cli_removes_local_client_connector_config(tmp_path):
+    result = run("mcp-config", "--home", str(tmp_path))
+    assert result.returncode != 0
+    assert not (tmp_path / "state").exists()
 
 
 def test_system_executable_rejects_unapproved_name():

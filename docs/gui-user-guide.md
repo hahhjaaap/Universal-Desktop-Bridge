@@ -72,8 +72,11 @@ The local **Xuất metadata đã ẩn thông tin nhạy cảm** action confirms 
 then saves a **new** JSON file (never overwriting an existing file) with
 only timestamps, tool labels and states. Inspect the destination before sharing
 it because even sanitized metadata can reveal which tools were used.
-A persistent header displays the current page, a **Tunnel-only** status,
-and a separate **Windows privilege** indicator. If the optional broad
+A persistent header displays the current page, a **Cloud Agent process**
+indicator on Cloudflare-paired profiles (or the legacy **Tunnel-only** status
+on unpaired profiles), and a separate **Windows privilege** indicator.
+Neither Cloud Agent running nor a green legacy Tunnel proves that ChatGPT can
+invoke MCP tools. If the optional broad
 current-user computer grant is active, it warns **Windows: không sandbox**
 on every page. Unknown local grant status stays **chưa xác minh**, never a
 green authorization or safety claim. Disabling that broad grant does not

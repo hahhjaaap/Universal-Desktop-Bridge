@@ -3,6 +3,16 @@
 > **Trạng thái:** hướng dẫn chuẩn bị, **không** phải bằng chứng đã kết nối.
 > Mọi thao tác cấp quyền/đăng nhập đều cần chủ máy tự xác nhận.
 
+> **Trạng thái mã nguồn (04/11/2026):** PR #85–#88 đã vào `main`.
+> Máy có `cloud-pairing.json` hợp lệ sẽ ưu tiên Cloudflare trong
+> `udb setup`, `udb setup --edit`, GUI và `udb doctor`. **Không nhập URL
+> workers.dev vào ô Tunnel ID**. Kết nối Cloudflare vẫn chỉ được xác nhận
+> hoàn chỉnh khi Worker đã triển khai phiên bản đúng, Access/OAuth và
+> `UDB_DEVICE_GRANTS` đã cấp riêng cho thiết bị, ChatGPT đã khám phá và
+> gọi thành công công cụ được phép. Xem
+> [runbook đọc project](cloudflare-project-read-acceptance.md).
+> Việc merge code hoặc cài EXE không tự triển khai Worker hay cấp quyền.
+
 ## 1. Tách ba lớp kết nối
 
 1. **Windows UDB:** đúng bản có Cloud Pair/Cloud Agent; người dùng xác nhận quyền cục bộ.
@@ -54,9 +64,11 @@ thiết bị có trong Relay, hoặc ChatGPT báo "Connected" **đều không đ
    `UDB_ACCESS_AUD` bằng audience thật của Access app,
    `UDB_ACCESS_TEAM_DOMAIN=https://TEN_TEAM.cloudflareaccess.com` để xác minh
    chữ ký JWT Access nếu `ctx.access` không có danh tính, và
-   `UDB_DEVICE_GRANTS` cấp đúng chủ máy/thiết bị. Mặc định chỉ cấp `bridge_status`, `list_projects`. Nếu chủ máy muốn
-   đọc mã nguồn dự án, có thể cấp rõ ràng thêm `list_files`, `read_file`,
-   `search_files`, `check_python_syntax` sau khi triển khai gateway hỗ trợ.
+   `UDB_DEVICE_GRANTS` cấp đúng chủ máy/thiết bị. Quyền mặc định tối thiểu
+   chỉ gồm `bridge_status`, `list_projects`. Sau khi triển khai Worker
+   hỗ trợ project-read, chủ máy có thể cấp **rõ ràng** thêm `list_files`,
+   `read_file`, `search_files`, `check_python_syntax` cho danh tính và
+   thiết bị phù hợp. Việc có code allowlist không tạo grant tự động.
    Không cấp quyền ghi, terminal, desktop hay computer_* qua scope `udb:read`.
    Admin RPC vẫn tắt.
 7. Chạy kiểm tra **không dùng token** (sau khi Worker có phiên bản mã mới
@@ -67,8 +79,12 @@ thiết bị có trong Relay, hoặc ChatGPT báo "Connected" **đều không đ
    ```
 
    Kết quả đúng xác nhận HTTP health, challenge OAuth và metadata Cloudflare
-   qua các phản hồi không kèm token; **không** chứng minh bằng mật mã rằng edge
-   đang thực thi đúng policy và **không** xác nhận đã đăng nhập.
+   qua các phản hồi không kèm token. Header
+   `X-UDB-Project-Read-Capable: 1` (nếu có) chỉ chứng minh **mã Worker
+   quảng bá** hỗ trợ đọc project, không chứng minh grant hoặc nội dung file.
+   Nếu header không có, kiểm tra phiên bản Worker thực tế trước khi ghép lại.
+   Preflight **không** chứng minh đã đăng nhập hay Access policy đúng
+   danh tính; bước xác minh là gọi `read_file` thực tế trong ChatGPT.
 8. Trong ChatGPT, thêm MCP server riêng bằng **chính xác URL MCP**,
    bắt đầu đăng nhập Cloudflare và hoàn thành consent do chủ máy thực hiện.
    Kiểm tra danh sách công cụ read-only và gọi `bridge_status` trên đúng máy.
@@ -103,5 +119,6 @@ phạm vi policy để làm bài kiểm thử chuyển xanh.
 Nguồn kỹ thuật:
 - https://developers.cloudflare.com/workers/configuration/cloudflare-access/
 - https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/
-- [Cloud relay prototype](cloudflare-relay-prototype.md)
+- [Cloud relay prototype (ghi chú lịch sử, không phải hướng dẫn mới)](cloudflare-relay-prototype.md)
+- [Kiểm tra project reads sau deploy](cloudflare-project-read-acceptance.md)
 - [Cloudflare Access code integration](cloudflare-access-managed-oauth.md)

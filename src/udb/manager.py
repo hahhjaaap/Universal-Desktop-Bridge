@@ -609,7 +609,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
     def build_connection(self):
         p, lay = self.page(
             "Kết nối & cài đặt",
-            "Kết nối ChatGPT chỉ kết nối qua Cloudflare Access OAuth; khóa thiết bị không hiển thị.",
+            "ChatGPT chỉ kết nối qua Cloudflare Access OAuth; khóa thiết bị không hiển thị.",
         )
         setup = panel()
         setup_layout = QVBoxLayout(setup)
@@ -944,7 +944,6 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             return
         self.busy = True
         self.connect_button.setEnabled(False)
-        self.local_button.setEnabled(False)
         self.configure_button.setEnabled(False)
         self.status_label.setText("●  Đang xử lý…")
         for button in (
@@ -982,7 +981,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             ConnectionDialog(self.controller, self).exec()
 
     def toggle_cloud(self):
-        """Only a local GUI action may enable the experimental cloud session."""
+        """Only the local owner may enable the Cloudflare session."""
         if self.busy:
             return
         if self.controller.alive("cloud"):
@@ -990,7 +989,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             return
         answer = QMessageBox.question(
             self,
-            "UDB Cloud · Bật phiên thử nghiệm",
+            "UDB Cloud · Bật Cloud Agent",
             "Bật Cloud Agent để nhận lệnh MCP đã xác thực qua Cloudflare?\\n"
             "Cloudflare có thể chuyển các yêu cầu được xác thực về UDB.\\n"
             "Chỉ bật khi bạn tin tưởng chủ hệ thống và đã ghép nối máy.\\n"

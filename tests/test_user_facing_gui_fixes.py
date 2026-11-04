@@ -21,15 +21,19 @@ class ListingAgent:
         if path == "missing":
             raise OSError("Folder is temporarily unavailable")
         if path == "folder":
-            return {"items": [
-                {"path": "folder/second.py", "directory": False},
-            ]}
-        return {"items": [
-            {"path": "missing", "directory": True},
-            {"path": "folder", "directory": True},
-            {"path": "good.py", "directory": False},
-            {"path": "bad.py", "directory": False},
-        ]}
+            return {
+                "items": [
+                    {"path": "folder/second.py", "directory": False},
+                ]
+            }
+        return {
+            "items": [
+                {"path": "missing", "directory": True},
+                {"path": "folder", "directory": True},
+                {"path": "good.py", "directory": False},
+                {"path": "bad.py", "directory": False},
+            ]
+        }
 
     def read(self, project, path):
         if path == "bad.py":
@@ -40,8 +44,9 @@ class ListingAgent:
 def test_unavailable_folder_does_not_strand_the_source_dialog(monkeypatch):
     make_app()
     errors = []
-    monkeypatch.setattr(QMessageBox, "warning",
-                        lambda _parent, _title, text: errors.append(text))
+    monkeypatch.setattr(
+        QMessageBox, "warning", lambda _parent, _title, text: errors.append(text)
+    )
     dialog = SourceDialog(ListingAgent(), "demo")
     try:
         dialog.open_item(dialog.files.item(2))
@@ -59,8 +64,9 @@ def test_unavailable_folder_does_not_strand_the_source_dialog(monkeypatch):
 def test_failed_file_read_never_displays_the_previous_file(monkeypatch):
     make_app()
     errors = []
-    monkeypatch.setattr(QMessageBox, "warning",
-                        lambda _parent, _title, text: errors.append(text))
+    monkeypatch.setattr(
+        QMessageBox, "warning", lambda _parent, _title, text: errors.append(text)
+    )
     dialog = SourceDialog(ListingAgent(), "demo")
     try:
         dialog.open_item(dialog.files.item(2))
@@ -95,12 +101,14 @@ def test_chatgpt_plugins_link_is_not_tied_to_one_private_account():
 
 def test_browser_launch_failure_explains_how_to_open_chatgpt(monkeypatch):
     from PySide6.QtGui import QDesktopServices
+
     from udb.manager import MainWindow
 
     warnings = []
     monkeypatch.setattr(QDesktopServices, "openUrl", lambda _url: False)
     monkeypatch.setattr(
-        QMessageBox, "warning",
+        QMessageBox,
+        "warning",
         lambda _parent, _title, detail: warnings.append(detail),
     )
     MainWindow.open_url(None, PLUGIN_URL)

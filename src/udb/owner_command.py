@@ -609,6 +609,48 @@ def stop(
             pause(min(0.3, max(0, deadline - clock())))
 
 
+def reconnect(
+    home, exe, wait=30, *, snapshot=inspect, clock=time.monotonic, pause=time.sleep
+):
+    """Request a new owned tunnel connection without restarting jobs or grants."""
+    from .host_client import atomic_json
+
+    with launch_gate(home):
+        state = headless_state(home)
+        if not state:
+            raise CommandError(
+                "Run udb start first; reconnect requires a live headless agent."
+            )
+        rid = os.urandom(16).hex()
+        target = regular(home / "state" / "headless-reconnect.json")
+        atomic_json(
+            target,
+            {
+                "instance": state["instance"],
+                "request_id": rid,
+                "expires": time.time() + 45,
+            },
+        )
+        deadline = clock() + wait
+        while True:
+            result = snapshot(home, exe)
+            current = headless_state(home) or {}
+            acknowledged = current.get("reconnect_request") == rid
+            if (
+                acknowledged
+                and not current.get("reconnect_pending", False)
+                and result["local_tunnel_ready"]
+            ) or clock() >= deadline:
+                return dict(
+                    result,
+                    reconnect_requested=True,
+                    request_id=rid,
+                    reconnect_acknowledged=acknowledged,
+                    reconnect_pending=current.get("reconnect_pending", False),
+                )
+            pause(min(0.3, max(0, deadline - clock())))
+
+
 def main(argv=None):
     args = parse_args(argv)
     try:
@@ -656,6 +698,8 @@ def main(argv=None):
             report = start(home, exe, args.wait, connect=not args.offline)
         elif args.action == "stop":
             report = stop(home, exe, args.wait)
+        elif args.action == "reconnect":
+            report = reconnect(home, exe, args.wait)
         else:
             report = inspect(home, exe)
         if args.action == "doctor":

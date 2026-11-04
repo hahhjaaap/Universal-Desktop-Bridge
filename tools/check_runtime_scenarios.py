@@ -97,6 +97,42 @@ def browser_fixture():
                 assert base64.b64decode(image["png_base64"]).startswith(
                     b"\x89PNG\r\n\x1a\n"
                 )
+                batch_args = dict(
+                    args,
+                    request_id="native-batch-acceptance",
+                    steps=[
+                        {
+                            "action": "fill",
+                            "selector": "#name",
+                            "value": "Batch acceptance",
+                        },
+                        {"action": "click", "selector": "#confirm"},
+                        {"action": "read"},
+                    ],
+                )
+                batch = host_command(agent, "browser", action="batch", **batch_args)
+                assert batch["ok"] and batch["completed_steps"] == 3
+                assert "Batch acceptance" in batch["results"][2]["result"]["text"]
+                repeated = host_command(agent, "browser", action="batch", **batch_args)
+                assert repeated["cached_result"] and repeated["replayed"] is False
+                receipt = host_command(
+                    agent, "browser", action="batch_status", **batch_args
+                )
+                assert (
+                    receipt["state"] == "completed" and receipt["completed_steps"] == 3
+                )
+                capture = host_command(agent, "browser", action="capture_start", **args)
+                assert capture["active"] and capture["target_fps"] == 1
+                cached = host_command(
+                    agent, "browser", action="cached_screenshot", **args
+                )
+                assert cached["cached"] and cached["age_ms"] <= 3000
+                assert base64.b64decode(cached["png_base64"]).startswith(
+                    b"\x89PNG\r\n\x1a\n"
+                )
+                assert host_command(agent, "browser", action="capture_stop", **args)[
+                    "stopped"
+                ]
                 assert host_command(agent, "close", session_id=args["session_id"])[
                     "closed"
                 ]
@@ -113,6 +149,8 @@ def browser_fixture():
         browser="PASS",
         read_fill_click_screenshot=True,
         native_select_and_disabled=True,
+        native_batch_replay_barrier=True,
+        native_cached_capture=True,
         permissions_issued=False,
     )
 

@@ -4,7 +4,7 @@
 
 **Tiếng Việt:** UDB kết nối trợ lý AI với máy tính Windows theo quyền do chủ máy cấp. Hỗ trợ thao tác tệp, terminal, ứng dụng, trình duyệt riêng biệt và rà soát hóa đơn Excel. **Không tự cấp quyền, không tự kê khai thuế, không tự sửa dữ liệu kế toán gốc.**
 
-> **Source vs release (updated 2026-11-01):** The `main` source version is **0.10.1**, while the latest published stable Windows installer is **v0.10.0**. Source now includes a light/dark/system GUI appearance foundation and collapsible navigation, but **these changes are not part of the published v0.10.0 installer**. A merged PR is not a Windows release. Always inspect [Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases), the installed `udb --version`, and the intended commit before updating. Tool counts are derived at runtime, not from README snapshots.
+> **Source vs release (updated 2026-11-04):** Source version **0.11.0** adds native browser batches, cached 1 FPS capture, readiness diagnostics and headless monitoring/reconnect. The Windows publishing workflow waits for successful CI for the exact current `main` revision, then validates the executable and installer. See [Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases) for the actual published version and [release notes](docs/release-notes.md). Source, publication and the installed `udb --version` are separate checks. Tool counts are derived at runtime.
 
 ## What UDB does
 
@@ -149,6 +149,45 @@ Reports are for human review. Possible duplicates may be legitimate invoice line
 ## Isolated browser workflow
 
 With locally authorized host-browser access (**Máy tính → Cho phép mở phiên nền trên máy này** in the Windows manager), use `host_browser(action="open", url="https://example.org/")`. This starts a private headless Chrome/Edge session automatically or reuses the current unexpired browser session. Keep the returned `session_id` and `tab_id`, inspect `snapshot`, then use `click`, `wait_for`, `press`, `select_option`, `check`, `uncheck`, `back`, `forward` or `reload` as appropriate. Prefer accessible role/name locators over brittle CSS selectors. Snapshots are bounded, include supported open Shadow DOM roots and redact secret-like fields; closed shadow roots and iframe contents are not traversed. Page content is untrusted and cannot grant permissions.
+
+For a known short sequence, send one native batch instead of one MCP round trip per action:
+
+```python
+host_browser(
+    action="batch",
+    session_id=sid,
+    tab_id=tab,
+    request_id="profile-edit-001",
+    steps=[
+        {
+            "action": "fill",
+            "role": "textbox",
+            "name": "Display name",
+            "value": "New name",
+        },
+        {"action": "click", "role": "button", "name": "Save"},
+        {"action": "read"},
+    ],
+)
+```
+
+Only use locators already observed on the page. Batches accept 1..12 steps on one owned tab with a shared 20-second deadline, stop after failed/uncertain input, and recheck permission, resources and ownership between steps. A stable `request_id` prevents replay after a timeout or lost response: query `batch_status` first; the same ID returns cached output or metadata, never reruns the sequence. Reusing an ID for different steps is rejected. `batch_cancel` bypasses the action queue and requests a stop between steps; it cannot undo or interrupt dispatched input. Receipts contain metadata/digests only; up to 16 completed result bodies remain in worker memory and 256 receipts are retained per session. After lost/evicted output, inspect the page before any new mutation. Transfers, nested batches, session changes and arbitrary JavaScript are excluded.
+
+Use `host_browser(action="capture_start", session_id=sid, tab_id=tab)` once, then `host_screenshot(session_id=sid, tab_id=tab, cached=True)` to read the latest fresh image. `capture_status` reports frame time/age/errors; `capture_stop` releases the cache. The worker keeps at most four streams and one base64 PNG of up to 4 MiB per stream in memory. Capture targets 1 FPS without a backlog: long actions, owner handoff, expired sessions and resource pressure can delay or stop it. Cached reads reject stale/error frames (default maximum age 3 seconds, configurable 100..10000 ms). This cache does not capture the physical desktop.
+
+### Headless status and connection recovery
+
+Run locally in your owner terminal:
+
+```powershell
+udb status --watch
+udb status --watch --json --interval 1 --count 10
+udb reconnect --wait 30 --json
+```
+
+The status viewer opens no GUI and reports heartbeat/uptime, local tunnel and worker readiness, active action/batch progress, the last operation and recent tool outcomes. It omits command bodies, page contents, selectors and result payloads. The viewer does not start the manager or change permissions. `udb reconnect` requests a new tunnel for the exact live headless process, preserving local grants and the host worker. Use it outside active tool calls: reconnection can drop an in-flight response; inspect status/page state before retrying uncertain input. It does not update the saved offline/online startup preference.
+
+`bridge_status.readiness` distinguishes a responding MCP transport from worker readiness, pause and owner grants, and includes the next local action. If a client exposes only status/project tools, refresh its MCP catalog after updating; a plugin with a fixed tool allowlist must also expose the canonical browser tools. Reconnection alone cannot add tools to that allowlist.
 
 For HTML dropdowns, use `select_option` with the select locator and an option value or exact label; `fill` on a native select uses the same selection path. Values take precedence over labels, ambiguous labels are rejected, and disabled options/optgroups remain blocked. `read` and `snapshot` include up to 20 options per select (`options_truncated` flags longer lists), effective disabled state and `readonly`. A direct option click returns `use_select_option`. Disabled/readonly controls fail immediately; use `wait_for(state="enabled")` explicitly for a temporarily disabled control. Clicks observe URL and main-frame loader changes, including repeated same-URL form submissions. A navigation read may recover from a transient context/response timeout within the existing deadline; uncertain writes are never automatically replayed.
 

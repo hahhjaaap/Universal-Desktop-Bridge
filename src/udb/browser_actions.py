@@ -4,6 +4,12 @@ from .core import PolicyError
 
 BROWSER_ACTIONS = (
     "open",
+    "batch",
+    "batch_status",
+    "batch_cancel",
+    "capture_start",
+    "capture_stop",
+    "capture_status",
     "upload",
     "download",
     "scroll",

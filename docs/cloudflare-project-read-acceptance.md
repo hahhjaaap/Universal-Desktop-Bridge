@@ -70,7 +70,7 @@ connection are different observations.
 From a source checkout, using the real non-secret relay origin/device ID:
 
 ```sh
-python tools/check_cloudflare_deployment.py --relay https://YOUR-WORKER.workers.dev --device-id YOUR_DEVICE_ID --auth-mode cloudflare-access
+python tools/check_cloudflare_deployment.py --relay https://YOUR-WORKER.workers.dev --device-id YOUR_DEVICE_ID --auth-mode cloudflare-access --require-project-read
 ```
 
 `project_read_capability=deployed` means the code advertises project-read support.
@@ -83,6 +83,41 @@ If initialization fails, sanitized `diagnostics.reason` distinguishes `device_of
 the local agent when offline, or let the active request finish when busy. No client
 mutation or timed-out request is automatically replayed. The original
 `device_initialize_unavailable` error remains for compatibility.
+
+### Public preflight gate for staging
+
+The `--require-project-read` flag rejects a Worker whose public `/health`
+response does not advertise `X-UDB-Project-Read-Capable: 1`. A failure
+prints a fixed diagnostic code, `project_read_not_advertised`, **without
+printing** the relay URL, device ID, tokens or response body. An unexpected
+403 or missing edge OAuth challenge reports
+`oauth_challenge_missing_or_wrong_status`, and is **not** evidence that
+Managed OAuth was configured successfully.
+
+This is **only** a code/deployment and unauthenticated denial check.
+A successful public preflight must still be followed by an actual
+authenticated tool call from ChatGPT, on a registered test project and a
+deliberately scoped owner account. Do not try to retrieve, copy or log the
+ChatGPT OAuth token to make a command-line test succeed.
+
+Required human-reviewed evidence from an isolated staging environment:
+
+| Boundary | Acceptance evidence |
+| --- | --- |
+| Worker version | Reviewed deployed SHA, correct `/health` capability |
+| Access policy | Authenticated identity and exact device-specific MCP path |
+| Grant | Allowed tools match the owner-approved subject/device entry |
+| Windows project | `read_file` returns expected fixture bytes and SHA-256 |
+| Denial | Wrong subject/device, outside project and unsafe tools all denied |
+| Lifecycle | Disconnect, reconnect, expiry, revoked grants checked without tool replay |
+| Operational | No credentials/file contents included in shared reports |
+
+A missing Worker capability flag is the first blocker, **not** an invitation
+to add broad scopes or disable authentication. If the ChatGPT plugin catalog
+lists only `bridge_status` and `list_projects`, verify Worker deployment
+and per-subject grants before attempting reconnects. The Worker does not
+automatically update the plugin's registered tool catalog.
+
 
 ## Authenticated acceptance in ChatGPT
 

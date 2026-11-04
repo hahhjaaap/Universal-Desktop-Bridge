@@ -89,3 +89,20 @@ test("expired, wrong-audience and unsigned tokens cannot authorize", async () =>
     headers: { Authorization: "Bearer eyJhbGciOiJub25lIn0.e30.invalid" },
   }), env, DEVICE), AuthError);
 });
+
+test("a device grant can opt into scoped project reads without allowing writes", () => {
+  const tools = ["bridge_status", "list_projects", "list_files", "read_file",
+    "search_files", "check_python_syntax"];
+  const projectEnv = { ...env,
+    UDB_DEVICE_GRANTS: JSON.stringify({ [DEVICE]: { alice: tools } }) };
+  assert.deepEqual(deviceGrant(projectEnv, DEVICE, "alice"), tools);
+  assert.deepEqual(deviceGrant(projectEnv, DEVICE, "bob"), []);
+  for (const disallowed of ["propose_file_write", "computer_execute",
+    "terminal_start", "computer_files"]) {
+    const attempted = { ...env,
+      UDB_DEVICE_GRANTS: JSON.stringify({ [DEVICE]: {
+        alice: ["read_file", disallowed],
+      } }) };
+    assert.deepEqual(deviceGrant(attempted, DEVICE, "alice"), ["read_file"]);
+  }
+});

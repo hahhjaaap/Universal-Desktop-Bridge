@@ -14,6 +14,8 @@ import time
 import uuid
 
 from .browser_actions import dispatch_browser
+from .browser_batch import BatchRunner
+from .browser_capture import CaptureCache
 from .core import PolicyError, reject_links
 from .host_client import _read_json, atomic_json, enabled
 from .resources import LIMITS, Governor, WindowsSampler, require_capacity
@@ -57,6 +59,11 @@ class HostService:
         self.sampler = WindowsSampler()
         self.governor = Governor()
         self.current = None
+        self.operation_detail = None
+        self.last_operation = None
+        self.operation_counts = {"completed": 0, "failed": 0}
+        self.batches = BatchRunner()
+        self.captures = CaptureCache()
         from .desktop_control import PauseHotkey
 
         self.pause_hotkey = PauseHotkey(agent)
@@ -112,6 +119,12 @@ class HostService:
             resources=dict(self.resource),
             sessions=sessions,
             running_operation=self.current,
+            operation_detail=getattr(self, "operation_detail", None),
+            last_operation=getattr(self, "last_operation", None),
+            operation_counts=dict(getattr(self, "operation_counts", {})),
+            capture_streams=len(
+                getattr(getattr(self, "captures", None), "streams", {})
+            ),
             host_mouse_keyboard=False,
             existing_user_windows=False,
             native_apps=["workspace"],
@@ -173,6 +186,8 @@ class HostService:
                 continue  # Keep failed cleanup tracked and maintain the other sessions.
 
     def _close(self, sid):
+        if getattr(self, "captures", None):
+            self.captures.stop(sid)
         row = self.sessions.get(sid)
         if row:
             row["closing"] = True
@@ -350,6 +365,13 @@ class HostService:
                 self._sync_handoff(obj)
             return dict(result, session_id=sid)
         opening_browser = op == "browser" and args.get("action") == "open"
+        if op == "browser" and args.get("action") in {"capture_stop", "capture_status"}:
+            self._session(args.get("session_id"), kind="browser")
+            if not hasattr(self, "captures"):
+                self.captures = CaptureCache()
+            if args["action"] == "capture_stop":
+                return self.captures.stop(args["session_id"], args.get("tab_id", ""))
+            return self.captures.status(args["session_id"], args.get("tab_id", ""))
         require_capacity(
             self.resource, 512 if op == "start" or opening_browser else 128
         )
@@ -368,9 +390,32 @@ class HostService:
                 raise PolicyError(
                     "The owner has browser control; return it to background in the local UDB manager"
                 )
+            if action == "batch":
+                if not hasattr(self, "batches"):
+                    self.batches = BatchRunner()
+                return self.batches.run(self, obj, args)
+            if action in {
+                "capture_start",
+                "capture_stop",
+                "capture_status",
+                "cached_screenshot",
+            }:
+                if not hasattr(self, "captures"):
+                    self.captures = CaptureCache()
+                sid, tab = args.get("session_id"), args.get("tab_id", "")
+                if action == "capture_start":
+                    return self.captures.start(self, sid, tab)
+                if action == "capture_stop":
+                    return self.captures.stop(sid, tab)
+                if action == "capture_status":
+                    return self.captures.status(sid, tab)
+                return self.captures.get(sid, tab, args.get("max_age_ms", 3000))
             if action in {"upload", "download"}:
                 return self._browser_transfer(obj, args)
-            return dispatch_browser(obj, args)
+            result = dispatch_browser(obj, args)
+            if action == "close_tab" and getattr(self, "captures", None):
+                self.captures.stop(args.get("session_id"), args.get("tab_id", ""))
+            return result
         if op == "workspace" and row["kind"] == "workspace":
             if action == "read":
                 return obj.read()
@@ -437,11 +482,54 @@ class HostService:
                 if not isinstance(op, str) or not isinstance(args, dict):
                     raise ValueError("Invalid host command envelope")
                 with self.lock:
-                    self.current = op
+                    self.current = (
+                        op
+                        if op
+                        in {
+                            "start",
+                            "close",
+                            "stop_all",
+                            "browser",
+                            "workspace",
+                            "computer",
+                            "browser_presentation",
+                        }
+                        else "invalid"
+                    )
+                    action = args.get("action", args.get("mode", ""))
+                    action = (
+                        action
+                        if isinstance(action, str)
+                        and re.fullmatch(r"[a-z_]{0,40}", action)
+                        else "invalid"
+                    )
+                    self.operation_detail = {
+                        "op": self.current,
+                        "action": action,
+                        "started_at": time.time(),
+                    }
+                    started, succeeded = time.monotonic(), False
                     try:
                         self.publish()
                         result = self.dispatch(op, args)
+                        succeeded = not (
+                            isinstance(result, dict) and result.get("ok") is False
+                        )
                     finally:
+                        self.last_operation = dict(
+                            self.operation_detail,
+                            ok=succeeded,
+                            finished_at=time.time(),
+                            elapsed_ms=round((time.monotonic() - started) * 1000, 2),
+                        )
+                        counts = dict(
+                            getattr(
+                                self, "operation_counts", {"completed": 0, "failed": 0}
+                            )
+                        )
+                        counts["completed" if succeeded else "failed"] += 1
+                        self.operation_counts = counts
+                        self.operation_detail = None
                         self.current = None
                 reply = dict(ok=True, result=result)
             except Exception as exc:
@@ -474,6 +562,9 @@ class HostService:
                         processed = self._process_command(p) or processed
                     except Exception:
                         continue  # A bad/locked entry must not block the rest of the inbox.
+                if getattr(self, "captures", None):
+                    with self.lock:
+                        self.captures.tick(self)
                 now = time.monotonic()
                 if now >= next_cleanup:
                     next_cleanup = now + _REPLY_CLEANUP_SECONDS
@@ -481,6 +572,8 @@ class HostService:
             except Exception:
                 pass  # Transient mailbox errors are retried on the next poll.
             poll = 0.06 if processed else min(_IDLE_POLL_SECONDS, poll * 1.5)
+            if getattr(getattr(self, "captures", None), "streams", {}):
+                poll = min(poll, 0.05)
             self.stop_event.wait(poll)
 
     def close(self):

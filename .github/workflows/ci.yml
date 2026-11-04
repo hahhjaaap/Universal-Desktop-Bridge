@@ -1,5 +1,8 @@
 name: package-and-regressions
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
 permissions:
   contents: read
 
@@ -24,7 +27,6 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -m pip install ".[office,dev]"
       - run: python -m ruff check src tools tests
-      - run: python -m ruff format --diff .
       - run: python -m ruff format --check .
       - run: python tools/audit_repository.py --strict
       - run: python tools/check_import_boundaries.py

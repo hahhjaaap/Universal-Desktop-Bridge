@@ -130,6 +130,22 @@ def command(agent, op, **args):
             require(agent)
     elif not s["enabled"] and op not in ("close", "stop_all"):
         raise PolicyError("Host background mode is disabled locally")
+    if op == "browser" and args.get("action") in {"batch_status", "batch_cancel"}:
+        # Read/cancel a running batch without waiting behind its serial action
+        # worker. Cancellation is checked between steps, never input replay.
+        from .browser_batch import cancel, inspect_receipt
+
+        sid = args.get("session_id", "")
+        if not any(
+            row["session_id"] == sid
+            and row["kind"] == "browser"
+            and row["expires"] > time.time()
+            and not row.get("closing")
+            for row in s["sessions"]
+        ):
+            raise PolicyError("Unknown or expired owned browser session")
+        operation = cancel if args["action"] == "batch_cancel" else inspect_receipt
+        return operation(agent.state / "host", sid, args.get("request_id", ""))
     folder = agent.state / "host"
     inbox = folder / "inbox"
     replies = folder / "replies"

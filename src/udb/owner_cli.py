@@ -59,9 +59,9 @@ def render_report(report, as_json=False):
     if as_json:
         print(json.dumps(report, ensure_ascii=True))
         return
-    tunnel = "ready" if report["local_tunnel_ready"] else "not ready"
+    cloud = "running" if report["cloud_agent_running"] else "not running"
     print(
-        f"UDB: local tunnel {tunnel}; background {report['background']}; mode {report['manager_mode']}."
+        f"UDB: Cloud Agent {cloud}; background {report['background']}; mode {report['manager_mode']}."
     )
     print(report["next_action"])
     for check in report.get("checks", []):
@@ -81,7 +81,7 @@ def report_healthy(action, report):
     if action == "reconnect":
         return (
             report.get("reconnect_acknowledged") is True
-            and report["local_tunnel_ready"]
+            and report["cloud_agent_running"]
             and not report.get("reconnect_pending", False)
         )
     running = report["local_tunnel_ready"] or (

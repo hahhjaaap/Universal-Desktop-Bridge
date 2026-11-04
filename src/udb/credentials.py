@@ -1,18 +1,18 @@
-"""Local-only runtime credentials; never return secret text to MCP or logs."""
+"""Windows Credential Manager helpers; do not return secrets to MCP or logs."""
 
 from __future__ import annotations
 
 import uuid
 from typing import Any
 
-TARGET = "UniversalDesktopBridge/Tunnel"
+TARGET = "UniversalDesktopBridge/Local"
 
 
 def normalize_key(value: str) -> str:
     key = value.strip()
     if not key:
         raise ValueError(
-            "API key is empty. Paste the key into the local credential field."
+            "Credential value is empty; enter it only in an attended local field."
         )
     if any(ord(character) < 33 or ord(character) > 126 for character in key):
         raise ValueError(

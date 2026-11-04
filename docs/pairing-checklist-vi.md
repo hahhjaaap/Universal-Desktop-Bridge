@@ -54,8 +54,11 @@ thiết bị có trong Relay, hoặc ChatGPT báo "Connected" **đều không đ
    `UDB_ACCESS_AUD` bằng audience thật của Access app,
    `UDB_ACCESS_TEAM_DOMAIN=https://TEN_TEAM.cloudflareaccess.com` để xác minh
    chữ ký JWT Access nếu `ctx.access` không có danh tính, và
-   `UDB_DEVICE_GRANTS` cấp đúng chủ máy/thiết bị. Chỉ cho phép công cụ
-   read-only `bridge_status`, `list_projects`. Admin RPC vẫn tắt.
+   `UDB_DEVICE_GRANTS` cấp đúng chủ máy/thiết bị. Mặc định chỉ cấp `bridge_status`, `list_projects`. Nếu chủ máy muốn
+   đọc mã nguồn dự án, có thể cấp rõ ràng thêm `list_files`, `read_file`,
+   `search_files`, `check_python_syntax` sau khi triển khai gateway hỗ trợ.
+   Không cấp quyền ghi, terminal, desktop hay computer_* qua scope `udb:read`.
+   Admin RPC vẫn tắt.
 7. Chạy kiểm tra **không dùng token** (sau khi Worker có phiên bản mã mới
    và Managed OAuth đã thực sự bảo vệ MCP path):
    

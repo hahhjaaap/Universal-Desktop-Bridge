@@ -2,7 +2,13 @@
 // The OAuth authorization-code + PKCE flow is owned by the configured external IdP.
 // This module never issues tokens or substitutes an admin/device key for user identity.
 const ID = /^[a-f0-9]{32}$/;
-const SAFE_TOOLS = new Set(["bridge_status", "list_projects"]);
+// Strictly project-scoped read-only tools. Writes, host operations, desktop
+// control and legacy aliases are never permitted by the udb:read scope.
+// The owner's per-device/per-subject UDB_DEVICE_GRANTS must still name each tool.
+const SAFE_TOOLS = new Set([
+  "bridge_status", "list_projects", "list_files", "read_file",
+  "search_files", "check_python_syntax",
+]);
 const MAX_TOKEN = 8192;
 const MAX_JWKS = 16384;
 let cachedJwks = { url: "", until: 0, keys: [] };

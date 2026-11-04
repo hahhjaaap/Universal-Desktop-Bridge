@@ -192,7 +192,7 @@ def main():
             assert (
                 offline["manager_running"] and offline["connection_mode"] == "offline"
             )
-            assert offline["local_tunnel_ready"] is False
+            assert offline["cloud_agent_running"] is False
             assert legacy_metadata.read_text("utf-8") == legacy_data
             # The start CLI has fully exited. Native modules not yet loaded by
             # the background manager must still exist for later host commands.
@@ -210,7 +210,7 @@ def main():
                 checks = {row["check"]: row for row in doctor["checks"]}
                 assert checks["runtime_integrity"]["ok"] is True
                 assert checks["agent_heartbeat"]["ok"] is True
-                assert checks["local_tunnel"]["ok"] is None
+                assert checks["cloud_agent"]["ok"] is None
                 assert checks["credentials"]["ok"] is None
                 assert all(row["ok"] is not False for row in checks.values())
                 assert run("autostart", "--help") and run("update", "--help")

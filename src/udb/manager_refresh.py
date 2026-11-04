@@ -589,9 +589,7 @@ class ManagerRefreshMixin:
             + theme.raised
             + "; border-radius:9px; padding:4px 10px;"
         )
-        self.connect_button.setText(
-            "Tắt Cloud Agent" if running else "Bật Cloud Agent"
-        )
+        self.connect_button.setText("Tắt Cloud Agent" if running else "Bật Cloud Agent")
         self.connect_button.setEnabled(not self.busy)
         self.cloud_session_button.setEnabled(not self.busy)
         self.cloud_session_button.setText(self.connect_button.text())

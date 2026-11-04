@@ -17,7 +17,6 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 FILENAMES = {
-    "tunnel-client": "tunnel-client.exe",
     "ffmpeg": "ffmpeg.exe",
     "ffprobe": "ffprobe.exe",
 }
@@ -161,7 +160,7 @@ def runtime_report(probe=False):
             result = subprocess.run(
                 [
                     str(path),
-                    "--version" if record["name"] == "tunnel-client" else "-version",
+                    "-version",
                 ],
                 env=child_environment(),
                 capture_output=True,

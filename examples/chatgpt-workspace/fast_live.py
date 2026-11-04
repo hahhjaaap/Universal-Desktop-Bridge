@@ -19,6 +19,57 @@ def atomic_json(path, data):
     os.replace(tmp, path)
 
 
+def bound_snapshot(snapshot, max_bytes=48000):
+    """Bound one-call JSON without repeatedly serializing an almost-full snapshot.
+
+    Preserve the original priority: oldest participant tail first, then topic
+    tail, then oldest messages. Keep the newest messages and cursor intact.
+    """
+
+    def byte_count():
+        return len(
+            json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        )
+
+    if byte_count() <= max_bytes:
+        return snapshot
+    for field, minimum, flag in (
+        ("participants", 4, "participants_truncated"),
+        ("topics", 4, "topics_truncated"),
+        ("messages", 1, "history_truncated"),
+    ):
+        original = snapshot[field]
+        if len(original) <= minimum:
+            continue
+        snapshot[flag] = True
+        low, high = minimum, len(original) - 1
+        chosen = minimum
+        # Binary search avoids O(N) serializations when 100 long topics/roles
+        # must be trimmed. Each trial preserves the same deterministic order.
+        while low <= high:
+            middle = (low + high) // 2
+            snapshot[field] = (
+                original[-middle:] if field == "messages" else original[:middle]
+            )
+            if field == "messages":
+                snapshot["oldest_included_id"] = snapshot["messages"][0]["id"]
+            if byte_count() <= max_bytes:
+                chosen = middle
+                low = middle + 1
+            else:
+                high = middle - 1
+        snapshot[field] = (
+            original[-chosen:] if field == "messages" else original[:chosen]
+        )
+        if field == "messages":
+            snapshot["oldest_included_id"] = snapshot["messages"][0]["id"]
+        if byte_count() <= max_bytes:
+            return snapshot
+    raise ValueError("Unexpected oversized snapshot")
+
+
 class Mirror:
     def __init__(self, root, interval_ms=25):
         self.root = Path(root)
@@ -54,6 +105,14 @@ class Mirror:
                 counts = self.db.execute(
                     "SELECT (SELECT count(*) FROM topics),(SELECT count(*) FROM participants)"
                 ).fetchone()
+                # The cursor and truncation flag must observe the same SQLite
+                # snapshot even when another writer commits during refresh.
+                history_truncated = bool(
+                    rows
+                    and self.db.execute(
+                        "SELECT 1 FROM messages WHERE id<? LIMIT 1", (rows[-1]["id"],)
+                    ).fetchone()
+                )
             finally:
                 self.db.rollback()
             messages = []
@@ -69,12 +128,7 @@ class Mirror:
                 "poll_interval_ms": self.interval_ms,
                 "latest_id": rows[0]["id"] if rows else 0,
                 "oldest_included_id": rows[-1]["id"] if rows else 0,
-                "history_truncated": bool(
-                    rows
-                    and self.db.execute(
-                        "SELECT 1 FROM messages WHERE id<? LIMIT 1", (rows[-1]["id"],)
-                    ).fetchone()
-                ),
+                "history_truncated": history_truncated,
                 "topics_truncated": counts[0] > 100,
                 "participants_truncated": counts[1] > 100,
                 "messages": messages,
@@ -87,27 +141,9 @@ class Mirror:
                 topic["goal"] = topic["goal"][:500]
             for person in snapshot["participants"]:
                 person["role"] = person["role"][:200]
-            # Keep one-call snapshots below 48 KiB even with long Unicode fields.
-            while (
-                len(
-                    json.dumps(
-                        snapshot, ensure_ascii=False, separators=(",", ":")
-                    ).encode("utf-8")
-                )
-                > 48000
-            ):
-                if len(snapshot["participants"]) > 4:
-                    snapshot["participants"].pop()
-                    snapshot["participants_truncated"] = True
-                elif len(snapshot["topics"]) > 4:
-                    snapshot["topics"].pop()
-                    snapshot["topics_truncated"] = True
-                elif len(snapshot["messages"]) > 1:
-                    snapshot["messages"].pop(0)
-                    snapshot["oldest_included_id"] = snapshot["messages"][0]["id"]
-                    snapshot["history_truncated"] = True
-                else:
-                    raise ValueError("Unexpected oversized snapshot")
+            # Same 48 KiB limit and truncation semantics, with logarithmic
+            # rather than linear full-document JSON serialization.
+            bound_snapshot(snapshot)
             atomic_json(self.root / "latest.json", snapshot)
             self.snapshot = snapshot
             self.version = version

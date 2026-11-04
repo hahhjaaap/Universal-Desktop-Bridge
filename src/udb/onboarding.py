@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import getpass
 import json
 import os
 import sys
 import uuid
 
 from .config import checked, prepare_workspace
-from .connection import is_tunnel_id, normalize_tunnel_id
 
-TUNNELS_URL = "https://platform.openai.com/settings/organization/tunnels"
-KEYS_URL = "https://platform.openai.com/settings/organization/api-keys"
 CHATGPT_URL = "https://chatgpt.com/plugins"
 
 
@@ -49,21 +45,14 @@ def attended_console():
 
 
 def saved_connection(settings, *, repair=False):
-    from . import owner_command
+    """Read only the owner-paired device ID; never expose a token."""
+    from .cloud_agent import load_pairing
 
-    path = checked(settings.home / "state/connection.json")
-    if not path.exists():
-        return None
     try:
-        data = owner_command.read_object(path, 4096)
-    except (OSError, ValueError, owner_command.CommandError):
-        if repair:
-            return None
-        raise ValueError(
-            "Saved connection could not be read. Run udb setup --edit locally."
-        ) from None
-    value = data.get("tunnel_id")
-    return value if is_tunnel_id(value) else None
+        _, device_id, _ = load_pairing(settings.home)
+        return device_id
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
 
 
 def saved_mode(settings):
@@ -106,147 +95,88 @@ def save_mode(settings, mode):
 
 def connection_help():
     print(
-        "1/3 Create or reuse your tunnel in the intended OpenAI organization and "
-        "ChatGPT workspace:\n"
-        + TUNNELS_URL
-        + "\n2/3 Create a restricted runtime key with Tunnels Read + Use:\n"
-        + KEYS_URL
-        + "\n3/3 Once UDB is running, add or finish your ChatGPT MCP connection, "
-        "choose Connection: Tunnel, and select that same tunnel:\n"
+        "UDB Cloudflare-only setup:\n"
+        "1/3 Configure an owner-only, path-scoped Cloudflare Access MCP application.\n"
+        "2/3 Obtain a short-lived pairing invitation; enter it locally with "
+        "udb cloud-pair.\n"
+        "3/3 Start UDB Cloud Agent and connect the exact MCP URL at "
         + CHATGPT_URL
-        + "\nTunnel access depends on your account/workspace. If it is unavailable, "
-        "ask its administrator or use the generated local stdio MCP configuration. "
-        "A ChatGPT account alone does not provision a tunnel."
+        + "\nNo OpenAI Tunnel ID or runtime API key is needed. "
+        "The public Cloudflare gateway grants only approved read-only tools."
     )
 
 
 def run(settings, *, edit=False, local=False):
+    """Attended Cloudflare-only pairing and agent startup.
+
+    Offline mode is local diagnostics, not another remote connection path.
+    """
     if not console_input():
         raise ValueError(
             "Setup requires your own attended Windows terminal; redirected input is refused."
         )
     if edit and local:
-        raise ValueError("Choose either connection editing or local mode")
+        raise ValueError("Choose either Cloudflare pairing or offline diagnostics")
     from . import owner_command
-    from .desktop import DesktopController
+    from .config import prepare_workspace
 
-    # Validate the destination before changing an existing agent or connection.
     checked(settings.home / "state/startup-preferences.json")
-    print("UDB console setup. Python, Node.js and Desktop Commander are not required.")
+    print("UDB Cloudflare setup. No OpenAI Tunnel or runtime API key is used.")
     if getattr(sys, "frozen", False):
         from .components import runtime_report
 
         try:
             runtime = runtime_report()
-            if "tunnel-client" not in {
-                row["name"] for row in runtime["components"]
-            } or not all(runtime["office_modules"].values()):
+            if not all(runtime["office_modules"].values()):
                 raise ValueError()
         except (OSError, ValueError, KeyError, TypeError):
             raise ValueError(
-                "Runtime check failed. Reinstall the complete Windows standalone release before entering connection details."
+                "Bundled runtime check failed. Reinstall the verified standalone release."
             ) from None
-    print("Runtime check complete. Step 1: choose online or local mode.")
-    current = None if local else saved_connection(settings, repair=edit)
-    connect = not local and bool(current or edit)
-    if not local and not connect:
-        answer = input("Connect this PC to ChatGPT now? [Y/n]: ").strip().lower()
-        if answer not in ("", "y", "yes", "n", "no"):
-            raise ValueError("Choose Y or N; setup was not changed.")
-        connect = answer in ("", "y", "yes")
-    changed = False
-    pending = False
-    key = ""
-    try:
-        if connect and (edit or not current):
-            connection_help()
-            while True:
-                prompt = (
-                    "Tunnel ID or MCP URL (Enter keeps the current ID; cancel exits): "
-                    if edit and current
-                    else "Tunnel ID or MCP URL (? repeats help; Enter cancels): "
-                )
-                pasted = input(prompt).strip()
-                if pasted != "?":
-                    break
-                connection_help()
-            if pasted.lower() == "cancel" or (edit and not current and not pasted):
-                print("Connection unchanged.")
-                return 0
-            if not pasted and not current:
-                connect = False
-            else:
-                tunnel = normalize_tunnel_id(pasted or current)
-                print("Runtime key comes from: " + KEYS_URL)
-                key = getpass.getpass(
-                    "Runtime key (hidden; Enter cancels without saving): "
-                )
-                if not key.strip():
-                    if edit:
-                        print("Connection unchanged.")
-                        return 0
-                    connect = False
-                else:
-                    from .credentials import normalize_key
 
-                    key = normalize_key(key)
-                    pending = True
+    prepare_workspace(settings)
+    paired = saved_connection(settings)
+    connect = not local
+    if connect and not paired:
+        connection_help()
+        answer = input("Pair this PC with Cloudflare now? [y/N]: ").strip().lower()
+        if answer not in ("y", "yes"):
+            print("Cloud pairing not changed; offline diagnostics are available.")
+            return 0
+        from .cloud_pair import run as pair_device
 
-        args = ["start", "--home", str(settings.home), "--wait", "60", "--follow"]
-        if connect:
+        pair_device(settings)
+        paired = saved_connection(settings)
+        if not paired:
+            raise ValueError("Cloud pairing was not confirmed locally.")
+    elif connect:
+        print("A Cloudflare device is already paired. Existing secrets are unchanged.")
+        if edit:
             print(
-                "Finish or verify the ChatGPT connection at "
-                + CHATGPT_URL
-                + "\nChoose Connection: Tunnel and the same Tunnel ID. "
-                "Local readiness alone does not verify a ChatGPT tool call."
+                "To replace a paired device, revoke the previous device in Cloudflare "
+                "first and follow the owner-attended pairing procedure."
             )
-            if (
-                input("Open the local computer-access consent prompt? [y/N]: ")
-                .strip()
-                .lower()
-                == "y"
-            ):
-                args.extend(["--access", "computer"])
-        else:
-            args.append("--offline")
-            print(
-                "Local mode selected. ChatGPT is not connected yet. "
-                "Future udb start commands will reuse local mode. "
-                "Run udb setup to connect later, or udb mcp-config for a local client."
-            )
+            return 0
 
-        prepare_workspace(settings)
-        if pending:
-            controller = DesktopController(settings.home, monitor=False)
-            try:
-                controller.configure(tunnel, key)
-                changed = True
-            except Exception:
-                raise ValueError(
-                    "Could not save the connection. Retry udb setup --edit locally."
-                ) from None
-            finally:
-                controller.close()
-    finally:
-        key = ""
+    args = ["start", "--home", str(settings.home), "--wait", "60", "--follow"]
+    if connect:
+        print(
+            "Cloud Agent launch is not proof of ChatGPT authorization. "
+            "Verify bridge_status from the udb-cloudflare plugin."
+        )
+        if input("Open the computer-access consent prompt? [y/N]: ").strip().lower() == "y":
+            args.extend(["--access", "computer"])
+    else:
+        args.append("--offline")
+        print("Offline diagnostics selected. No remote connection is started.")
 
     state = owner_command.headless_state(settings.home) or {}
     desired = "online" if connect else "offline"
-    if changed or (
-        state.get("connection_mode") and state["connection_mode"] != desired
-    ):
-        print("Applying the selected connection settings...")
+    if state.get("connection_mode") and state["connection_mode"] != desired:
         if owner_command.main(
             ["stop", "--home", str(settings.home), "--wait", "60", "--json"]
         ):
-            raise ValueError(
-                "The previous agent did not stop. Run udb stop and try setup again."
-            )
+            raise ValueError("The previous agent did not stop; run udb stop locally.")
     save_mode(settings, desired)
-    print(
-        "Configuration saved. Starting the agent; its readiness and live log follow below."
-    )
-    print(
-        "Optional: udb autostart enable | Troubleshooting: udb doctor | View logs later: udb start"
-    )
+    print("Starting UDB. Use udb doctor for pairing and agent status.")
     return owner_command.main(args)

@@ -114,3 +114,40 @@ def test_browser_launch_failure_explains_how_to_open_chatgpt(monkeypatch):
     MainWindow.open_url(None, PLUGIN_URL)
     assert warnings and PLUGIN_URL in warnings[0]
     assert "trình duyệt" in warnings[0]
+
+
+def test_source_browser_loads_beyond_first_200_files_and_can_retry(monkeypatch):
+    make_app()
+    warnings = []
+    monkeypatch.setattr(
+        QMessageBox, "warning", lambda _parent, _title, message: warnings.append(message)
+    )
+
+    class PagedAgent:
+        fail_once = True
+
+        def listing(self, project, path, offset=0, limit=200):
+            assert project == "demo" and path == "." and limit == 200
+            if offset == 200 and self.fail_once:
+                self.fail_once = False
+                raise OSError("Temporary source listing error")
+            files = [
+                {"path": f"file-{index:03d}.py", "directory": False}
+                for index in range(offset, min(offset + limit, 205))
+            ]
+            return {"items": files, "next_offset": 200 if offset == 0 else None}
+
+    dialog = SourceDialog(PagedAgent(), "demo")
+    try:
+        assert dialog.files.count() == 201
+        assert dialog.files.item(200).text() == "Xem thêm tệp…"
+        dialog.open_item(dialog.files.item(200))
+        assert warnings == ["Temporary source listing error"]
+        assert dialog.files.count() == 201
+        assert dialog.files.item(200).text() == "Xem thêm tệp…"
+        dialog.open_item(dialog.files.item(200))
+        assert dialog.files.count() == 205
+        assert dialog.files.item(204).text() == "file-204.py"
+        assert dialog.path == "."
+    finally:
+        dialog.close()

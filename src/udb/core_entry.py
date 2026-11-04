@@ -50,11 +50,6 @@ def main(argv=None):
     parser.add_argument(
         "--gui-screenshot", help="Save a native GUI screenshot and exit"
     )
-    parser.add_argument(
-        "--start-tunnel",
-        action="store_true",
-        help="Connect the existing configured tunnel after opening the GUI",
-    )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--headless",
@@ -67,7 +62,7 @@ def main(argv=None):
     parser.add_argument(
         "--no-connect",
         action="store_true",
-        help="Start the headless worker without a tunnel (offline diagnostics)",
+        help="Run offline diagnostics without Cloudflare connection",
     )
     owner = parser.add_mutually_exclusive_group()
     owner.add_argument(
@@ -225,7 +220,7 @@ def main(argv=None):
 
             run(
                 Path(args.home),
-                start_tunnel=args.start_tunnel,
+                start_cloud=False,
                 screenshot=args.gui_screenshot,
             )
     else:

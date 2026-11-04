@@ -8,16 +8,11 @@ import subprocess
 import sys
 import threading
 import time
-import urllib.request
 from pathlib import Path
 
-from .connection import is_tunnel_id, normalize_tunnel_id
 from .core import Agent, PolicyError, reject_links
-from .credentials import load_key, save_key
 from .windows_paths import system_executable
 
-HEALTH_URL_NAME = "tunnel-health.url"
-UNREADY_RESTART_SECONDS = 90
 CREATE_FLAGS = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
@@ -82,18 +77,12 @@ class DesktopController:
         self.handles = {}
         self.lock = threading.RLock()
         self.closed = threading.Event()
-        self.ready = False
         self.error = ""
         self.host_service = None
-        self.tunnel_wanted = False
-        self._connecting = False
-        self._generation = 0
-        self._retry_attempt = 0
-        self._retry_at = 0.0
-        self._unready_since = None
-        self._last_probe_at = None
-        self._recovery_count = 0
-        self._last_recovery = ""
+        self.cloud_wanted = False
+        self._cloud_retry_attempt = 0
+        self._cloud_retry_at = 0.0
+        self._cloud_recovery_count = 0
         if monitor:
             threading.Thread(target=self._monitor, daemon=True).start()
             threading.Thread(target=self._sandbox_monitor, daemon=True).start()
@@ -103,16 +92,6 @@ class DesktopController:
             from .host_service import HostService
 
             self.host_service = HostService(self.agent)
-
-    def config(self):
-        # The connection file is local state, not an unbounded JSON input.
-        # Reject linked paths and oversized/corrupted objects before use.
-        from .owner_command import read_object
-
-        try:
-            return read_object(self.agent.state / "connection.json", 4096)
-        except FileNotFoundError:
-            return {}
 
     def settings(self):
         from .owner_command import CommandError, read_object
@@ -131,24 +110,6 @@ class DesktopController:
         if "theme" in settings:
             safe["theme"] = normalize_preference(settings["theme"])
         atomic_json(self.agent.state / "gui.json", safe)
-
-    def configure(self, tunnel_id, key=""):
-        try:
-            tunnel_id = normalize_tunnel_id(tunnel_id)
-        except ValueError as exc:
-            raise PolicyError(str(exc)) from None
-        from .host_client import atomic_json
-
-        # Reject linked/reparse-point destinations before changing credentials.
-        target = self.agent.state / "connection.json"
-        reject_links(target)
-        if key:
-            save_key(key)
-        elif not self.config().get("tunnel_id"):
-            raise PolicyError("Cần nhập runtime API key khi cấu hình lần đầu.")
-
-        # Never expose a partially written tunnel identifier to the watchdog.
-        atomic_json(target, {"tunnel_id": tunnel_id})
 
     def alive(self, name):
         with self.lock:
@@ -181,139 +142,20 @@ class DesktopController:
                 raise
             self.handles[name] = log
 
-    def start_tunnel(self, *, _retry_generation=None):
-        with self.lock:
-            if _retry_generation is not None and (
-                not self.tunnel_wanted or _retry_generation != self._generation
-            ):
-                return
-            if self.closed.is_set():
-                raise PolicyError("Ứng dụng đang đóng.")
-            if not self.tunnel_wanted:
-                self._generation += 1
-                self.tunnel_wanted = True
-                self._retry_attempt = 0
-            if self._connecting or self.alive("tunnel"):
-                return
-            generation = self._generation
-            self._connecting = True
-        try:
-            self._launch_tunnel(generation)
-        except Exception:
-            with self.lock:
-                if generation == self._generation and self.tunnel_wanted:
-                    # Do not forward subprocess output or credential exceptions.
-                    self.error = (
-                        "Kết nối thất bại; sẽ thử lại. Kiểm tra cài đặt kết nối."
-                    )
-            raise PolicyError(
-                "Kết nối thất bại. Kiểm tra cấu hình và trạng thái mạng trong ứng dụng."
-            ) from None
-        finally:
-            with self.lock:
-                self._connecting = False
-                if generation == self._generation and self.tunnel_wanted:
-                    delay = min(30, 2 ** min(self._retry_attempt, 5))
-                    self._retry_attempt += 1
-                    self._retry_at = time.monotonic() + delay
-
-    def _launch_tunnel(self, generation):
-        cfg = self.config()
-        if not is_tunnel_id(cfg.get("tunnel_id")):
-            raise PolicyError("Mở Cài đặt kết nối và nhập Tunnel ID trước.")
-        from .components import component_path
-
-        binary = component_path("tunnel-client", self.home)
-        if binary is None:
-            raise PolicyError(
-                "This build has no tunnel component. Use a release that bundles tunnel-client."
-            )
-        try:
-            secret = load_key()
-        except Exception:
-            raise PolicyError(
-                "Chưa đọc được runtime key. Nhập lại trong Cài đặt kết nối; không gửi key vào Chat."
-            ) from None
-        work = self.agent.state / "tunnel"
-        work.mkdir(exist_ok=True)
-        env = os.environ.copy()
-        env["CONTROL_PLANE_API_KEY"] = secret
-        env["TUNNEL_CLIENT_PROFILE_DIR"] = str(work)
-        cmdline = subprocess.list2cmdline(
-            [a.replace("\\", "/") for a in mcp_command(self.home)]
-        )
-        argv = [
-            str(binary),
-            "init",
-            "--force",
-            "--profile-dir",
-            str(work),
-            "--sample",
-            "sample_mcp_stdio_local",
-            "--profile",
-            "universal-desktop-bridge",
-            "--health-listen-addr",
-            "127.0.0.1:0",
-            "--tunnel-id",
-            cfg["tunnel_id"],
-            "--mcp-command",
-            cmdline,
-        ]
-        result = subprocess.run(
-            argv,
-            cwd=work,
-            env=env,
-            capture_output=True,
-            timeout=30,
-            creationflags=CREATE_FLAGS,
-        )
-        if result.returncode:
-            # Never forward captured CLI output: it may contain authentication context.
-            raise PolicyError(
-                "Khởi tạo tunnel chưa thành công. Kiểm tra ID và quyền Tunnels Read + Use."
-            )
-        try:
-            with self.lock:
-                # A local Disconnect/Close during init invalidates this launch.
-                if (
-                    self.closed.is_set()
-                    or not self.tunnel_wanted
-                    or generation != self._generation
-                ):
-                    return
-                self.ready = False
-                self._unready_since = time.monotonic()
-                self.error = ""
-                health_file = self.agent.state / HEALTH_URL_NAME
-                health_file.unlink(missing_ok=True)
-                self.start_process(
-                    "tunnel",
-                    [
-                        str(binary),
-                        "run",
-                        "--mcp.stdio-send-initialized-notification",
-                        "--profile",
-                        "universal-desktop-bridge",
-                        "--health.url-file",
-                        str(health_file),
-                    ],
-                    env,
-                )
-        finally:
-            secret = None
-            env.pop("CONTROL_PLANE_API_KEY", None)
-
     def start_local(self):
         self.start_process("mcp", command(self.home, "--serve"))
 
     def start_cloud(self):
-        """Owner-initiated remote session. Never auto-start or create grants."""
+        """Start only the owner-paired Cloudflare agent; never grant access."""
         from .cloud_agent import load_pairing
         from .cloud_secrets import load_device_token
         from .launcher import command as cli_command
 
         _relay, device_id, _token_file = load_pairing(self.agent.home)
         load_device_token(self.agent.home, device_id)
+        with self.lock:
+            self.cloud_wanted = True
+            self.error = ""
         self.start_process(
             "cloud",
             cli_command(["cloud-agent", "--home", str(self.agent.home)]),
@@ -321,16 +163,12 @@ class DesktopController:
 
     def stop_process(self, name):
         with self.lock:
-            if name == "tunnel":
-                self.tunnel_wanted = False
-                self._generation += 1
-                self.ready = False
-                self._retry_at = 0.0
-                self.error = ""
+            if name == "cloud":
+                self.cloud_wanted = False
             p = self.children.get(name)
             if p is None or p.poll() is not None:
                 return
-            # Only a still-live child owned by THIS controller, never arbitrary user PIDs.
+            # Terminate only children this manager owns; never use name-wide kills.
             if os.name == "nt":
                 subprocess.run(
                     [system_executable("taskkill.exe"), "/PID", str(p.pid), "/T", "/F"],
@@ -344,8 +182,6 @@ class DesktopController:
                 p.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 p.kill()
-        if name == "tunnel":
-            self.ready = False
 
     def _sandbox_monitor(self):
         while not self.closed.wait(1):
@@ -358,126 +194,54 @@ class DesktopController:
                 self.error = "Automation queue failed; inspect redacted logs."
 
     def _monitor(self):
-        from .owner_command import NoRedirect
+        """Recover unexpected Cloud Agent exits with bounded backoff.
 
-        opener = urllib.request.build_opener(
-            urllib.request.ProxyHandler({}), NoRedirect()
-        )
-        while not self.closed.wait(1.5):
+        Authentication denial exits with code 2 and is never retried
+        automatically; the owner must repair or revoke the pairing.
+        """
+        while not self.closed.wait(2):
             try:
-                self._monitor_once(opener)
+                with self.lock:
+                    child = self.children.get("cloud")
+                    wanted = self.cloud_wanted
+                    if not wanted or self.closed.is_set() or not child:
+                        continue
+                    code = child.poll()
+                    if code is None:
+                        continue
+                    if code == 2:
+                        self.cloud_wanted = False
+                        self.error = "Cloud Agent rejected pairing; check credentials locally."
+                        continue
+                    if time.monotonic() < self._cloud_retry_at:
+                        continue
+                    self._cloud_retry_attempt += 1
+                    self._cloud_retry_at = time.monotonic() + min(
+                        120, 5 * (2 ** min(self._cloud_retry_attempt, 5))
+                    )
+                try:
+                    self.start_cloud()
+                    self._cloud_recovery_count += 1
+                except Exception:
+                    # Authentication and runtime failures are not exposed to MCP.
+                    self.error = "Cloud Agent stopped; use udb doctor to inspect pairing."
             except Exception:
-                # A failed local probe/child stop must not kill the watchdog thread.
-                self.ready = False
-                self.error = "Connection monitor failed; retrying local checks."
-
-    def _monitor_once(self, opener, now=None):
-        from .owner_command import tunnel_ready
-
-        now = time.monotonic() if now is None else now
-        with self.lock:
-            generation = self._generation
-            child = self.children.get("tunnel")
-        if not self.alive("tunnel"):
-            self.ready = False
-            self._retry_if_due(now)
-            return
-        ready = tunnel_ready(self.home, opener)
-        with self.lock:
-            # Discard a late HTTP response from a previous process/connection.
-            if generation != self._generation or child is not self.children.get(
-                "tunnel"
-            ):
-                return
-            self.ready = ready and self.tunnel_wanted and self.alive("tunnel")
-            if self.ready:
-                self._unready_since = None
-                self._retry_attempt = 0
-                self._retry_at = 0.0
-                self.error = ""
-            else:
-                # Allow a full recovery grace period after suspend or a delayed monitor.
-                if self._unready_since is None or (
-                    self._last_probe_at is not None and now - self._last_probe_at > 30
-                ):
-                    self._unready_since = now
-                if (
-                    self.tunnel_wanted
-                    and not self.closed.is_set()
-                    and not self._connecting
-                    and now - self._unready_since >= UNREADY_RESTART_SECONDS
-                ):
-                    self._recover_unready(generation)
-            self._last_probe_at = now
-
-    def _recover_unready(self, generation):
-        # Called with the controller lock; Stop cannot race a reconnect intent.
-        if generation != self._generation or not self.tunnel_wanted:
-            return
-        try:
-            self.stop_process("tunnel")  # Only this controller's owned child tree.
-        except (OSError, subprocess.SubprocessError):
-            if not self.closed.is_set():
-                self.tunnel_wanted = True
-                self._unready_since = time.monotonic()
-                self.error = "Could not stop the unready tunnel; retrying local checks."
-            return
-        if self.alive("tunnel") or self.closed.is_set():
-            if not self.closed.is_set():
-                self.tunnel_wanted = True
-                self._unready_since = time.monotonic()
-            return
-        self.tunnel_wanted = True
-        self._recovery_count += 1
-        self._last_recovery = "tunnel_unready"
-        self._unready_since = None
-        self._retry_at = time.monotonic() + min(30, 2 ** min(self._retry_attempt, 5))
-        self._retry_attempt += 1
-        self.error = (
-            "Tunnel remained unready; reconnect scheduled. No tool call is replayed."
-        )
-        from .activity import Activity
-
-        Activity(self.home).emit(
-            "connection",
-            "tunnel",
-            status="RETRY",
-            details={"action": "recover_unready"},
-        )
-
-    def _retry_if_due(self, now=None):
-        now = time.monotonic() if now is None else now
-        with self.lock:
-            due = (
-                self.tunnel_wanted
-                and not self._connecting
-                and not self.closed.is_set()
-                and not self.alive("tunnel")
-                and now >= self._retry_at
-            )
-            generation = self._generation
-        if due:
-            try:
-                self.start_tunnel(_retry_generation=generation)
-            except Exception:
-                pass  # start_tunnel stores a sanitized status and bounded backoff.
+                self.error = "Cloud Agent monitor could not check the process."
 
     def status(self):
         from .sandbox import available
 
         return {
-            "tunnel_running": self.alive("tunnel"),
-            "ready": self.ready,
-            "tunnel_wanted": self.tunnel_wanted,
-            "connecting": self._connecting,
-            "retry_in_seconds": max(0, round(self._retry_at - time.monotonic(), 1))
-            if self.tunnel_wanted
-            else 0,
-            "connection_error": self.error,
-            "recovery_count": self._recovery_count,
-            "last_recovery": self._last_recovery,
-            "local_running": self.alive("mcp"),
             "cloud_running": self.alive("cloud"),
+            "cloud_wanted": self.cloud_wanted,
+            # Running is not a verified WebSocket or ChatGPT tool call.
+            "cloud_connection_verified": False,
+            "cloud_retry_in_seconds": max(
+                0, round(self._cloud_retry_at - time.monotonic(), 1)
+            ) if self.cloud_wanted and not self.alive("cloud") else 0,
+            "connection_error": self.error,
+            "recovery_count": self._cloud_recovery_count,
+            "local_running": self.alive("mcp"),
             "sandbox": available(),
         }
 

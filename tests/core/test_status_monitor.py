@@ -48,7 +48,7 @@ def test_headless_gui_status_describes_lifecycle_even_after_qt_import(
 ):
     monkeypatch.setitem(sys.modules, "PySide6.QtWidgets", object())
     ctl = Mock(agent=Mock(state=tmp_path), offline_mode=False)
-    ctl.status.return_value = dict(ready=False, tunnel_running=False, connecting=False)
+    ctl.status.return_value = dict(cloud_running=False, cloud_wanted=False)
     ctl._headless_started = time.monotonic()
     ctl._last_reconnect_request = ""
     ctl._reconnect_pending = False
@@ -75,7 +75,7 @@ def test_monitor_strips_payloads_and_never_creates_missing_home(tmp_path, monkey
     report = dict(
         manager_running=False,
         manager_mode="unknown",
-        local_tunnel_ready=False,
+        cloud_agent_running=False,
         background=False,
         next_action="start",
     )
@@ -104,7 +104,7 @@ def test_monitor_recent_activity_has_no_command_or_path_payload(tmp_path, monkey
     report = dict(
         manager_running=False,
         manager_mode="unknown",
-        local_tunnel_ready=False,
+        cloud_agent_running=False,
         background=False,
         next_action="start",
     )
@@ -158,7 +158,7 @@ def test_reconnect_requests_are_process_scoped_and_leave_grants_unchanged(
 
     monkeypatch.setattr(owner_command, "headless_state", heartbeat)
     result = owner_command.reconnect(
-        tmp_path, tmp_path / "udb.exe", snapshot=lambda *_: {"local_tunnel_ready": True}
+        tmp_path, tmp_path / "udb.exe", snapshot=lambda *_: {"cloud_agent_running": True}
     )
     request = json.loads((state / headless.RECONNECT_NAME).read_text())
     assert request["instance"] == instance and headless.stop_requested(
@@ -188,12 +188,12 @@ def test_headless_reconnect_is_accepted_once_only_for_current_lifetime(
         def stop_process(self, name):
             calls.append(name)
 
-        def start_tunnel(self):
+        def start_cloud(self):
             calls.append("connect")
             raise PolicyError("synthetic")
 
         def status(self):
-            return dict(ready=False, tunnel_running=False, connecting=False)
+            return dict(cloud_running=False, cloud_wanted=False)
 
         def close(self):
             pass
@@ -219,4 +219,4 @@ def test_headless_reconnect_is_accepted_once_only_for_current_lifetime(
 
     stop.wait = wait
     headless.run_loop(ctl, instance, stop, connect=False)
-    assert calls == ([] if foreign or expired else ["tunnel", "connect"])
+    assert calls == ([] if foreign or expired else ["cloud", "connect"])

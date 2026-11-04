@@ -12,10 +12,8 @@ import time
 from pathlib import Path
 
 from udb.core import Agent
-from udb.host_client import command as host_command
-from udb.host_client import status as host_status
+from udb.host_client import command as host_command, status as host_status
 from udb.launcher import child_environment, worker_command
-
 
 
 def _wait_for_fixture_host(agent, process, session_id, *, timeout=12):

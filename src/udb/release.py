@@ -21,7 +21,6 @@ ROOT_FILES = (
     "requirements-build.txt",
     "requirements-gui.txt",
     "Install.ps1",
-    "Install-Tunnel.ps1",
     "Enable-Sandbox.ps1",
     "Build-Release.ps1",
     "Build-Release.py",

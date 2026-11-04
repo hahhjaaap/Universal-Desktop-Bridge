@@ -10,7 +10,8 @@ Access blocks WebSocket upgrades, which would disconnect the UDB Cloud Agent.
 
 The code remains **off by default**. The Windows device is not remotely
 controllable through the MCP gateway. It exposes only owner-granted read tools
-(`bridge_status`, `list_projects`).
+(`bridge_status`, `list_projects` and the four explicitly granted project read
+tools described in [the project-read acceptance runbook](cloudflare-project-read-acceptance.md)).
 
 ## Required authenticated identity boundary
 

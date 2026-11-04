@@ -390,7 +390,10 @@ def test_browser_locator_template_does_not_expand_user_placeholder_text():
     assert 'return {marker:"__SELECTOR__"};' in expression
 
 
-def test_browser_wait_for_uses_one_mutation_observer_round_trip():
+def test_browser_wait_for_uses_one_mutation_observer_round_trip(monkeypatch):
+    # (255.1 + 1) - 255.1 is 1.0000000000000284, without elapsed time.
+    # Reproduce the Windows boundary deterministically; the cap stays 1.25.
+    monkeypatch.setattr("udb.host_browser.time.monotonic", lambda: 255.1)
     browser = Browser.__new__(Browser)
     captured = []
 

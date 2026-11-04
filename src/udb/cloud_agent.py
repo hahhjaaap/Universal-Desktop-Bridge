@@ -1,7 +1,8 @@
 """Experimental opt-in Cloudflare relay client for the existing UDB stdio proxy.
 
 No account login, grants, tunnel creation or privilege escalation is performed here.
-The relay is private/admin-only until an audited OAuth MCP front end is added.
+The optional OAuth gateway independently filters read-only device/identity grants;
+the local proxy retains the existing project boundaries and owner approvals.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import re
 import subprocess
 import threading
 import time
+import uuid
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -92,6 +94,7 @@ class LocalProxy:
         self.reader = threading.Thread(target=self._read_loop, daemon=True)
         self.reader.start()
         self.unusable = False
+        self.initialized = False
 
     def _read_loop(self):
         assert self.process.stdout is not None
@@ -120,6 +123,43 @@ class LocalProxy:
             raise RuntimeError("Local UDB proxy is unavailable")
         if not valid_remote_rpc(rpc):
             raise ValueError("Unsupported remote RPC")
+        deadline = time.monotonic() + timeout
+        if rpc["method"] != "initialize" and not self.initialized:
+            # A new WebSocket owns a fresh local proxy. Existing MCP clients
+            # can resume with tools/list/call without another edge initialize.
+            # Bootstrap locally before dispatch, never retry the caller's RPC.
+            answer = self._exchange(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "udb-init-" + uuid.uuid4().hex,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2025-11-25",
+                        "capabilities": {},
+                        "clientInfo": {"name": "udb-cloud-agent", "version": VERSION},
+                    },
+                },
+                deadline,
+            )
+            self._accept_initialize(answer)
+        answer = self._exchange(rpc, deadline)
+        if rpc["method"] == "initialize":
+            self._accept_initialize(answer)
+        return answer
+
+    def _accept_initialize(self, answer):
+        result = answer.get("result")
+        if not isinstance(result, dict) or result.get("protocolVersion") not in {
+            "2025-03-26",
+            "2025-06-18",
+            "2025-11-25",
+        }:
+            self.unusable = True
+            raise RuntimeError("Local UDB initialization rejected")
+        self._write({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        self.initialized = True
+
+    def _write(self, rpc):
         wire = (
             json.dumps(rpc, ensure_ascii=True, separators=(",", ":")) + "\n"
         ).encode("utf-8")
@@ -129,40 +169,54 @@ class LocalProxy:
         try:
             self.process.stdin.write(wire)
             self.process.stdin.flush()
-            while True:
-                try:
-                    answer = self.replies.get(timeout=timeout)
-                except queue.Empty:
-                    self.unusable = True
-                    raise TimeoutError(
-                        "Outcome unknown; do not retry a mutation"
-                    ) from None
-                if answer is None:
-                    self.unusable = True
-                    raise RuntimeError("Local UDB proxy disconnected")
-                if (
-                    type(answer.get("id")) is type(rpc["id"])
-                    and answer["id"] == rpc["id"]
-                    and answer.get("jsonrpc") == "2.0"
-                    and ("result" in answer) != ("error" in answer)
-                ):
-                    return answer
-                # A single outstanding proxy request cannot legitimately receive
-                # another ID or an incomplete envelope. Fail closed, never replay.
-                self.unusable = True
-                raise RuntimeError("Local UDB proxy returned an invalid RPC reply")
         except OSError:
             self.unusable = True
             raise RuntimeError("Local UDB proxy disconnected") from None
 
+    def _exchange(self, rpc, deadline):
+        if time.monotonic() >= deadline:
+            self.unusable = True
+            raise TimeoutError("RPC deadline expired before dispatch")
+        self._write(rpc)
+        try:
+            answer = self.replies.get(timeout=max(0, deadline - time.monotonic()))
+        except queue.Empty:
+            # TimeoutError is an OSError subclass: keep this outside any pipe
+            # error handler so an unknown outcome retains its correct category.
+            self.unusable = True
+            raise TimeoutError("Outcome unknown; do not retry a mutation") from None
+        if answer is None:
+            self.unusable = True
+            raise RuntimeError("Local UDB proxy disconnected") from None
+        if (
+            type(answer.get("id")) is type(rpc["id"])
+            and answer["id"] == rpc["id"]
+            and answer.get("jsonrpc") == "2.0"
+            and ("result" in answer) != ("error" in answer)
+        ):
+            return answer
+        # A single outstanding proxy request cannot legitimately receive
+        # another ID or an incomplete envelope. Fail closed, never replay.
+        self.unusable = True
+        raise RuntimeError("Local UDB proxy returned an invalid RPC reply")
+
     def close(self):
-        if self.process.poll() is None:
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait(timeout=3)
+        try:
+            if self.process.poll() is None:
+                self.process.terminate()
+                try:
+                    self.process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    self.process.kill()
+                    self.process.wait(timeout=3)
+        finally:
+            for name in ("stdin", "stdout"):
+                stream = getattr(self.process, name, None)
+                if stream is not None:
+                    stream.close()
+            reader = getattr(self, "reader", None)
+            if reader is not None and reader is not threading.current_thread():
+                reader.join(timeout=1)
 
 
 def load_pairing(home: Path) -> tuple[str, str, Path]:

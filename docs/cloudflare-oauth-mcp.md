@@ -67,6 +67,9 @@ Before exposing a real Windows PC, complete:
 
 No secrets, API keys or actual user subjects belong in source control.
 
+For scoped-read deployment, failure diagnosis, authenticated ChatGPT acceptance
+and rollback, follow the [project-read runbook](cloudflare-project-read-acceptance.md).
+
 ## Identity-provider interoperability
 
 `UDB_OAUTH_ISSUER` must be copied **exactly** from the authorization server's

@@ -23,6 +23,44 @@ function harness() {
   return { relay, ws, frames, closed, send };
 }
 
+for (const name of ["list_files", "read_file", "search_files", "check_python_syntax"]) {
+  test(name + " shares the bounded read queue without replay", async () => {
+    const h = harness();
+    const first = h.send();
+    const forwarded = await sent(h);
+    const second = h.send(2, "tools/call", { name, arguments: { project: "udb-room" } });
+    for (let i = 0; i < 30 && h.relay.queuedReads === 0; i++) await setImmediate();
+    assert.equal(h.relay.queuedReads, 1);
+    assert.equal(h.frames.length, 1);
+    h.relay.webSocketMessage(h.ws, JSON.stringify({ kind: "rpc_result", id: forwarded.id,
+      rpc: { jsonrpc: "2.0", id: 1, result: {} } }));
+    assert.equal((await first).status, 200);
+    for (let i = 0; i < 30 && h.frames.length < 2; i++)
+      await new Promise(resolve => setTimeout(resolve, 20));
+    assert.equal(h.frames.length, 2);
+    h.relay.webSocketMessage(h.ws, JSON.stringify({ kind: "rpc_result", id: h.frames[1].id,
+      rpc: { jsonrpc: "2.0", id: 2, result: {} } }));
+    assert.equal((await second).status, 200);
+    assert.equal(h.frames.length, 2);
+  });
+}
+
+test("queued reads cannot move to a replacement device connection", async () => {
+  const h = harness();
+  const first = h.send();
+  await sent(h);
+  const second = h.send(2, "tools/list");
+  for (let i = 0; i < 30 && h.relay.queuedReads === 0; i++) await setImmediate();
+  const replacement = { readyState: WebSocket.OPEN, send: () => assert.fail("Must not dispatch on a new connection") };
+  h.relay.ctx.getWebSockets = () => [replacement];
+  h.relay.webSocketClose(h.ws, 1006, "replaced");
+  assert.equal((await first).status, 503);
+  const response = await second;
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error, "device_connection_changed");
+  assert.equal(h.relay.queuedReads, 0);
+});
+
 async function sent(h) {
   for (let i = 0; i < 10 && h.frames.length === 0; i++) {
     await setImmediate();

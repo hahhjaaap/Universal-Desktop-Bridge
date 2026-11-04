@@ -155,3 +155,67 @@ test("gateway discovers and calls explicitly granted project read tools only", a
   assert.equal(ungranted.status, 403);
   assert.deepEqual(forwarded.map(rpc => rpc.id), [100, 101, 102]);
 });
+
+test("initialize reports the actual negotiated device protocol without requiring an HTTP header", async () => {
+  const e = { UDB_AUTH_MODE: "cloudflare-access", UDB_ACCESS_AUD: "application-audience-test",
+    UDB_DEVICE_GRANTS: JSON.stringify({ [id]: { "owner@example.test": ["read_file"] } }) };
+  const access = { aud: "application-audience-test", getIdentity: async () => ({ email: "owner@example.test" }) };
+  const request = () => new Request(resource, { method: "POST", body: JSON.stringify({
+    jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25" } }) });
+  const stub = { fetch: async () => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1,
+    result: { protocolVersion: "2025-11-25" } })) };
+  const result = await handleMcp(request(), e, id, stub, fetch, access);
+  assert.equal((await result.json()).result.protocolVersion, "2025-11-25");
+  stub.fetch = async () => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1,
+    result: { protocolVersion: "not-supported" } }));
+  assert.equal((await handleMcp(request(), e, id, stub, fetch, access)).status, 502);
+  stub.fetch = async () => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1,
+    result: { protocolVersion: "2025-11-25" }, error: null }));
+  assert.equal((await handleMcp(request(), e, id, stub, fetch, access)).status, 502);
+});
+
+test("gateway preserves scoped tool schemas and denies revoked identity/device grants", async () => {
+  const names = ["list_files", "read_file", "search_files", "check_python_syntax"];
+  const e = { UDB_AUTH_MODE: "cloudflare-access", UDB_ACCESS_AUD: "application-audience-test",
+    UDB_DEVICE_GRANTS: JSON.stringify({ [id]: { "owner@example.test": names } }) };
+  const access = { aud: "application-audience-test", getIdentity: async () => ({ email: "owner@example.test" }) };
+  const schema = { type: "object", properties: { project: { type: "string" }, path: { type: "string" } }, required: ["project", "path"] };
+  const forwarded = [];
+  const stub = { async fetch(req) {
+    const rpc = await req.json(); forwarded.push(rpc);
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: rpc.id,
+      result: rpc.method === "tools/list" ? { tools: [...names, "propose_file_write"].map(name => ({ name, inputSchema: schema })) } : { ok: true } }));
+  } };
+  const request = (method, name) => new Request(resource, { method: "POST", body: JSON.stringify({
+    jsonrpc: "2.0", id: 1, method, ...(name ? { params: { name, arguments: { project: "udb-room", path: "README.md" } } } : {}) }) });
+  const list = await handleMcp(request("tools/list"), e, id, stub, fetch, access);
+  const tools = (await list.json()).result.tools;
+  assert.deepEqual(tools.map(tool => tool.name), names);
+  for (const tool of tools) assert.deepEqual(tool.inputSchema, schema);
+  for (const name of names) assert.equal((await handleMcp(request("tools/call", name), e, id, stub, fetch, access)).status, 200);
+  assert.equal((await handleMcp(request("tools/call", "propose_file_write"), e, id, stub, fetch, access)).status, 403);
+  const count = forwarded.length;
+  assert.equal((await handleMcp(request("tools/list"), e, "b".repeat(32), stub, fetch, access)).status, 403);
+  e.UDB_DEVICE_GRANTS = "{}";
+  assert.equal((await handleMcp(request("tools/call", "read_file"), e, id, stub, fetch, access)).status, 403);
+  assert.equal(forwarded.length, count);
+});
+
+test("initialize failure diagnostics distinguish safe reasons and redact upstream payloads", async () => {
+  const e = { UDB_AUTH_MODE: "cloudflare-access", UDB_ACCESS_AUD: "application-audience-test",
+    UDB_DEVICE_GRANTS: JSON.stringify({ [id]: { "owner@example.test": ["read_file"] } }) };
+  const access = { aud: "application-audience-test", getIdentity: async () => ({ email: "owner@example.test" }) };
+  const request = params => new Request(resource, { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params }) });
+  for (const reason of ["device_offline", "device_busy", "secret-path-and-token"]) {
+    let calls = 0;
+    const result = await handleMcp(request({}), e, id, { fetch: async () => {
+      calls++; return new Response(JSON.stringify({ error: reason, token: "private" }), { status: reason === "device_busy" ? 429 : 503 });
+    } }, fetch, access);
+    const reply = await result.json();
+    assert.equal(reply.error, "device_initialize_unavailable");
+    assert.equal(reply.diagnostics.reason, reason === "secret-path-and-token" ? "upstream_unavailable" : reason);
+    assert.equal(calls, 1);
+    assert.ok(!JSON.stringify(reply).includes("private") && !JSON.stringify(reply).includes("secret-path-and-token"));
+  }
+  assert.equal((await handleMcp(request([]), e, id, { fetch: () => assert.fail("Bad initialize must not reach device") }, fetch, access)).status, 400);
+});

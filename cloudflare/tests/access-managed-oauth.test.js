@@ -94,6 +94,7 @@ test("Worker health advertises Access code capability without claiming auth enab
   const response = await worker.fetch(new Request(ORIGIN + "/health"), settings());
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("X-UDB-Access-OAuth-Capable"), "1");
+  assert.equal(response.headers.get("X-UDB-Project-Read-Capable"), "1");
   assert.deepEqual(await response.json(),
     { status: "ok", kind: "private-relay-prototype" });
 });

@@ -63,6 +63,11 @@ def check(relay: str, device_id: str, opener=None, *, auth_mode="jwt") -> dict:
     if health != {"status": "ok", "kind": "private-relay-prototype"}:
         raise ValueError("Unexpected Cloudflare health response")
     report["health"] = "ok"
+    report["project_read_capability"] = (
+        "deployed"
+        if headers.get("X-UDB-Project-Read-Capable") == "1"
+        else "not_advertised"
+    )
 
     if auth_mode == "jwt":
         metadata_value, _ = read_json(metadata)

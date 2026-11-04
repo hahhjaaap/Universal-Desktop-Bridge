@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import queue
 from types import SimpleNamespace
 
@@ -85,6 +86,7 @@ def test_agent_backs_off_immediately_closed_websockets(monkeypatch, tmp_path):
 def make_proxy(reply):
     proxy = LocalProxy.__new__(LocalProxy)
     proxy.unusable = False
+    proxy.initialized = True
     proxy.process = SimpleNamespace(poll=lambda: None, stdin=io.BytesIO())
     proxy.replies = queue.Queue()
     proxy.replies.put_nowait(reply)
@@ -114,6 +116,100 @@ def test_proxy_accepts_matching_reply():
     proxy = make_proxy(response)
     assert proxy.call({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}) == response
     assert proxy.unusable is False
+
+
+def test_dispatched_timeout_poisons_proxy_and_cannot_repeat_the_call(monkeypatch):
+    monkeypatch.setattr(cloud_agent.time, "monotonic", lambda: 100.0)
+    proxy = make_proxy(None)
+    proxy.replies = queue.Queue()
+    request = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {"name": "read_file", "arguments": {}},
+    }
+    with pytest.raises(TimeoutError, match="Outcome unknown"):
+        proxy.call(request, timeout=0.01)
+    sent = proxy.process.stdin.getvalue()
+    with pytest.raises(RuntimeError, match="unavailable"):
+        proxy.call(request)
+    assert proxy.process.stdin.getvalue() == sent and sent.count(b"tools/call") == 1
+
+
+def bootstrapping_proxy(initialization=None, clock=None):
+    proxy = make_proxy(None)
+    proxy.initialized = False
+    proxy.replies = queue.Queue()
+
+    class DeviceInput(io.BytesIO):
+        def write(self, wire):
+            result = super().write(wire)
+            rpc = json.loads(wire)
+            if "id" in rpc:
+                payload = (
+                    initialization
+                    if rpc["method"] == "initialize"
+                    else {"result": {"tools": []}}
+                )
+                proxy.replies.put_nowait(
+                    dict(
+                        jsonrpc="2.0",
+                        id=rpc["id"],
+                        **(payload or {"result": {"protocolVersion": "2025-11-25"}}),
+                    )
+                )
+                if clock is not None and rpc["method"] == "initialize":
+                    clock[0] += 5
+            return result
+
+    proxy.process.stdin = DeviceInput()
+    return proxy
+
+
+def test_fresh_proxy_bootstraps_before_resumed_call_and_notifies_once():
+    proxy = bootstrapping_proxy()
+    for ident in (1, 2):
+        result = proxy.call({"jsonrpc": "2.0", "id": ident, "method": "tools/list"})
+        assert result["id"] == ident
+    sent = [json.loads(line) for line in proxy.process.stdin.getvalue().splitlines()]
+    assert [rpc["method"] for rpc in sent] == [
+        "initialize",
+        "notifications/initialized",
+        "tools/list",
+        "tools/list",
+    ]
+    assert sent[0]["id"] not in (1, 2)
+
+
+@pytest.mark.parametrize(
+    "initialization",
+    [
+        {"error": {"code": -32000, "message": "private"}},
+        {"result": {"protocolVersion": "unsupported"}},
+        {"result": {}},
+    ],
+)
+def test_bootstrap_failure_never_dispatches_the_call(initialization):
+    proxy = bootstrapping_proxy(initialization)
+    with pytest.raises(RuntimeError, match="initialization rejected"):
+        proxy.call(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "read_file", "arguments": {}},
+            }
+        )
+    assert b"tools/call" not in proxy.process.stdin.getvalue() and proxy.unusable
+
+
+def test_bootstrap_and_rpc_share_one_deadline(monkeypatch):
+    clock = [100.0]
+    monkeypatch.setattr(cloud_agent.time, "monotonic", lambda: clock[0])
+    proxy = bootstrapping_proxy(clock=clock)
+    with pytest.raises(TimeoutError, match="before dispatch"):
+        proxy.call({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, timeout=1)
+    assert b"tools/list" not in proxy.process.stdin.getvalue()
 
 
 def test_pairing_network_timeout_never_writes_local_credentials(tmp_path):

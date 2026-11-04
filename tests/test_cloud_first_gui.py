@@ -1,4 +1,5 @@
 """One Cloudflare-first connection path for an already-paired UDB owner."""
+
 import os
 from types import SimpleNamespace
 

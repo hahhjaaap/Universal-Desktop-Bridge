@@ -86,6 +86,22 @@ test("one additional read-only request waits for the current RPC", async () => {
   assert.equal(h.relay.queuedReads, 0);
 });
 
+test("queued reads fail closed if the device disconnects", async () => {
+  const h = harness();
+  const first = h.send();
+  await sent(h);
+  const second = h.send(2, "tools/list");
+  for (let i = 0; i < 30 && h.relay.queuedReads === 0; i++)
+    await setImmediate();
+  assert.equal(h.relay.queuedReads, 1);
+  h.ws.readyState = WebSocket.CLOSED;
+  h.relay.webSocketClose(h.ws, 1006, "lost");
+  assert.equal((await first).status, 503);
+  assert.equal((await second).status, 503);
+  assert.equal(h.frames.length, 1, "A queued read is not replayed after disconnect");
+  assert.equal(h.relay.queuedReads, 0);
+});
+
 test("mismatched RPC IDs are rejected and connection is closed", async () => {
   const h = harness();
   const first = h.send();

@@ -559,6 +559,8 @@ class ManagerRefreshMixin:
 
     def _refresh_connection(self, source_auto_projects):
         status = self.controller.status()
+        pairing = self.agent.home / "cloud-pairing.json"
+        cloud_preferred = pairing.exists() or pairing.is_symlink()
         indicator = tunnel_indicator(status)
         self.tunnel_health.set_status(indicator.text, indicator.tone)
         self.tunnel_health.setToolTip(indicator.detail)
@@ -622,6 +624,48 @@ class ManagerRefreshMixin:
             + ("đang bật" if status["local_running"] else "đang tắt")
             + "\nKhóa: lưu trong Windows Credential Manager · không hiển thị"
         )
+        # Cloudflare and OpenAI Tunnel are separate transports. On an already
+        # paired machine, never display legacy Tunnel status as Cloudflare health.
+        if cloud_preferred:
+            cloud_running = status.get("cloud_running") is True
+            ready = False  # Only an actual ChatGPT tool call proves readiness.
+            alive = cloud_running
+            state = "Đang chạy" if cloud_running else "Chưa bật"
+            tone = "paused" if cloud_running else "neutral"
+            self._connection_ready = False
+            self.tunnel_health.set_status(state, tone)
+            self.tunnel_health.setToolTip(
+                "Trạng thái tiến trình Cloud Agent, không xác minh WebSocket/OAuth."
+            )
+            self.setup_tunnel_health.set_status(state, tone)
+            self.setup_tunnel_health.setToolTip(
+                "Phải thử công cụ từ ChatGPT để xác minh MCP Cloudflare."
+            )
+            self.header_connection.set_status("Cloudflare: " + state, tone)
+            self.header_connection.setToolTip(
+                "Cloud Agent đang chạy" if cloud_running
+                else "Cloud Agent chưa được bật. ChatGPT chưa xác minh."
+            )
+            self.status_label.setText("●  Cloud Agent " + state.lower())
+            self.connect_button.setText(
+                "Tắt Cloud Agent" if cloud_running else "Bật Cloud Agent"
+            )
+            self.connect_button.setEnabled(not self.busy)
+            self.cloud_pair_button.setEnabled(False)
+            self.cloud_session_status.setText(
+                "Cloud Agent đang chạy; ChatGPT và WebSocket chưa được xác minh."
+                if cloud_running
+                else "Đã ghép Cloudflare; bật Cloud Agent để kết nối."
+            )
+            self.connection_hint.setText(
+                "Cloudflare là kết nối chính. Xác minh bằng lời gọi MCP trong ChatGPT."
+            )
+            self.detail_status.setText(
+                "Cloudflare: " + state
+                + "\nMCP cục bộ: "
+                + ("đang bật" if status["local_running"] else "đang tắt")
+                + "\nKết nối ChatGPT: chưa xác minh"
+            )
         setup = self.agent.state / "sandbox-setup-result.json"
         needs_restart = False
         if setup.exists():
@@ -640,12 +684,16 @@ class ManagerRefreshMixin:
             if not status["sandbox"]
             else "Sandbox: thành phần đã cài, chờ kiểm thử chạy mã."
         )
-        sig = (ready, alive)
+        sig = (ready, alive, cloud_preferred)
         if sig != self.connection_signature:
             self.connection_signature = sig
             self.band.flash()
         self.footer_status.setText(
-            ("Tunnel đã kết nối" if ready else "Chờ kết nối")
+            (
+                ("Cloud Agent đang chạy" if alive else "Cloud Agent đã tắt")
+                if cloud_preferred
+                else ("Tunnel đã kết nối" if ready else "Chờ kết nối")
+            )
             + " · "
             + ("AI tự sửa theo quyền" if source_auto_projects else "Chưa bật tự sửa")
             + " · Quyền do bạn cấp"

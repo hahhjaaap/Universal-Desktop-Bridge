@@ -9,9 +9,16 @@ const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
     "x-content-type-options": "nosniff" }
 });
 const failure = (status, code) => json({ error: code }, status);
-// A single Windows stdio proxy processes RPCs sequentially. Refuse additional
-// calls rather than queue commands that might outlive HTTP timeouts.
+// The Windows stdio proxy is serial. Allow one bounded waiter only for
+// read-only MCP discovery/status calls; never queue mutations or replay RPCs.
 const MAX_PENDING_PER_DEVICE = 1;
+const MAX_QUEUED_READS = 1;
+const READ_QUEUE_WAIT_MS = 8000;
+const isReadRpc = (rpc) => (
+  ["initialize", "tools/list", "ping"].includes(rpc.method) ||
+  (rpc.method === "tools/call" &&
+    ["bridge_status", "list_projects"].includes(rpc.params?.name))
+);
 const MAX_REPLY_BYTES = 1024 * 1024;
 const encoder = new TextEncoder();
 
@@ -119,6 +126,7 @@ export class DeviceRelay {
     this.ctx = ctx;
     this.env = env;
     this.pending = new Map();
+    this.queuedReads = 0;
   }
 
   deviceSocket() {
@@ -207,11 +215,29 @@ export class DeviceRelay {
       return new Response(null, { status: 101, webSocket: client });
     }
     if (path === "/rpc" && request.method === "POST") {
-      const ws = this.deviceSocket();
-      if (!ws) return failure(503, "device_offline");
-      if (this.pending.size >= MAX_PENDING_PER_DEVICE) return failure(429, "device_busy");
+      if (!this.deviceSocket()) return failure(503, "device_offline");
       const rpc = await readJson(request);
       if (!validRpc(rpc)) return failure(400, "invalid_rpc");
+      if (this.pending.size >= MAX_PENDING_PER_DEVICE) {
+        if (!isReadRpc(rpc) || this.queuedReads >= MAX_QUEUED_READS)
+          return failure(429, "device_busy");
+        this.queuedReads++;
+        try {
+          const deadline = Date.now() + READ_QUEUE_WAIT_MS;
+          while (this.pending.size >= MAX_PENDING_PER_DEVICE &&
+                 Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, 75));
+            if (!this.deviceSocket()) return failure(503, "device_offline");
+          }
+        } finally {
+          this.queuedReads--;
+        }
+        if (this.pending.size >= MAX_PENDING_PER_DEVICE)
+          return failure(429, "device_busy");
+      }
+      // Recheck after waiting: the device may have disconnected or reconnected.
+      const ws = this.deviceSocket();
+      if (!ws) return failure(503, "device_offline");
       const requestId = crypto.randomUUID();
       return await new Promise((resolve) => {
         const timeout = setTimeout(() => {

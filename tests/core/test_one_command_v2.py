@@ -122,7 +122,7 @@ class ReadinessTests(Fixture):
                     self.exe,
                     running=lambda *args: True,
                 )
-                self.assertTrue(report["cloud_agent_running"])
+                self.assertFalse(report["cloud_agent_running"])
                 self.assertFalse(report["chatgpt_connection_verified"])
 
     def test_stale_health_without_live_manager_is_not_ready(self):

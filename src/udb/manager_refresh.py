@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QTreeWidgetItem
 from .activity_presenter import describe, event_state
 from .manager_job_refresh import should_reload_job_details
 from .manager_widgets import icon
-from .ui_connection import tunnel_indicator, unknown_indicator, worker_indicator
+from .ui_connection import cloud_indicator, unknown_indicator, worker_indicator
 from .ui_jobs import job_metadata, visible_jobs
 from .ui_security import (
     approval_indicator,
@@ -98,18 +98,18 @@ class ManagerRefreshMixin:
         except Exception as exc:
             errors.append("Kết nối: " + str(exc))
             indicator = unknown_indicator()
-            self.tunnel_health.set_status(indicator.text, indicator.tone)
-            self.tunnel_health.setToolTip(indicator.detail)
-            self.setup_tunnel_health.set_status(indicator.text, indicator.tone)
-            self.setup_tunnel_health.setToolTip(indicator.detail)
+            self.cloud_health.set_status(indicator.text, indicator.tone)
+            self.cloud_health.setToolTip(indicator.detail)
+            self.setup_cloud_health.set_status(indicator.text, indicator.tone)
+            self.setup_cloud_health.setToolTip(indicator.detail)
             self.header_connection.set_status(
-                "Tunnel: " + indicator.text, indicator.tone
+                "Cloud Agent: " + indicator.text, indicator.tone
             )
             self.header_connection.setToolTip(
                 indicator.detail + " ChatGPT chưa được xác minh bằng lời gọi công cụ."
             )
             self._connection_ready = False
-            self.status_label.setText("●  Không đọc được tunnel")
+            self.status_label.setText("●  Không đọc được Cloud Agent")
             theme = current_theme()
             self.status_label.setStyleSheet(
                 f"color:{theme.muted}; background:{theme.raised};"
@@ -559,68 +559,56 @@ class ManagerRefreshMixin:
 
     def _refresh_connection(self, source_auto_projects):
         status = self.controller.status()
-        indicator = tunnel_indicator(status)
-        self.tunnel_health.set_status(indicator.text, indicator.tone)
-        self.tunnel_health.setToolTip(indicator.detail)
-        self.setup_tunnel_health.set_status(indicator.text, indicator.tone)
-        self.setup_tunnel_health.setToolTip(indicator.detail)
-        self.header_connection.set_status("Tunnel: " + indicator.text, indicator.tone)
-        self.header_connection.setToolTip(
-            indicator.detail + " ChatGPT chưa được xác minh bằng lời gọi công cụ."
+        indicator = cloud_indicator(status)
+        self.cloud_health.set_status(indicator.text, indicator.tone)
+        self.cloud_health.setToolTip(indicator.detail)
+        self.setup_cloud_health.set_status(indicator.text, indicator.tone)
+        self.setup_cloud_health.setToolTip(indicator.detail)
+        self.header_connection.set_status(
+            "Cloud Agent: " + indicator.text, indicator.tone
         )
-        ready = status["ready"] is True and status["tunnel_running"] is True
-        self._connection_ready = ready
-        alive = status["tunnel_running"]
-        wanted = status["tunnel_wanted"]
-        text = (
-            "Tunnel đã kết nối"
-            if ready
-            else (
-                "Đang kết nối…"
-                if alive or status["connecting"]
-                else f"Thử lại sau {status['retry_in_seconds']:.0f} giây"
-                if wanted
-                else "Chưa kết nối"
-            )
+        self.header_connection.setToolTip(indicator.detail)
+        running = status["cloud_running"] is True
+        wanted = status["cloud_wanted"] is True
+        # Never claim that a running process proves a live OAuth/MCP call.
+        self._connection_ready = False
+        label_text = (
+            "Cloud Agent đang chạy · cần xác minh ChatGPT"
+            if running
+            else "Cloud Agent đang thử lại"
+            if wanted
+            else "Cloud Agent đang tắt"
         )
         if not self.busy:
-            self.status_label.setText("●  " + text)
+            self.status_label.setText("●  " + label_text)
         theme = current_theme()
         self.status_label.setStyleSheet(
             "color:"
-            + (theme.accent if ready else theme.warning if alive else theme.muted)
+            + (theme.accent if running else theme.warning if wanted else theme.muted)
             + "; background:"
             + theme.raised
             + "; border-radius:9px; padding:4px 10px;"
         )
-        self.connect_button.setText("Ngắt kết nối" if wanted else "Kết nối")
-        self.connect_button.setEnabled(not self.busy)
-        self.local_button.setEnabled(not self.busy)
-        self.local_button.setText(
-            "Tắt MCP cục bộ" if status["local_running"] else "Bật MCP cục bộ"
+        self.connect_button.setText(
+            "Tắt Cloud Agent" if running else "Bật Cloud Agent"
         )
-        if hasattr(self, "cloud_session_button"):
-            cloud_running = status.get("cloud_running", False)
-            self.cloud_session_button.setEnabled(not self.busy)
-            self.cloud_session_button.setText(
-                "Tắt Cloud Agent" if cloud_running else "Bật Cloud Agent"
-            )
-            self.cloud_session_status.setText(
-                "Cloud Agent đang chạy · chưa xác minh plugin ChatGPT hoặc WebSocket."
-                if cloud_running
-                else "Cloud Agent đã tắt. Ghép nối không tự tạo phiên điều khiển."
-            )
+        self.connect_button.setEnabled(not self.busy)
+        self.cloud_session_button.setEnabled(not self.busy)
+        self.cloud_session_button.setText(self.connect_button.text())
+        self.cloud_session_status.setText(
+            "Cloud Agent đang chạy. Hãy gọi bridge_status tại ChatGPT để xác minh."
+            if running
+            else "Cloud Agent đã tắt; không có kết nối từ ChatGPT vào máy."
+        )
         self.connection_hint.setText(
-            "Tunnel sẵn sàng trên máy này; ChatGPT chưa được xác minh."
-            if ready
-            else "Tunnel là bước cục bộ; ChatGPT cần kiểm tra công cụ riêng."
+            "Cloudflare là đường kết nối từ xa duy nhất. "
+            "Trạng thái tiến trình không chứng minh quyền truy cập ChatGPT."
         )
         self.detail_status.setText(
-            "Tunnel: "
-            + text
-            + "\nMCP cục bộ: "
-            + ("đang bật" if status["local_running"] else "đang tắt")
-            + "\nKhóa: lưu trong Windows Credential Manager · không hiển thị"
+            "Cloud Agent: "
+            + label_text
+            + "\nKhóa thiết bị: Windows Credential Manager, không hiển thị"
+            + "\nĐường vào: Cloudflare Access OAuth (chỉ công cụ được cấp quyền)"
         )
         setup = self.agent.state / "sandbox-setup-result.json"
         needs_restart = False
@@ -640,12 +628,12 @@ class ManagerRefreshMixin:
             if not status["sandbox"]
             else "Sandbox: thành phần đã cài, chờ kiểm thử chạy mã."
         )
-        sig = (ready, alive)
+        sig = (running, wanted)
         if sig != self.connection_signature:
             self.connection_signature = sig
             self.band.flash()
         self.footer_status.setText(
-            ("Tunnel đã kết nối" if ready else "Chờ kết nối")
+            ("Cloud Agent chạy" if running else "Cloud Agent tắt")
             + " · "
             + ("AI tự sửa theo quyền" if source_auto_projects else "Chưa bật tự sửa")
             + " · Quyền do bạn cấp"

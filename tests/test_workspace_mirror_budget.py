@@ -53,11 +53,17 @@ def synthetic_snapshot(seed):
         for i in range(rand.randrange(1, 110))
     ]
     topics = [
-        {"name": f"topic-{i}", "goal": ("中文" if i % 2 else "goal") * rand.randint(3, 120)}
+        {
+            "name": f"topic-{i}",
+            "goal": ("中文" if i % 2 else "goal") * rand.randint(3, 120),
+        }
         for i in range(rand.randrange(1, 110))
     ]
     messages = [
-        {"id": i + 1, "body": ("Xin chào🙂" if i % 2 else "Hello") * rand.randint(4, 180)}
+        {
+            "id": i + 1,
+            "body": ("Xin chào🙂" if i % 2 else "Hello") * rand.randint(4, 180),
+        }
         for i in range(rand.randrange(1, 25))
     ]
     return {

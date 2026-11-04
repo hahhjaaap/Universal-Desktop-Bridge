@@ -6,6 +6,7 @@ import re
 import sqlite3
 import sys
 import time
+
 import room
 
 ALLOWED = {
@@ -223,8 +224,8 @@ def emit(db, line):
 
 def selftest():
     import tempfile
-    from pathlib import Path
     from concurrent.futures import ThreadPoolExecutor
+    from pathlib import Path
 
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "test.sqlite3"

@@ -75,7 +75,6 @@ def main(argv=None):
         action="store_true",
         help="Revoke optional computer access locally",
     )
-    parser.add_argument("--legacy-gui", action="store_true")
     parser.add_argument("--host-workspace", help=argparse.SUPPRESS)
     parser.add_argument("--host-engine-qa", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
@@ -210,19 +209,14 @@ def main(argv=None):
         from udb.core import Agent
 
         print(json.dumps(Agent(Path(args.home)).diagnostics()))
-    elif args.gui or args.legacy_gui or args.gui_screenshot:
-        if args.legacy_gui:
-            from udb.manager_legacy import run
+    elif args.gui or args.gui_screenshot:
+        from udb.manager import run
 
-            run(Path(args.home))
-        else:
-            from udb.manager import run
-
-            run(
-                Path(args.home),
-                start_cloud=False,
-                screenshot=args.gui_screenshot,
-            )
+        run(
+            Path(args.home),
+            start_cloud=False,
+            screenshot=args.gui_screenshot,
+        )
     else:
         from udb.headless import run
 

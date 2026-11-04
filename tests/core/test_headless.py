@@ -27,12 +27,15 @@ class Controller:
     def start_host(self):
         self.host_calls += 1
 
-    def start_tunnel(self):
+    def start_cloud(self):
         self.connect_calls += 1
-        raise PolicyError("synthetic connection unavailable")
+        raise PolicyError("synthetic Cloudflare connection unavailable")
+
+    def stop_process(self, name):
+        assert name == "cloud"
 
     def status(self):
-        return dict(ready=False, tunnel_running=False, connecting=False)
+        return dict(cloud_running=False, cloud_wanted=False)
 
     def close(self):
         self.close_calls += 1

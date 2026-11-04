@@ -61,9 +61,8 @@ from .manager_widgets import (
 )
 from .ui_theme import apply_theme, current_theme, normalize_preference
 
-PLUGIN_URL = (
-    "https://chatgpt.com/plugins/plugin_asdk_app_6ad78a6c547c81919d4efa885507ead2"
-)
+# Personal plugin IDs do not exist in every user's ChatGPT account.
+PLUGIN_URL = "https://chatgpt.com/plugins"
 
 
 class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
@@ -685,7 +684,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         cl.addWidget(self.media_auto)
         config = MotionButton("Cài đặt kết nối", "settings")
         config.clicked.connect(self.configure)
-        plugin = MotionButton("Mở plugin ChatGPT", "external")
+        plugin = MotionButton("Quản lý plugin ChatGPT", "external")
         plugin.clicked.connect(lambda: self.open_url(PLUGIN_URL))
         cl.addLayout(row(config, plugin, None))
         lay.addWidget(card)
@@ -1436,7 +1435,13 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         from PySide6.QtCore import QUrl
         from PySide6.QtGui import QDesktopServices
 
-        QDesktopServices.openUrl(QUrl(url))
+        if not QDesktopServices.openUrl(QUrl(url)):
+            QMessageBox.warning(
+                self,
+                "Không mở được liên kết",
+                "Windows không mở được trình duyệt mặc định. "
+                "Hãy mở liên kết này trong trình duyệt:\n" + url,
+            )
 
     def _update_window_chrome(self):
         if os.name == "nt":

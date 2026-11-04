@@ -306,3 +306,7 @@ def test_edit_and_local_setup_still_refuse_redirected_input(
 def test_windows_nul_is_not_an_attended_console():
     with open(os.devnull) as stream:
         assert onboarding._console_stream(stream) is False
+
+
+def test_owner_setup_links_to_chatgpt_plugins_instead_of_legacy_connector_settings():
+    assert onboarding.CHATGPT_URL == "https://chatgpt.com/plugins"

@@ -69,14 +69,24 @@ class SourceDialog(QDialog):
         lay.addLayout(row(None, close))
         self.load()
 
-    def load(self):
+    def load(self, path=None):
+        # Read before changing the visible folder. An inaccessible directory
+        # must not strand the owner on an empty list with a stale breadcrumb.
+        target = self.path if path is None else path
+        listing = self.agent.listing(self.project, target, limit=200)
         self.files.clear()
-        self.breadcrumb.setText(self.path)
-        if self.path != ".":
+        self.path = target
+        self.breadcrumb.setText(target)
+        # The prior file preview belongs to the prior selection, not this folder.
+        self.code.clear()
+        self.sha.setText("SHA256 xuất hiện sau khi đọc file.")
+        if target != ".":
             item = QListWidgetItem("..  Thư mục trước")
             item.setData(Qt.ItemDataRole.UserRole, {"up": True})
             self.files.addItem(item)
-        listing = self.agent.listing(self.project, self.path, limit=200)
+        self._append_listing(listing)
+
+    def _append_listing(self, listing):
         for entry in listing["items"]:
             item = QListWidgetItem(
                 icon("folder" if entry["directory"] else "file"),
@@ -84,17 +94,30 @@ class SourceDialog(QDialog):
             )
             item.setData(Qt.ItemDataRole.UserRole, entry)
             self.files.addItem(item)
+        if listing.get("next_offset") is not None:
+            more = QListWidgetItem("Xem thêm tệp…")
+            more.setData(Qt.ItemDataRole.UserRole, {"more": listing["next_offset"]})
+            self.files.addItem(more)
 
     def open_item(self, item):
         entry = item.data(Qt.ItemDataRole.UserRole)
         try:
-            if entry.get("up"):
-                self.path = Path(self.path).parent.as_posix()
-                self.load()
+            if entry.get("more") is not None:
+                # Fetch before removing the retryable 'more' row. On a read
+                # failure, the owner can try again without losing this page.
+                listing = self.agent.listing(
+                    self.project, self.path, offset=entry["more"], limit=200
+                )
+                self.files.takeItem(self.files.row(item))
+                self._append_listing(listing)
+            elif entry.get("up"):
+                self.load(Path(self.path).parent.as_posix())
             elif entry["directory"]:
-                self.path = entry["path"]
-                self.load()
+                self.load(entry["path"])
             else:
+                # Never display the previous file as if a new read succeeded.
+                self.code.clear()
+                self.sha.setText("Chưa đọc được file.")
                 result = self.agent.read(self.project, entry["path"])
                 self.code.setPlainText(result["text"])
                 self.sha.setText("SHA256  " + result["sha256"])

@@ -13,7 +13,7 @@ from .connection import is_tunnel_id, normalize_tunnel_id
 
 TUNNELS_URL = "https://platform.openai.com/settings/organization/tunnels"
 KEYS_URL = "https://platform.openai.com/settings/organization/api-keys"
-CHATGPT_URL = "https://chatgpt.com/#settings/Connectors"
+CHATGPT_URL = "https://chatgpt.com/plugins"
 
 
 def _console_stream(stream):

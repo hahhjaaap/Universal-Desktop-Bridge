@@ -1,4 +1,4 @@
-"""Remote-device troubleshooting stays honest about what local probes prove."""
+"""Only a real Cloudflare MCP call verifies the remote ChatGPT session."""
 
 import pytest
 
@@ -6,33 +6,23 @@ from udb.owner_command import remote_session_action
 
 
 @pytest.mark.parametrize(
-    ("local_ready", "expected"),
+    "running,expected",
     [
-        (False, "local tunnel is not ready"),
-        (True, "NOT verified"),
+        (False, "Cloud Agent is not running"),
+        (True, "Cloud Agent process is running"),
     ],
 )
-def test_remote_guidance_distinguishes_local_and_remote(local_ready, expected):
-    action = remote_session_action({"local_tunnel_ready": local_ready}, offline=False)
-    assert expected.casefold() in action.casefold()
+def test_remote_status_guidance_never_promises_chatgpt_access(running, expected):
+    message = remote_session_action({"cloud_agent_running": running}, offline=False)
+    assert expected in message
+    if running:
+        assert "unverified" in message
 
 
-def test_ready_tunnel_does_not_claim_connected_chatgpt():
-    action = remote_session_action({"local_tunnel_ready": True}, offline=False)
-    assert "bridge_status" in action
-    assert "Session terminated" in action
-    assert "Do not replay" in action
-    assert "Connected" in action
+def test_offline_diagnostics_does_not_claim_remote_connection():
+    message = remote_session_action({"cloud_agent_running": False}, offline=True)
+    assert "Offline diagnostics" in message
 
 
-def test_offline_mode_does_not_recommend_reconnecting_a_remote_session():
-    action = remote_session_action({"local_tunnel_ready": False}, offline=True)
-    assert "offline" in action
-    assert "udb setup" in action
-    assert "bridge_status" not in action
-
-
-def test_missing_tunnel_field_fails_closed_with_local_diagnostics():
-    action = remote_session_action({}, offline=False)
-    assert "udb doctor --json" in action
-    assert "bridge_status" not in action
+def test_missing_agent_field_fails_closed_with_diagnostics():
+    assert "Cloud Agent is not running" in remote_session_action({}, offline=False)

@@ -39,22 +39,19 @@ names that lack a handler, unexpected handlers and duplicate schemas.
 `udb.proxy` owns backend routing, concurrency and response normalization.
 Keep this separate from file permissions and owner approvals.
 
-## Connection identity and Multi-PC status
+## Cloudflare identity and multi-PC routing
 
-The released source's `udb.desktop` starts a tunnel client using one locally
-configured `tunnel_id`. That identifies an MCP endpoint, **not** an arbitrary
-set of Windows agents. `udb.proxy` routes tool calls to its own machine's
-core and companion workers; it has no built-in per-call `computer_id` router
-on `main`. A ChatGPT account using two computers does not by itself alter
-that routing boundary.
+The only remote MCP path is ChatGPT → Cloudflare Access Managed OAuth →
+private Worker/Durable Object → paired outbound Windows Cloud Agent.
+The Cloud Agent forwards the allow-listed RPC to its **internal local stdio**
+`udb serve` process, which dispatches to core and companion workers.
+The internal stdio worker is not an independently configured remote tunnel.
 
-The independent [draft Multi-PC PR #34](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/34)
-prototypes a hub, explicit device IDs, loopback-only agents and private
-Tailscale transport. It must remain a separate, opt-in review item until
-Windows CI, secure deployment and a two-network end-to-end test are verified.
-Do not claim that a feature on a draft branch is installed with the latest
-published release. Preserve existing per-host owner grants and protected-path
-checks; never route an unavailable remote command to the local machine.
+Each Windows device has its own random ID, Credential Manager device secret
+and explicitly scoped Cloudflare Access user/tool grant. Authentication at the
+Worker does not grant Windows computer control. ChatGPT selects a device
+through a device-specific MCP endpoint; it does not silently route to other
+machines. A failed device call is never replayed on a different PC.
 
 ## Core policy and approval queues
 
@@ -83,8 +80,8 @@ checks; never route an unavailable remote command to the local machine.
 - `udb.ui_jobs`: bounded, purely local task metadata filtering and
   fail-closed status grouping. Search excludes scripts, logs and document text;
   filtering never changes stored jobs or permissions.
-- `udb.ui_connection`: pure fail-closed read-only Agent/Tunnel/ChatGPT health
-  viewmodels. Only explicit local and tunnel signals can be marked ready;
+- `udb.ui_connection`: pure fail-closed read-only Agent/Cloud Agent/ChatGPT health
+  viewmodels. Local worker and Cloud Agent process status are reported separately;
   the GUI cannot assert ChatGPT tool discovery without a real invocation.
 - `udb.manager_refresh`: status polling, project list refresh, real
   permission count updates and accessibility text for compact navigation.
@@ -187,7 +184,7 @@ The GUI **observes and presents** backend state. Its Qt paint, sidebar,
 appearance and focus components do not authorize file writes, launch arbitrary
 programs or enable full-computer access. Owner approvals and protected-path
 checks remain in the core/host policy layer; backend authorization is required
-even if a GUI button is enabled. Conversely, a visual **Tunnel đã kết nối**
+even if a GUI button is enabled. Conversely, a visual **Cloud Agent đang chạy**
 indicator is not end-to-end proof that ChatGPT has discovered UDB's tools.
 
 The 200 px/72 px navigation preference is per window and not persisted.

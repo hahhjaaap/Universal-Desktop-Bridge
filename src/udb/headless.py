@@ -100,12 +100,10 @@ def publish(controller, instance: str, phase="running"):
                     1,
                 ),
             ),
-            tunnel_ready=connection["ready"],
-            tunnel_running=connection["tunnel_running"],
-            connecting=connection["connecting"],
+            cloud_agent_running=connection["cloud_running"],
+            cloud_connection_verified=False,
             recovery_count=connection.get("recovery_count", 0),
-            last_recovery=connection.get("last_recovery", ""),
-            retry_in_seconds=connection.get("retry_in_seconds", 0),
+            retry_in_seconds=connection.get("cloud_retry_in_seconds", 0),
             reconnect_request=getattr(controller, "_last_reconnect_request", ""),
             reconnect_pending=getattr(controller, "_reconnect_pending", False),
             connection_mode="offline"
@@ -127,12 +125,12 @@ def run_loop(controller, instance, stop_event, connect=True, interval=0.3):
     def begin(reconnect=False):
         try:
             if reconnect:
-                controller.stop_process("tunnel")
+                controller.stop_process("cloud")
             if not stop_event.is_set():
                 controller.offline_mode = False
-                controller.start_tunnel()
+                controller.start_cloud()
         except (PolicyError, OSError):
-            pass  # Existing controller schedules bounded retries, not tool replay.
+            pass  # Pairing is owner-controlled; never replay an uncertain tool.
         finally:
             controller._reconnect_pending = False
 

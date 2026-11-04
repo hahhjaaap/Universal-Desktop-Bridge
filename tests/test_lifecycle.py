@@ -11,75 +11,12 @@ import pytest
 
 from udb import autostart, cli, maintenance, onboarding, owner_command
 from udb.config import Settings
-from udb.desktop import DesktopController
 from udb.owner_command import CommandError
 
 
 @pytest.fixture(autouse=True)
 def isolated_startup_helper(tmp_path, monkeypatch):
     monkeypatch.setattr(autostart, "script_path", lambda _: tmp_path / "startup.ps1")
-
-
-@pytest.fixture
-def controller(tmp_path, monkeypatch):
-    ctl = DesktopController(tmp_path / "bridge", monitor=False)
-    child = SimpleNamespace(live=True)
-    child.poll = lambda: None if child.live else 0
-    ctl.children["tunnel"] = child
-    ctl.tunnel_wanted = True
-    monkeypatch.setattr(owner_command, "tunnel_ready", lambda *a: False)
-    original_stop = ctl.stop_process
-
-    def stop(name):
-        child.live = False
-        original_stop(name)
-
-    monkeypatch.setattr(ctl, "stop_process", stop)
-    yield ctl
-    ctl.close()
-
-
-def test_live_unready_tunnel_recovers_once_after_grace(controller):
-    for now in range(0, 91, 10):
-        controller._monitor_once(None, now)
-    assert not controller.alive("tunnel")
-    assert controller.tunnel_wanted and controller._recovery_count == 1
-    assert controller._retry_at > 0
-    assert controller._last_recovery == "tunnel_unready"
-
-
-def test_short_outage_and_sleep_grace_do_not_restart(controller, monkeypatch):
-    controller._monitor_once(None, 0)
-    controller._monitor_once(None, 15)
-    controller._monitor_once(None, 4000)  # Resume gets a new full grace period.
-    controller._monitor_once(None, 4010)
-    assert controller.alive("tunnel") and controller._recovery_count == 0
-    monkeypatch.setattr(owner_command, "tunnel_ready", lambda *a: True)
-    controller._monitor_once(None, 4011)
-    assert controller.ready and controller._unready_since is None
-
-
-def test_late_ready_response_cannot_mark_a_replaced_child_ready(
-    controller, monkeypatch
-):
-    def response(*a):
-        controller.children["tunnel"] = SimpleNamespace(poll=lambda: None)
-        return True
-
-    monkeypatch.setattr(owner_command, "tunnel_ready", response)
-    controller._monitor_once(None, 0)
-    assert not controller.ready
-    controller.children["tunnel"].poll = lambda: 0
-
-
-def test_stop_during_health_check_cancels_recovery(controller, monkeypatch):
-    def response(*a):
-        controller.stop_process("tunnel")
-        return False
-
-    monkeypatch.setattr(owner_command, "tunnel_ready", response)
-    controller._monitor_once(None, 1000)
-    assert not controller.tunnel_wanted and not controller._recovery_count
 
 
 class Registry:
@@ -308,7 +245,7 @@ def test_doctor_offline_is_useful_without_credentials(tmp_path, monkeypatch):
     )
     report = dict(
         manager_running=True,
-        local_tunnel_ready=False,
+        cloud_agent_running=False,
         connection_mode="offline",
         next_action="local",
     )
@@ -326,18 +263,6 @@ def test_online_start_overrides_saved_local_mode(tmp_path, monkeypatch):
     assert "--offline" not in calls[0]
 
 
-def test_unready_stop_failure_keeps_reconnect_intent(controller, monkeypatch):
-    def fail(name):
-        controller.tunnel_wanted = False
-        raise subprocess.TimeoutExpired("synthetic-stop", 15)
-
-    monkeypatch.setattr(controller, "stop_process", fail)
-    controller._recover_unready(controller._generation)
-    assert controller.tunnel_wanted and not controller._recovery_count
-    assert controller.alive("tunnel")
-    monkeypatch.setattr(controller, "stop_process", lambda name: None)
-
-
 def test_diagnostic_recovery_fields_are_bounded_not_raw_state(tmp_path, monkeypatch):
     monkeypatch.setattr(
         owner_command,
@@ -348,13 +273,9 @@ def test_diagnostic_recovery_fields_are_bounded_not_raw_state(tmp_path, monkeypa
         },
     )
     report = owner_command.inspect(
-        tmp_path, Path("unused"), running=lambda *a: True, ready=lambda *a: False
+        tmp_path, Path("unused"), running=lambda *a: True
     )
-    assert report["tunnel_recovery"] == {
-        "count": 0,
-        "last_reason": "",
-        "replays_tool_calls": False,
-    }
+    assert report["cloud_recovery"] == {"count": 0, "replays_tool_calls": False}
     assert "SYNTHETIC_PRIVATE" not in json.dumps(report)
 
 
@@ -364,13 +285,13 @@ def test_setup_checks_frozen_runtime_before_asking_for_a_key(tmp_path, monkeypat
     monkeypatch.setattr(onboarding, "console_input", lambda: True)
     monkeypatch.setattr(onboarding.sys, "frozen", True, raising=False)
     monkeypatch.setattr(
-        components, "runtime_report", lambda: {"components": [], "office_modules": {}}
+        components, "runtime_report", lambda: {"components": [], "office_modules": {"openpyxl": False}}
     )
     monkeypatch.setattr(
         "builtins.input",
         lambda _: pytest.fail("Incomplete build must not request connection details"),
     )
-    with pytest.raises(ValueError, match="Runtime check failed"):
+    with pytest.raises(ValueError, match="Bundled runtime check failed"):
         onboarding.run(Settings(tmp_path / "unused", tmp_path / "work"))
     assert not (tmp_path / "unused").exists()
 

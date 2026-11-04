@@ -65,8 +65,9 @@ def test_saved_connection_reuses_normal_start_without_a_setup_prompt(
     calls, setups = route(monkeypatch)
     home = tmp_path / "existing"
     (home / "state").mkdir(parents=True)
-    data = json.dumps({"tunnel_id": "tunnel_" + "a" * 32})
-    connection = home / "state/connection.json"
+    data = json.dumps({"relay": "https://udb-example.workers.dev",
+                       "device_id": "a" * 32})
+    connection = home / "cloud-pairing.json"
     connection.write_text(data)
     assert cli.main(["start", "--home", str(home)]) == 0
     assert len(calls) == 1 and not setups and "--offline" not in calls[0]
@@ -81,7 +82,7 @@ def test_offline_choice_is_reused_even_by_machine_readable_start(tmp_path, monke
     assert cli.main(["start", "--home", str(home), "--json"]) == 0
     assert len(calls) == 1 and "--offline" in calls[0] and not setups
     assert onboarding.saved_mode(settings) == "offline"
-    assert not (home / "state/connection.json").exists()
+    assert not (home / "cloud-pairing.json").exists()
     assert not (home / "state/computer-access.dpapi").exists()
 
 

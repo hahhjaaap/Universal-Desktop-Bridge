@@ -181,7 +181,7 @@ def test_start_attaches_logs_only_when_requested_or_interactive(
 
     report = dict(
         manager_running=True,
-        local_tunnel_ready=True,
+        cloud_agent_running=True,
         background="ready",
         manager_mode="headless",
         next_action="fixture",

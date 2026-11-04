@@ -122,7 +122,10 @@ jobs:
         continue-on-error: true
         with:
           name: windows-executable
-          path: dist/*
+          # The standalone ZIP already contains udb.exe, helper binaries,
+          # extension resources, install instructions and third-party notices.
+          # Uploading dist/* duplicates the ~150 MiB executable in CI artifacts.
+          path: dist/udb-*-windows-standalone.zip
           retention-days: 3
       - if: steps.artifact_upload.outcome == 'failure'
         run: echo "::warning::Build/test results are independent of artifact storage; upload failed, check Actions quota."

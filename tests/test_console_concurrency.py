@@ -88,9 +88,10 @@ def test_slots_are_shared_across_processes_and_released_after_crash(tmp_path):
         slot.close()
 
 
-
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows byte-range locks")
-def test_capacity_slot_recovers_from_transient_postcrash_windows_lock(tmp_path, monkeypatch):
+def test_capacity_slot_recovers_from_transient_postcrash_windows_lock(
+    tmp_path, monkeypatch
+):
     import msvcrt
 
     original_lock = msvcrt.locking
@@ -111,6 +112,7 @@ def test_capacity_slot_recovers_from_transient_postcrash_windows_lock(tmp_path, 
         assert calls[0] == MAX_CONCURRENT + 1
     finally:
         slot.close()
+
 
 def test_commands_terminal_and_background_share_one_ten_job_pool(tmp_path):
     class FakeCommand:

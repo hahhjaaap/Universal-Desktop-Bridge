@@ -60,7 +60,9 @@ class Opener:
                 {"WWW-Authenticate": 'Bearer resource_metadata="' + metadata + '"'},
                 None,
             )
-        if request.full_url.endswith("/.well-known/cloudflare-access-protected-resource/"):
+        if request.full_url.endswith(
+            "/.well-known/cloudflare-access-protected-resource/"
+        ):
             return Response(
                 json.dumps(
                     {

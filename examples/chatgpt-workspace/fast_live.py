@@ -5,8 +5,9 @@ import ctypes
 import hashlib
 import json
 import os
-from pathlib import Path
 import time
+from pathlib import Path
+
 import room
 
 
@@ -209,7 +210,7 @@ def selftest():
         for i in range(10):
             committed = []
 
-            def send():
+            def send(request_id="latency-" + str(i), samples=committed):
                 d = room.connect(root / "workspace.sqlite3")
                 room.post(
                     d,
@@ -219,10 +220,10 @@ def selftest():
                         kind="message",
                         body="timed",
                         reply_to=None,
-                        request_id="latency-" + str(i),
+                        request_id=request_id,
                     ),
                 )
-                committed.append(time.perf_counter())
+                samples.append(time.perf_counter())
                 d.close()
 
             thread = threading.Timer(0.007, send)

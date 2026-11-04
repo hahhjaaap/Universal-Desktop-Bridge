@@ -5,6 +5,20 @@ or network while the original Windows computer is online and the owner-approved
 agent remains running. **A locally ready tunnel does not prove that the current
 ChatGPT plugin session can call its tools.**
 
+## First identify your transport
+
+On a Windows profile with an existing `cloud-pairing.json`, Cloudflare is
+the preferred connection path. Start Cloud Agent explicitly in UDB Manager;
+`udb setup --edit` is not a place to paste a workers.dev URL. Verify the
+Worker deployment, Cloudflare Access OAuth, per-device subject grant, live
+Cloud Agent and the exact MCP plugin catalog separately. See
+[Cloudflare project-read acceptance](cloudflare-project-read-acceptance.md).
+
+The Tunnel ID and `local_tunnel_ready` checks below apply only to the
+**legacy OpenAI Tunnel** compatibility mode on unpaired profiles. A local
+Tunnel failure does not diagnose an existing Cloudflare pairing, and Cloud
+Agent process readiness does not prove an authenticated ChatGPT tool call.
+
 ## When the plugin displays Connected but calls fail
 
 1. On the original Windows computer, run `udb status --json` and

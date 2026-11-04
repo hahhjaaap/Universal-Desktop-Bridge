@@ -17,12 +17,10 @@ import subprocess
 import sys
 import tempfile
 import time
-import urllib.request
 from pathlib import Path
 
 from ._version import VERSION
 from .config import manager_options
-from .connection import is_tunnel_id
 from .launcher import worker_command
 from .owner_cli import parse_args, render_report, report_healthy
 
@@ -174,26 +172,6 @@ def manager_running(home: Path, exe: Path, image=process_image) -> bool:
         return False
 
 
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
-
-
-def tunnel_ready(home: Path, opener=None) -> bool:
-    try:
-        base = read_text(home / "state" / "tunnel-health.url", 128).strip()
-        match = re.fullmatch(r"http://127\.0\.0\.1:([0-9]{1,5})", base)
-        if not match or not 1 <= int(match[1]) <= 65535:
-            return False
-        opener = opener or urllib.request.build_opener(
-            urllib.request.ProxyHandler({}), NoRedirect()
-        )
-        with opener.open(base + "/readyz", timeout=0.6) as reply:
-            return reply.status == 200
-    except (OSError, ValueError, CommandError):
-        return False
-
-
 def background_state(home: Path, now=None) -> str:
     try:
         prefs = read_object(home / "state" / "host-settings.json")
@@ -239,64 +217,54 @@ def headless_state(home: Path) -> dict | None:
         return None
 
 
-def inspect(home: Path, exe: Path, running=manager_running, ready=tunnel_ready) -> dict:
+def inspect(home: Path, exe: Path, running=manager_running) -> dict:
     active = running(home, exe)
-    connected = active and ready(home)
     hidden = headless_state(home) if active else None
+    cloud_running = bool(hidden and hidden.get("cloud_agent_running") is True)
     count = (hidden or {}).get("recovery_count", 0)
     count = count if type(count) is int and 0 <= count <= 10**9 else 0
-    reason = (hidden or {}).get("last_recovery", "")
-    reason = reason if reason in ("", "tunnel_unready") else ""
     return dict(
         companion_version=VERSION,
         manager_running=active,
         manager_mode=(
             "headless" if hidden else "legacy_or_unknown" if active else "stopped"
         ),
-        local_tunnel_ready=connected,
+        cloud_agent_running=cloud_running,
+        cloud_connection_verified=False,
         background=background_state(home),
-        connection_mode=hidden.get("connection_mode", "online")
-        if hidden
-        else "unknown",
+        connection_mode=hidden.get("connection_mode", "online") if hidden else "unknown",
         chatgpt_connection_verified=False,
-        tunnel_recovery={
+        cloud_recovery={
             "count": count,
-            "last_reason": reason,
             "replays_tool_calls": False,
         },
         next_action=(
-            "Call bridge_status in ChatGPT to verify the session."
-            if connected
-            else "The local agent is running offline. Run udb setup to connect."
+            "Cloud Agent process is running. Call bridge_status in ChatGPT to verify live access."
+            if cloud_running
+            else "Offline diagnostics mode; run udb start to enable the Cloud Agent."
             if hidden and hidden.get("connection_mode") == "offline"
-            else "The background agent is retrying. Run udb doctor to inspect local readiness."
+            else "Check Cloud pairing and agent state using udb doctor --json."
             if hidden
-            else "Close the legacy UDB window once, then run udb to use headless mode."
+            else "Close an older UDB window, then run udb start."
             if active
-            else "Run udb to open the existing installation."
+            else "Pair with udb cloud-pair, then run udb start."
         ),
     )
 
 
 def remote_session_action(report: dict, *, offline: bool) -> str:
-    """Guide remote troubleshooting without claiming to observe the ChatGPT UI."""
+    """A live ChatGPT invocation is the only verified end-to-end signal."""
     if offline:
+        return "Offline diagnostics mode; run udb start for Cloudflare connectivity."
+    if not report.get("cloud_agent_running", False):
         return (
-            "Local/offline mode: a ChatGPT remote session is not expected. "
-            "Use udb setup on the original computer to enable online mode."
-        )
-    if not report.get("local_tunnel_ready", False):
-        return (
-            "The local tunnel is not ready. Run udb status --json and "
-            "udb doctor --json on the original computer; resolve local "
-            "connection problems before retrying tools in ChatGPT."
+            "Cloud Agent is not running. Confirm pairing locally with "
+            "udb doctor --json, then run udb start."
         )
     return (
-        "Local tunnel is ready, but ChatGPT tool access is NOT verified. "
-        "From the other device call bridge_status. If the plugin shows "
-        "Connected yet calls fail with 'Session terminated', reconnect or "
-        "refresh the ChatGPT plugin/session and verify bridge_status again. "
-        "Do not replay a command whose outcome is uncertain."
+        "Cloud Agent process is running; authenticated ChatGPT access is unverified. "
+        "Call bridge_status via udb-cloudflare, inspect plugin permissions and "
+        "do not replay commands whose result is uncertain."
     )
 
 
@@ -325,58 +293,41 @@ def doctor(home: Path, report: dict) -> list[dict]:
         )
     )
     try:
-        cfg = read_object(home / "state" / "connection.json")
-        valid = is_tunnel_id(cfg.get("tunnel_id"))
-    except (OSError, ValueError, CommandError):
-        valid = False
+        from .cloud_agent import load_pairing
+
+        relay, device_id, _token = load_pairing(home)
+        paired = bool(relay and device_id)
+    except (OSError, ValueError, TypeError, KeyError):
+        paired = False
     checks.append(
         dict(
-            check="connection_configuration",
-            ok=None if offline else valid,
-            action="Already configured."
-            if valid
-            else "Not required in local mode."
-            if offline
-            else "Run udb setup --edit locally. Keep runtime keys out of chat.",
+            check="cloud_pairing",
+            ok=None if offline else paired,
+            action="Device paired locally; secret never printed."
+            if paired else "Run udb cloud-pair in an attended terminal.",
         )
     )
     checks.append(
         dict(
             check="manager",
             ok=report["manager_running"],
-            action="Running." if report["manager_running"] else "Run udb.",
+            action="Running." if report["manager_running"] else "Run udb start.",
         )
     )
     checks.append(
         dict(
-            check="local_tunnel",
-            ok=None if offline else report["local_tunnel_ready"],
-            action="Not required in local mode." if offline else report["next_action"],
+            check="cloud_agent",
+            ok=None if offline else report["cloud_agent_running"],
+            action="Cloud Agent process running; test bridge_status in ChatGPT."
+            if report["cloud_agent_running"] else "Run udb start after pairing.",
         )
     )
     from .components import runtime_report
 
     try:
         runtime = runtime_report()
-        helpers = {row["name"] for row in runtime["components"]}
-        bundled = "tunnel-client" in helpers
-        if not bundled:
-            from .components import component_path
-
-            bundled = component_path("tunnel-client", home) is not None
         checks.append(
-            dict(
-                check="runtime_integrity", ok=True, action="Runtime inventory verified."
-            )
-        )
-        checks.append(
-            dict(
-                check="tunnel_component",
-                ok=None if offline else bundled,
-                action="Available."
-                if bundled
-                else "Install the Windows standalone release to include tunnel-client.",
-            )
+            dict(check="runtime_integrity", ok=True, action="Runtime inventory verified.")
         )
         checks.append(
             dict(
@@ -447,7 +398,7 @@ def doctor(home: Path, report: dict) -> list[dict]:
         dict(
             check="credentials",
             ok=None,
-            action="Keys are not read by doctor. If authentication fails, use udb setup --edit in your own terminal.",
+            action="Device tokens are not displayed by doctor. Re-pair locally if authentication was revoked.",
         )
     )
     checks.append(
@@ -560,7 +511,7 @@ def start(
         while True:
             report = snapshot(home, exe)
             if (
-                report["local_tunnel_ready"]
+                report["cloud_agent_running"]
                 or (
                     not connect
                     and report["manager_running"]
@@ -612,7 +563,7 @@ def stop(
 def reconnect(
     home, exe, wait=30, *, snapshot=inspect, clock=time.monotonic, pause=time.sleep
 ):
-    """Request a new owned tunnel connection without restarting jobs or grants."""
+    """Request an owner-scoped Cloud Agent reconnect without replaying tools."""
     from .host_client import atomic_json
 
     with launch_gate(home):
@@ -639,7 +590,7 @@ def reconnect(
             if (
                 acknowledged
                 and not current.get("reconnect_pending", False)
-                and result["local_tunnel_ready"]
+                and result["cloud_agent_running"]
             ) or clock() >= deadline:
                 return dict(
                     result,

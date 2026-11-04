@@ -27,15 +27,15 @@ def assets(tmp_path):
     root = tmp_path / "assets"
     (root / "bin").mkdir(parents=True)
     (root / "licenses").mkdir()
-    binary = root / "bin" / "tunnel-client.exe"
+    binary = root / "bin" / "ffmpeg.exe"
     binary.write_bytes(b"synthetic helper; not executable")
-    (root / "licenses" / "tunnel-client.txt").write_text("synthetic notice")
+    (root / "licenses" / "ffmpeg.txt").write_text("synthetic notice")
     record = {
-        "name": "tunnel-client",
+        "name": "ffmpeg",
         "version": "fixture",
-        "binary": "bin/tunnel-client.exe",
+        "binary": "bin/ffmpeg.exe",
         "sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
-        "license": "licenses/tunnel-client.txt",
+        "license": "licenses/ffmpeg.txt",
         "source_url": "https://example.test/public-helper.zip",
     }
     manifest = root / "components.json"
@@ -95,14 +95,14 @@ def test_corrupt_bundle_never_falls_back_to_an_external_helper(
     monkeypatch.setattr(components, "bundle_root", lambda: root)
     home = tmp_path / "home"
     (home / "tools").mkdir(parents=True)
-    (home / "tools" / "tunnel-client.exe").write_bytes(b"external fixture")
+    (home / "tools" / "ffmpeg.exe").write_bytes(b"external fixture")
     assert (
-        components.component_path("tunnel-client", home)
-        == root / "bin/tunnel-client.exe"
+        components.component_path("ffmpeg", home)
+        == root / "bin/ffmpeg.exe"
     )
-    (root / "bin/tunnel-client.exe").write_bytes(b"tampered")
+    (root / "bin/ffmpeg.exe").write_bytes(b"tampered")
     with pytest.raises(ValueError, match="checksum"):
-        components.component_path("tunnel-client", home)
+        components.component_path("ffmpeg", home)
 
 
 def test_hardlinked_helper_is_rejected(assets, tmp_path):
@@ -110,7 +110,7 @@ def test_hardlinked_helper_is_rejected(assets, tmp_path):
 
     root, _ = assets
     try:
-        os.link(root / "bin/tunnel-client.exe", tmp_path / "helper-alias")
+        os.link(root / "bin/ffmpeg.exe", tmp_path / "helper-alias")
     except OSError:
         pytest.skip("Hard links unavailable")
     with pytest.raises(ValueError, match="hardlinked"):
@@ -139,8 +139,8 @@ def test_embedded_helper_probe_uses_sanitized_child_environment(assets, monkeypa
 
     monkeypatch.setattr(components.subprocess, "run", run)
     report = components.runtime_report(probe=True)
-    assert report["component_probes"]["tunnel-client"]["ok"]
-    assert calls[0][0] == [str(root / "bin/tunnel-client.exe"), "--version"]
+    assert report["component_probes"]["ffmpeg"]["ok"]
+    assert calls[0][0] == [str(root / "bin/ffmpeg.exe"), "-version"]
     assert "CONTROL_PLANE_API_KEY" not in calls[0][1]["env"]
 
 
@@ -196,18 +196,18 @@ def test_gui_cannot_activate_computer_permissions(tmp_path):
     assert not home.exists()
 
 
-def test_offline_start_initializes_folders_and_never_requests_a_tunnel(tmp_path):
+def test_offline_start_initializes_folders_and_never_requests_a_cloud_connection(tmp_path):
     home = tmp_path / "fresh-home"
     reports = iter(
         [
             {
                 "manager_running": False,
-                "local_tunnel_ready": False,
+                "cloud_agent_running": False,
                 "connection_mode": "unknown",
             },
             {
                 "manager_running": True,
-                "local_tunnel_ready": False,
+                "cloud_agent_running": False,
                 "connection_mode": "offline",
             },
         ]
@@ -232,10 +232,10 @@ def test_background_manager_owns_its_frozen_runtime(tmp_path, monkeypatch, froze
     monkeypatch.setenv("PYINSTALLER_RESET_ENVIRONMENT", "0")
     reports = iter(
         [
-            {"manager_running": False, "local_tunnel_ready": False},
+            {"manager_running": False, "cloud_agent_running": False},
             {
                 "manager_running": True,
-                "local_tunnel_ready": False,
+                "cloud_agent_running": False,
                 "connection_mode": "offline",
             },
         ]
@@ -274,14 +274,14 @@ def test_offline_heartbeat_is_truthful_and_does_not_issue_access(tmp_path):
     closed = threading.Event()
 
     def forbidden():
-        raise AssertionError("Offline mode attempted a tunnel")
+        raise AssertionError("Offline mode attempted a cloud session")
 
     controller = SimpleNamespace(
         agent=SimpleNamespace(state=tmp_path),
         closed=closed,
         start_host=lambda: None,
-        start_tunnel=forbidden,
-        status=lambda: {"ready": False, "tunnel_running": False, "connecting": False},
+        start_cloud=forbidden,
+        status=lambda: {"ready": False, "cloud_running": False, "cloud_wanted": False},
         close=lambda: closed.set(),
     )
     (tmp_path / headless.STOP_NAME).write_text(

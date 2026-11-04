@@ -50,7 +50,9 @@ def test_waits_for_matching_session_and_enabled_host(monkeypatch):
 
 def test_fixture_worker_exit_does_not_attempt_a_browser_mutation(monkeypatch):
     monkeypatch.setattr(
-        scenarios, "host_status", lambda *_: pytest.fail("Should not check exited worker")
+        scenarios,
+        "host_status",
+        lambda *_: pytest.fail("Should not check exited worker"),
     )
     with pytest.raises(RuntimeError, match="exited before host readiness"):
         scenarios._wait_for_fixture_host(object(), FakeProcess(7), "a" * 32)

@@ -84,6 +84,9 @@ class SourceDialog(QDialog):
             item = QListWidgetItem("..  Thư mục trước")
             item.setData(Qt.ItemDataRole.UserRole, {"up": True})
             self.files.addItem(item)
+        self._append_listing(listing)
+
+    def _append_listing(self, listing):
         for entry in listing["items"]:
             item = QListWidgetItem(
                 icon("folder" if entry["directory"] else "file"),
@@ -91,11 +94,25 @@ class SourceDialog(QDialog):
             )
             item.setData(Qt.ItemDataRole.UserRole, entry)
             self.files.addItem(item)
+        if listing.get("next_offset") is not None:
+            more = QListWidgetItem("Xem thêm tệp…")
+            more.setData(
+                Qt.ItemDataRole.UserRole, {"more": listing["next_offset"]}
+            )
+            self.files.addItem(more)
 
     def open_item(self, item):
         entry = item.data(Qt.ItemDataRole.UserRole)
         try:
-            if entry.get("up"):
+            if entry.get("more") is not None:
+                # Fetch before removing the retryable 'more' row. On a read
+                # failure, the owner can try again without losing this page.
+                listing = self.agent.listing(
+                    self.project, self.path, offset=entry["more"], limit=200
+                )
+                self.files.takeItem(self.files.row(item))
+                self._append_listing(listing)
+            elif entry.get("up"):
                 self.load(Path(self.path).parent.as_posix())
             elif entry["directory"]:
                 self.load(entry["path"])

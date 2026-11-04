@@ -72,7 +72,7 @@ The local **Xuất metadata đã ẩn thông tin nhạy cảm** action confirms 
 then saves a **new** JSON file (never overwriting an existing file) with
 only timestamps, tool labels and states. Inspect the destination before sharing
 it because even sanitized metadata can reveal which tools were used.
-A persistent header displays the current page, a **Tunnel-only** status,
+A persistent header displays the current page, a **Cloud Agent-only** status,
 and a separate **Windows privilege** indicator. If the optional broad
 current-user computer grant is active, it warns **Windows: không sandbox**
 on every page. Unknown local grant status stays **chưa xác minh**, never a
@@ -132,11 +132,11 @@ session/job controls when necessary.
 ## First-run onboarding in Connection settings
 
 The **Kết nối** page displays a three-step status guide: **Agent trên
-Windows** (local worker heartbeat), **Kết nối Tunnel** (transport state),
+Windows** (local worker heartbeat), **Kết nối Cloud Agent** (transport state),
 and **Xác minh tại ChatGPT** (requires a separate read-only UDB tool call
 from ChatGPT). The first two indicators track actual local status and switch
 to unknown if their sources fail. The third deliberately remains
-**Chưa xác minh** because tunnel health cannot authenticate a ChatGPT
+**Chưa xác minh** because Cloud Agent process state cannot authenticate a ChatGPT
 invocation. The guide does not store a password, test a remote endpoint,
 start a browser, approve an operation or grant computer permissions.
 The existing **Sao chép lệnh kiểm tra** control only copies the local
@@ -149,10 +149,10 @@ The top of **Dự án** displays three compact indicators:
 | Indicator | What it verifies | What it does not verify |
 | --- | --- | --- |
 | **Agent** | Host worker reported a local readiness heartbeat | Authorized computer access or ChatGPT RPC |
-| **Tunnel** | Local tunnel health/transport is running and ready | Whether ChatGPT discovered any tools |
+| **Cloud Agent** | Local Cloud Agent process state/transport is running and ready | Whether ChatGPT discovered any tools |
 | **ChatGPT** | Always **Chưa xác minh** (unverified) in this GUI release | No GUI-side network test is invented |
 
-On a failed status refresh, the corresponding Agent or Tunnel indicator falls
+On a failed status refresh, the corresponding Agent or Cloud Agent indicator falls
 back to **Chưa xác định** rather than displaying its previous green value.
 Status is read-only; this feature sends no remote probe, stores no credential
 and grants no access. To verify end-to-end ChatGPT connectivity, run an actual
@@ -161,7 +161,7 @@ and grants no access. To verify end-to-end ChatGPT connectivity, run an actual
 ## Connection status is not authorization
 
 - **Local agent:** the worker is reachable on this PC.
-- **Tunnel ready:** this PC's outbound tunnel is ready; this does *not* prove a
+- **Cloud Agent running:** the outbound process is running; this does *not* prove a
   ChatGPT workspace can discover and call UDB tools.
 - **ChatGPT invocation:** confirm in ChatGPT with a *read-only* status tool.
 - **Permission grant:** separately authorized by the owner on the Windows
@@ -169,7 +169,7 @@ and grants no access. To verify end-to-end ChatGPT connectivity, run an actual
 
 The current source does **not** implement production one-plugin Multi-PC
 selection. Do not infer another PC from a green connection label; distinguish
-separate MCP connections and tunnel IDs. See
+separate MCP connections and Cloudflare device IDs. See
 [remote-device troubleshooting](remote-device-troubleshooting.md).
 
 ## Security page: distinguish actual protection boundaries

@@ -111,3 +111,47 @@ test("origin mismatch and unsupported protocol cannot reach a device", async () 
   env, id, stub, fetchImpl);
   assert.equal(wrongVersion.status, 400);
 });
+
+test("gateway discovers and calls explicitly granted project read tools only", async () => {
+  const scopedEnv = { UDB_AUTH_MODE: "cloudflare-access",
+    UDB_ACCESS_AUD: "application-audience-test",
+    UDB_DEVICE_GRANTS: JSON.stringify({ [id]: {
+      "owner@example.test": ["list_files", "read_file"],
+    } }) };
+  const access = { aud: "application-audience-test",
+    getIdentity: async () => ({ email: "owner@example.test" }) };
+  const forwarded = [];
+  const stub = { async fetch(req) {
+    const rpc = await req.json();
+    forwarded.push(rpc);
+    const result = rpc.method === "initialize" ? { protocolVersion: "2025-11-25" } :
+      rpc.method === "tools/list" ? { tools: [
+        { name: "bridge_status" }, { name: "list_files" },
+        { name: "read_file" }, { name: "propose_file_write" },
+        { name: "computer_execute" },
+      ] } : { ok: true };
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: rpc.id, result }));
+  } };
+  const request = (rpc) => new Request(resource, { method: "POST",
+    headers: { "content-type": "application/json" }, body: JSON.stringify(rpc) });
+  const execute = (rpc) => handleMcp(request(rpc), scopedEnv, id, stub, fetch, access);
+
+  const init = await execute({ jsonrpc: "2.0", id: 100, method: "initialize",
+    params: {} });
+  assert.equal(init.status, 200);
+  const list = await execute({ jsonrpc: "2.0", id: 101, method: "tools/list" });
+  assert.equal(list.status, 200);
+  assert.deepEqual((await list.json()).result.tools.map(t => t.name),
+    ["list_files", "read_file"]);
+
+  const allowed = await execute({ jsonrpc: "2.0", id: 102, method: "tools/call",
+    params: { name: "read_file", arguments: { project: "udb-room", path: "README.md" } } });
+  assert.equal(allowed.status, 200);
+  const denied = await execute({ jsonrpc: "2.0", id: 103, method: "tools/call",
+    params: { name: "propose_file_write", arguments: {} } });
+  assert.equal(denied.status, 403);
+  const ungranted = await execute({ jsonrpc: "2.0", id: 104, method: "tools/call",
+    params: { name: "bridge_status", arguments: {} } });
+  assert.equal(ungranted.status, 403);
+  assert.deepEqual(forwarded.map(rpc => rpc.id), [100, 101, 102]);
+});

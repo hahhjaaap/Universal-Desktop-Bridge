@@ -18,9 +18,7 @@ def test_page_header_does_not_compress_wrapped_subtitle_into_title():
     title = header.findChild(qt.QLabel, "H1")
     subtitle = header.findChild(qt.QLabel, "Subtitle")
     assert header.minimumHeight() >= (
-        title.minimumHeight()
-        + header.layout().spacing()
-        + subtitle.sizeHint().height()
+        title.minimumHeight() + header.layout().spacing() + subtitle.sizeHint().height()
     )
 
     try:

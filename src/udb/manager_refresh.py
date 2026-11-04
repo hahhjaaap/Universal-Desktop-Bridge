@@ -643,7 +643,8 @@ class ManagerRefreshMixin:
             )
             self.header_connection.set_status("Cloudflare: " + state, tone)
             self.header_connection.setToolTip(
-                "Cloud Agent đang chạy" if cloud_running
+                "Cloud Agent đang chạy"
+                if cloud_running
                 else "Cloud Agent chưa được bật. ChatGPT chưa xác minh."
             )
             self.status_label.setText("●  Cloud Agent " + state.lower())
@@ -661,7 +662,8 @@ class ManagerRefreshMixin:
                 "Cloudflare là kết nối chính. Xác minh bằng lời gọi MCP trong ChatGPT."
             )
             self.detail_status.setText(
-                "Cloudflare: " + state
+                "Cloudflare: "
+                + state
                 + "\nMCP cục bộ: "
                 + ("đang bật" if status["local_running"] else "đang tắt")
                 + "\nKết nối ChatGPT: chưa xác minh"

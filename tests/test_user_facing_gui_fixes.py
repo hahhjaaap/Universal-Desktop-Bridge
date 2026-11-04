@@ -120,7 +120,9 @@ def test_source_browser_loads_beyond_first_200_files_and_can_retry(monkeypatch):
     make_app()
     warnings = []
     monkeypatch.setattr(
-        QMessageBox, "warning", lambda _parent, _title, message: warnings.append(message)
+        QMessageBox,
+        "warning",
+        lambda _parent, _title, message: warnings.append(message),
     )
 
     class PagedAgent:

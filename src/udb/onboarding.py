@@ -15,6 +15,7 @@ TUNNELS_URL = "https://platform.openai.com/settings/organization/tunnels"
 KEYS_URL = "https://platform.openai.com/settings/organization/api-keys"
 CHATGPT_URL = "https://chatgpt.com/plugins"
 
+
 def paired_cloud(home):
     """Return validated public pairing metadata, without reading device secrets.
 
@@ -27,7 +28,6 @@ def paired_cloud(home):
 
     relay, device_id, _token_path = load_pairing(home)
     return relay, device_id
-
 
 
 def _console_stream(stream):
@@ -168,7 +168,9 @@ def run(settings, *, edit=False, local=False):
         relay, device_id = pairing
         print("Cloudflare MCP is already paired with this Windows profile.")
         print("Relay: " + relay + " | Device suffix: " + device_id[-8:])
-        print("Open UDB Manager and choose 'Bật Cloud Agent', or run 'udb cloud-agent'.")
+        print(
+            "Open UDB Manager and choose 'Bật Cloud Agent', or run 'udb cloud-agent'."
+        )
         print("Then reconnect the exact MCP URL in " + CHATGPT_URL)
         print("This setup check does not start Cloud Agent or change any grant/key.")
         return 0

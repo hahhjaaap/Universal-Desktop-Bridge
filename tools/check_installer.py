@@ -162,7 +162,7 @@ def main():
                 command = (
                     "$s=(New-Object -ComObject WScript.Shell).CreateShortcut("
                     + json.dumps(str(link))
-                    + "); [Console]::WriteLine($s.TargetPath)"
+                    + "); [Console]::WriteLine($s.TargetPath); [Console]::WriteLine($s.Arguments)"
                 )
                 result = subprocess.run(
                     [
@@ -178,9 +178,14 @@ def main():
                     timeout=30,
                     check=True,
                 )
-                return result.stdout.strip()
+                return tuple(result.stdout.strip().splitlines())
 
-            assert shortcut_target().lower() == str(exe).lower()
+            def assert_shortcut_uses_managed_launcher():
+                target, arguments = shortcut_target()
+                assert target.lower() == str(install / "bin/udb.cmd").lower()
+                assert arguments == "gui"
+
+            assert_shortcut_uses_managed_launcher()
             assert sentinel.read_text() == "existing owner data"
             assert not (home / "state/computer-access.dpapi").exists()
             assert not (home / "state/connection.json").exists()
@@ -284,7 +289,7 @@ def main():
             run_install()
             second = json.loads(record_path.read_text(encoding="utf-8"))
             assert second["exe"] != first["exe"] and second["previous"] == first
-            assert shortcut_target().lower() == str(second["exe"]).lower()
+            assert_shortcut_uses_managed_launcher()
             switched = app("status", "--json", image=second["exe"])
             assert (
                 switched["manager_running"] and switched["connection_mode"] == "offline"
@@ -297,7 +302,7 @@ def main():
             assert rollback["home_preserved"]
             restored = json.loads(record_path.read_text(encoding="utf-8"))
             assert restored["exe"] == first["exe"]
-            assert shortcut_target().lower() == str(first["exe"]).lower()
+            assert_shortcut_uses_managed_launcher()
             assert app("status", "--json")["manager_running"]
             assert preference.read_bytes() == before_mode
 

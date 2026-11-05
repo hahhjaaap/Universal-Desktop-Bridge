@@ -504,6 +504,66 @@ def test_copy_safe_diagnostics_command_and_keyboard_shortcuts(manager):
     assert window.job_search.accessibleName() == "Tìm công việc theo thông tin"
 
 
+def test_paired_cloud_ui_copies_cloud_readiness_probe(tmp_path, manager, monkeypatch):
+    """Paired UDB should not offer the plain doctor command without --cloud."""
+    import json
+
+    from PySide6.QtWidgets import QApplication
+
+    from udb.manager import MainWindow, make_app
+    from udb.manager_widgets import MotionButton
+
+    app = make_app()
+    (tmp_path / "cloud-pairing.json").write_text(
+        json.dumps(
+            {
+                "relay": "https://example.workers.dev",
+                "device_id": "a" * 32,
+            }
+        ),
+        encoding="utf-8",
+    )
+    # Reuse the isolated GUI backend/status mocks from the existing fixture.
+    controller = DesktopController(tmp_path, monitor=False)
+    window = MainWindow(tmp_path, controller)
+    window.timer.stop()
+    try:
+        assert window.cloud_preferred is True
+        window.navigate(4)
+        buttons = window.stack.currentWidget().findChildren(MotionButton)
+        button = next(
+            widget
+            for widget in buttons
+            if widget.accessibleName() == "Sao chép lệnh udb doctor --cloud --json"
+        )
+        button.click()
+        assert QApplication.clipboard().text() == "udb doctor --cloud --json"
+
+        monkeypatch.setattr(
+            "udb.cloud_preflight.paired_report",
+            lambda home: {
+                "result": "failed",
+                "reason": "oauth_challenge_missing_or_wrong_status",
+            },
+        )
+        monkeypatch.setattr(window, "run_background", lambda fn, done: done(fn()))
+        window.cloud_probe_button.click()
+        assert "Managed OAuth" in window.cloud_probe_status.text()
+        assert "chưa sẵn sàng" in window.cloud_probe_status.text()
+
+        monkeypatch.setattr(
+            "udb.cloud_preflight.paired_report",
+            lambda home: {"result": "passed_public_preflight"},
+        )
+        window.cloud_probe_button.click()
+        assert "công khai: đạt" in window.cloud_probe_status.text()
+        assert "ChatGPT" in window.cloud_probe_status.text()
+        assert not (tmp_path / "cloud-device-token").exists()
+    finally:
+        window.close()
+        app.processEvents()
+
+
 def test_activity_timeline_uses_only_presented_metadata(manager, monkeypatch):
     window, _ = manager
     events = [

@@ -197,9 +197,7 @@ def check(
             # A path-scoped challenge must identify *this* device's MCP resource.
             # Never accept a different device or a broad origin as proof that
             # a device-specific Access policy was applied at the edge.
-            scoped_metadata = parsed.path.endswith(
-                "/v1/devices/" + device_id + "/mcp"
-            )
+            scoped_metadata = parsed.path.endswith("/v1/devices/" + device_id + "/mcp")
             valid_resource = (
                 resource_id == resource
                 if scoped_metadata

@@ -96,6 +96,30 @@ On Windows: `udb status --json`, `udb doctor --json`, and confirm the local clou
 agent has connected. Local tunnel readiness and the separate Cloudflare device
 connection are different observations.
 
+For an already-paired standalone build, run this on the original Windows machine:
+
+```sh
+udb doctor --cloud --json
+```
+
+It reads the existing `cloud-pairing.json` to select the public relay/device, so
+there is no need to remember or paste the MCP URL. It does not read device tokens,
+change configuration/grants, connect a device, or retry failed requests. The normal
+`udb doctor --json` stays network-free. Public requests have an 8-second timeout
+per request (up to three requests); redirects are refused. This diagnostic does
+not need the local agent to be running. The overall doctor exit status can still
+be 2 when the manager or other local checks are unhealthy; inspect the separate
+`cloud_preflight` result.
+
+The default checks Cloudflare Access Managed OAuth. For a deployment deliberately
+configured with external JWT authentication, use
+`udb doctor --cloud --cloud-auth-mode jwt --json`.
+`passed_public_preflight` proves only public routing, advertised read capability,
+and unauthenticated OAuth denial. `windows_device`, `chatgpt_oauth` and
+`authenticated_project_read` stay `not_tested`; complete the staging fixture and
+ChatGPT acceptance steps below before declaring the connection usable. Diagnostic
+output omits the relay, device ID and raw upstream errors.
+
 From a source checkout, using the real non-secret relay origin/device ID:
 
 ```sh

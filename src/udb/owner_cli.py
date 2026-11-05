@@ -51,6 +51,17 @@ def parse_args(argv=None):
     parser.add_argument(
         "--offline", action="store_true", help="Start local agent without a tunnel"
     )
+    parser.add_argument(
+        "--cloud",
+        action="store_true",
+        help="Doctor only: check public Cloudflare endpoints using existing pairing (no credentials)",
+    )
+    parser.add_argument(
+        "--cloud-auth-mode",
+        choices=("cloudflare-access", "jwt"),
+        default=None,
+        help="Doctor --cloud only: identity layer (default: cloudflare-access)",
+    )
     parser.add_argument("--version", action="version", version=VERSION)
     return parser.parse_args(argv)
 

@@ -302,11 +302,37 @@ def remote_session_action(report: dict, *, offline: bool) -> str:
     )
 
 
-def doctor(home: Path, report: dict) -> list[dict]:
+def doctor(
+    home: Path, report: dict, *, cloud=False, cloud_auth_mode="cloudflare-access"
+) -> list[dict]:
     from .config import effective
     from .onboarding import paired_cloud, saved_mode
 
     checks = []
+    if cloud:
+        from .cloud_preflight import paired_report
+
+        public = paired_report(home, auth_mode=cloud_auth_mode)
+        report["cloud_preflight"] = public
+        passed = public["result"] == "passed_public_preflight"
+        checks.append(
+            dict(
+                check="cloud_public_preflight",
+                ok=passed,
+                action="Public health, project-read capability and unauthenticated OAuth denial passed."
+                if passed
+                else "Public preflight failed ("
+                + public["reason"]
+                + "). Inspect local pairing and the deployed OAuth configuration.",
+            )
+        )
+        checks.append(
+            dict(
+                check="cloud_authenticated_read",
+                ok=None,
+                action="Not tested. In ChatGPT verify bridge_status and a granted staging fixture read; keep credentials out of chat.",
+            )
+        )
     settings = effective(home)
     pair_path = home / "cloud-pairing.json"
     has_pairing = pair_path.exists() or pair_path.is_symlink()
@@ -688,6 +714,10 @@ def main(argv=None):
             raise CommandError("--detach/--follow apply only to start.")
         if args.follow and args.as_json:
             raise CommandError("--follow cannot be combined with --json.")
+        if args.cloud and args.action != "doctor":
+            raise CommandError("--cloud applies only to doctor.")
+        if args.cloud_auth_mode and (not args.cloud or args.action != "doctor"):
+            raise CommandError("--cloud-auth-mode requires doctor --cloud.")
         exe = executable(home)
         if args.offline and args.action != "start":
             raise CommandError("--offline applies only to start.")
@@ -731,7 +761,12 @@ def main(argv=None):
         else:
             report = inspect(home, exe)
         if args.action == "doctor":
-            report["checks"] = doctor(home, report)
+            report["checks"] = doctor(
+                home,
+                report,
+                cloud=args.cloud,
+                cloud_auth_mode=args.cloud_auth_mode or "cloudflare-access",
+            )
         render_report(report, as_json=args.as_json)
         healthy = report_healthy(args.action, report)
         if (

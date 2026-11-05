@@ -154,6 +154,15 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
             command.add_argument(
                 "--access", choices=("computer",), default=argparse.SUPPRESS
             )
+        if name == "doctor":
+            command.add_argument(
+                "--cloud",
+                action="store_true",
+                help="Check public Cloudflare endpoints using existing pairing (no credentials)",
+            )
+            command.add_argument(
+                "--cloud-auth-mode", choices=("cloudflare-access", "jwt")
+            )
         if name == "start":
             view = command.add_mutually_exclusive_group()
             view.add_argument(
@@ -563,6 +572,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             legacy_args.extend(["--access", args.access])
         if args.offline:
             legacy_args.append("--offline")
+        if getattr(args, "cloud", False):
+            legacy_args.append("--cloud")
+        if getattr(args, "cloud_auth_mode", None):
+            legacy_args.extend(["--cloud-auth-mode", args.cloud_auth_mode])
 
         with _settings_scope(settings):
             return owner_command.main(legacy_args)

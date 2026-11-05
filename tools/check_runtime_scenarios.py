@@ -13,7 +13,33 @@ from pathlib import Path
 
 from udb.core import Agent
 from udb.host_client import command as host_command
+from udb.host_client import status as host_status
 from udb.launcher import child_environment, worker_command
+
+
+def _wait_for_fixture_host(agent, process, session_id, *, timeout=12):
+    """Wait for the *read-only* host heartbeat after QA browser publication.
+
+    fixture-ready.json confirms CDP setup, not necessarily that the monitor's
+    status heartbeat has become visible. Do not retry any browser mutation:
+    only poll the host status for this disposable session.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError("Disposable browser worker exited before host readiness")
+        state = host_status(agent)
+        if (
+            state.get("worker_ready") is True
+            and state.get("enabled") is True
+            and any(
+                row.get("session_id") == session_id and row.get("kind") == "browser"
+                for row in state.get("sessions", [])
+            )
+        ):
+            return
+        time.sleep(0.1)
+    raise RuntimeError("Disposable browser worker heartbeat did not become ready")
 
 
 def browser_fixture():
@@ -45,6 +71,7 @@ def browser_fixture():
                 issued = json.loads(ready.read_text())
                 agent = Agent(home)
                 args = dict(session_id=issued["session_id"], tab_id=issued["tab_id"])
+                _wait_for_fixture_host(agent, process, args["session_id"])
                 row = host_command(agent, "browser", action="read", **args)
                 assert row["title"] == "UDB owned fixture"
                 value = "UDB Unicode kiểm thử"

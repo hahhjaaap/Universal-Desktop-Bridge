@@ -17,12 +17,30 @@ from .cloud_agent import CLOUD_USER_AGENT, device_url
 
 _FIXES = {
     "pairing_missing": ("pairing", "Pair the device from the local UDB Manager."),
-    "pairing_invalid": ("pairing", "Verify the local device pairing before reconnecting."),
-    "project_read_not_advertised": ("worker", "Deploy a project-read-capable Worker to staging."),
-    "Access-aware Worker code has not been deployed": ("worker", "Check the deployed Worker build for Access support."),
-    "oauth_challenge_missing_or_wrong_status": ("access", "Check Cloudflare Access on the exact device MCP path and enable Managed OAuth; leave the WebSocket path unprotected."),
-    "preflight_failed": ("network", "Check the public Worker health and network connection."),
-    "passed_public_preflight": ("live_check", "Public checks passed only. Verify owner login and a permitted fixture read in ChatGPT."),
+    "pairing_invalid": (
+        "pairing",
+        "Verify the local device pairing before reconnecting.",
+    ),
+    "project_read_not_advertised": (
+        "worker",
+        "Deploy a project-read-capable Worker to staging.",
+    ),
+    "Access-aware Worker code has not been deployed": (
+        "worker",
+        "Check the deployed Worker build for Access support.",
+    ),
+    "oauth_challenge_missing_or_wrong_status": (
+        "access",
+        "Check Cloudflare Access on the exact device MCP path and enable Managed OAuth; leave the WebSocket path unprotected.",
+    ),
+    "preflight_failed": (
+        "network",
+        "Check the public Worker health and network connection.",
+    ),
+    "passed_public_preflight": (
+        "live_check",
+        "Public checks passed only. Verify owner login and a permitted fixture read in ChatGPT.",
+    ),
 }
 
 
@@ -206,7 +224,9 @@ def paired_report(home, *, auth_mode="cloudflare-access", opener=None) -> dict:
         reason = failure_reason(exc)
         return {**report, "reason": reason, **recovery(reason)}
     return {
-        **report, **result, "result": "passed_public_preflight",
+        **report,
+        **result,
+        "result": "passed_public_preflight",
         **recovery("passed_public_preflight"),
     }
 

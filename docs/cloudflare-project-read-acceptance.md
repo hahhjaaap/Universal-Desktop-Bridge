@@ -24,6 +24,9 @@ After reconnect a fresh local proxy initializes and sends the initialized
 notification before forwarding a resumed call, with one shared deadline. It never
 replays that call. `initialize` reports the actual negotiated device protocol.
 
+The dedicated staging Worker configuration and owner-controlled deployment
+steps are documented in [the staging deployment guide](cloudflare-staging-deployment.md).
+
 ## Automated staging-only preflight (manual)
 
 The workflow [Cloudflare staging read-only preflight](../.github/workflows/cloudflare-staging-read-preflight.yml)
@@ -172,7 +175,11 @@ and per-subject grants before attempting reconnects. The Worker does not
 automatically update the plugin's registered tool catalog.
 
 
-For a deterministic, disposable local project and expected SHA-256/denial cases,\nsee [the offline staging fixture guide](staging-fixture.md). Creating the fixture\nalone does not establish authenticated Cloudflare/ChatGPT access.\n\n## Authenticated acceptance in ChatGPT
+For a deterministic, disposable local project and expected SHA-256/denial cases,
+see [the offline staging fixture guide](staging-fixture.md). Creating the fixture
+alone does not establish authenticated Cloudflare/ChatGPT access.
+
+## Authenticated acceptance in ChatGPT
 
 1. Refresh/reconnect the exact device MCP connection and complete the owner OAuth
    login/consent. A fixed plugin tool allowlist also needs an owner-managed catalog

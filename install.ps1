@@ -136,7 +136,7 @@ function Set-ActiveRelease($Record,$Old) {
         throw 'Activation failed; previous installation retained. Run udb doctor.'
     }
 }
-function Register-UdbStartMenu([string]$Image,[string]$DataDirectory) {
+function Register-UdbStartMenu([string]$Image) {
     # Per-user application search shortcut; no elevation, startup task or grant.
     # Never overwrite a link that was not originally created by UDB.
     if (!$env:APPDATA) { throw 'APPDATA is not configured.' }
@@ -148,14 +148,18 @@ function Register-UdbStartMenu([string]$Image,[string]$DataDirectory) {
     if ((Test-Path -LiteralPath $link) -and $shortcut.Description -ne 'UDB-managed Start Menu shortcut') {
         throw 'Existing shortcut belongs to another application; preserved.'
     }
-    $shortcut.TargetPath = (Assert-LocalPath $Image)
-    $shortcut.Arguments = '--home "' + $DataDirectory + '" gui'
-    $shortcut.WorkingDirectory = [IO.Path]::GetDirectoryName($Image)
+    # Resolve the active executable through install.json on every click.
+    # A fixed release image path becomes stale after an update/rollback.
+    $launcher = Assert-LocalPath (Join-Path $InstallRoot 'bin\udb.cmd')
+    if (!(Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'Managed UDB command launcher missing.' }
+    $shortcut.TargetPath = $launcher
+    $shortcut.Arguments = 'gui'
+    $shortcut.WorkingDirectory = [IO.Path]::GetDirectoryName($launcher)
     $shortcut.IconLocation = $Image + ',0'
     $shortcut.Description = 'UDB-managed Start Menu shortcut'
     $shortcut.Save()
     $verified = $shell.CreateShortcut($link)
-    if ($verified.TargetPath -ine $Image -or $verified.Description -ne 'UDB-managed Start Menu shortcut') {
+    if ($verified.TargetPath -ine $launcher -or $verified.Arguments -ne 'gui' -or $verified.Description -ne 'UDB-managed Start Menu shortcut') {
         throw 'Start Menu shortcut verification failed.'
     }
 }
@@ -201,7 +205,7 @@ try {
         $record = @{product='UniversalDesktopBridge';schema=1;version=$target.version;exe=$target.exe;home=$target.home;archive_sha256=$target.archive_sha256;previous=@{product=$previous.product;schema=$previous.schema;version=$previous.version;exe=$previous.exe;home=$previous.home;archive_sha256=$previous.archive_sha256}}
         Set-ActiveRelease $record $previous
         if (!$NoStartMenu) {
-            try { Register-UdbStartMenu $record.exe $DataHome }
+            try { Register-UdbStartMenu $record.exe }
             catch { Write-Warning ('Start Menu shortcut unavailable: ' + $_.Exception.Message) }
         }
         Write-Host ('UDB rolled back to ' + $target.version + '. Settings preserved.')
@@ -323,7 +327,7 @@ try {
     }
     Set-ActiveRelease $record $previous
     if (!$NoStartMenu) {
-        try { Register-UdbStartMenu $record.exe $DataHome }
+        try { Register-UdbStartMenu $record.exe }
         catch { Write-Warning ('Start Menu shortcut unavailable: ' + $_.Exception.Message) }
     }
     if (!$NoPath) {

@@ -56,14 +56,19 @@ def test_fixture_deterministic_across_two_roots(tmp_path):
 
 def test_cli_reports_only_sanitized_hashes(tmp_path, monkeypatch, capsys):
     root = tmp_path / "private-owner-location"
-    monkeypatch.setattr(sys, "argv", ["prepare_staging_fixture.py", "--root", str(root)])
+    monkeypatch.setattr(
+        sys, "argv", ["prepare_staging_fixture.py", "--root", str(root)]
+    )
     assert fixture.main() == 0
     output = capsys.readouterr().out
     reported = json.loads(output)
     assert reported["result"] == "created"
-    assert reported["expected_reads"] == json.loads(
-        (root / "manifest.json").read_text(encoding="utf-8")
-    )["expected_reads"]
+    assert (
+        reported["expected_reads"]
+        == json.loads((root / "manifest.json").read_text(encoding="utf-8"))[
+            "expected_reads"
+        ]
+    )
     assert str(root) not in output
     assert "not-a-credential" not in output
     assert fixture.main() == 1

@@ -748,6 +748,19 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             True,
         )
         cloud_layout.addWidget(self.cloud_session_status)
+        self.cloud_probe_button = MotionButton("Kiểm tra kết nối Cloudflare", "activity")
+        self.cloud_probe_button.setAccessibleName("Kiểm tra Cloudflare công khai")
+        self.cloud_probe_button.setToolTip(
+            "Chỉ kiểm tra Worker/Access công khai; không đọc token hoặc mở Cloud Agent."
+        )
+        self.cloud_probe_button.setEnabled(self.cloud_preferred)
+        self.cloud_probe_button.clicked.connect(self.check_cloud_setup)
+        cloud_layout.addWidget(self.cloud_probe_button)
+        self.cloud_probe_status = label(
+            "Chưa kiểm tra OAuth công khai. Kết nối ChatGPT vẫn chưa xác minh.",
+            "Muted", True,
+        )
+        cloud_layout.addWidget(self.cloud_probe_status)
         lay.addWidget(cloud_panel)
         local = panel()
         ll = QVBoxLayout(local)
@@ -1072,6 +1085,30 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         if answer != QMessageBox.StandardButton.Yes:
             return
         self.run_background(self.controller.start_cloud)
+
+    def check_cloud_setup(self):
+        """Owner-triggered public-only network probe; never touch device keys."""
+        if self.busy or not self.cloud_preferred:
+            return
+        from .cloud_preflight import paired_report, recovery
+
+        self.cloud_probe_status.setText("Đang kiểm tra Cloudflare công khai…")
+
+        def show(result):
+            if not isinstance(result, dict):
+                self.cloud_probe_status.setText("Không thể kiểm tra Cloudflare.")
+                return
+            passed = result.get("result") == "passed_public_preflight"
+            reason = "passed_public_preflight" if passed else result.get("reason", "")
+            next_step = recovery(reason)["next_action"]
+            self.cloud_probe_status.setText(
+                ("HTTP/OAuth công khai: đạt. " if passed else "Cloudflare chưa sẵn sàng. ")
+                + next_step
+            )
+
+        self.run_background(
+            lambda: paired_report(Path(self.agent.home)), done=show
+        )
 
     def cloud_pair(self):
         if self.busy:

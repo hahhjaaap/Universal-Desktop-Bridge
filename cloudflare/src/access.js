@@ -140,5 +140,9 @@ export async function authorizeAccess(access, env, deviceId, request = null,
   // Owner tools never replace the independently granted read identity.
   if (readTools.length === 0) throw new AuthError();
   const ownerTools = ownerToolGrant(env, deviceId, subject);
-  return { subject, allowTools: [...readTools, ...ownerTools], ownerTools };
+  // Preserve the legacy read-only authorization response exactly when the
+  // opt-in profile is absent; existing Access integrations remain unchanged.
+  return ownerTools.length
+    ? { subject, allowTools: [...readTools, ...ownerTools], ownerTools }
+    : { subject, allowTools: readTools };
 }

@@ -695,9 +695,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         )
         doctor = MotionButton("Sao chép lệnh kiểm tra", "file")
         doctor.setAccessibleName("Sao chép lệnh " + doctor_command)
-        doctor.clicked.connect(
-            lambda: QApplication.clipboard().setText(doctor_command)
-        )
+        doctor.clicked.connect(lambda: QApplication.clipboard().setText(doctor_command))
         cl.addLayout(row(doctor, None))
         self.detail_status = label("", "Muted", True)
         cl.addWidget(self.detail_status)
@@ -748,7 +746,9 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             True,
         )
         cloud_layout.addWidget(self.cloud_session_status)
-        self.cloud_probe_button = MotionButton("Kiểm tra kết nối Cloudflare", "activity")
+        self.cloud_probe_button = MotionButton(
+            "Kiểm tra kết nối Cloudflare", "activity"
+        )
         self.cloud_probe_button.setAccessibleName("Kiểm tra Cloudflare công khai")
         self.cloud_probe_button.setToolTip(
             "Chỉ kiểm tra Worker/Access công khai; không đọc token hoặc mở Cloud Agent."
@@ -758,7 +758,8 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         cloud_layout.addWidget(self.cloud_probe_button)
         self.cloud_probe_status = label(
             "Chưa kiểm tra OAuth công khai. Kết nối ChatGPT vẫn chưa xác minh.",
-            "Muted", True,
+            "Muted",
+            True,
         )
         cloud_layout.addWidget(self.cloud_probe_status)
         lay.addWidget(cloud_panel)
@@ -1102,13 +1103,15 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             reason = "passed_public_preflight" if passed else result.get("reason", "")
             next_step = recovery(reason)["next_action"]
             self.cloud_probe_status.setText(
-                ("HTTP/OAuth công khai: đạt. " if passed else "Cloudflare chưa sẵn sàng. ")
+                (
+                    "HTTP/OAuth công khai: đạt. "
+                    if passed
+                    else "Cloudflare chưa sẵn sàng. "
+                )
                 + next_step
             )
 
-        self.run_background(
-            lambda: paired_report(Path(self.agent.home)), done=show
-        )
+        self.run_background(lambda: paired_report(Path(self.agent.home)), done=show)
 
     def cloud_pair(self):
         if self.busy:

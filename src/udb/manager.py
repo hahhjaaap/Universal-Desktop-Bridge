@@ -690,10 +690,13 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
                 True,
             )
         )
+        doctor_command = (
+            "udb doctor --cloud --json" if self.cloud_preferred else "udb doctor --json"
+        )
         doctor = MotionButton("Sao chép lệnh kiểm tra", "file")
-        doctor.setAccessibleName("Sao chép lệnh udb doctor --json")
+        doctor.setAccessibleName("Sao chép lệnh " + doctor_command)
         doctor.clicked.connect(
-            lambda: QApplication.clipboard().setText("udb doctor --json")
+            lambda: QApplication.clipboard().setText(doctor_command)
         )
         cl.addLayout(row(doctor, None))
         self.detail_status = label("", "Muted", True)

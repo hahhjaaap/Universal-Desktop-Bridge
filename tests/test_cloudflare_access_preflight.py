@@ -32,8 +32,12 @@ class Response(io.BytesIO):
 
 class Opener:
     def __init__(
-        self, *, worker_capable=True, edge="managed",
-        metadata_valid=True, scoped_resource=None
+        self,
+        *,
+        worker_capable=True,
+        edge="managed",
+        metadata_valid=True,
+        scoped_resource=None,
     ):
         self.urls = []
         self.worker_capable = worker_capable
@@ -57,8 +61,11 @@ class Opener:
             value = {
                 "protected": self.metadata_valid,
                 "resource": (
-                    self.scoped_resource if self.scoped_resource is not None
-                    else RESOURCE if scoped else ORIGIN
+                    self.scoped_resource
+                    if self.scoped_resource is not None
+                    else RESOURCE
+                    if scoped
+                    else ORIGIN
                 ),
                 "team_domain": "owner-check.cloudflareaccess.com",
                 "authorization_servers": ["https://owner-check.cloudflareaccess.com"],
@@ -68,24 +75,28 @@ class Opener:
             challenges = {
                 "managed": GENERIC_META,
                 "managed-scoped": SCOPED_META,
-                "wrong-device": (
-                    GENERIC_META + "v1/devices/" + "b" * 32 + "/mcp"
-                ),
+                "wrong-device": (GENERIC_META + "v1/devices/" + "b" * 32 + "/mcp"),
                 "query": SCOPED_META + "?redirect=https://example.invalid",
                 "external": "https://evil.example/metadata",
                 "jwt": (
-                    ORIGIN + "/.well-known/oauth-protected-resource/v1/devices/"
-                    + DEVICE + "/mcp"
+                    ORIGIN
+                    + "/.well-known/oauth-protected-resource/v1/devices/"
+                    + DEVICE
+                    + "/mcp"
                 ),
             }
             metadata = challenges.get(self.edge)
             headers = (
                 {"WWW-Authenticate": 'Bearer resource_metadata="' + metadata + '"'}
-                if metadata else {}
+                if metadata
+                else {}
             )
             raise HTTPError(
-                request.full_url, 401 if metadata else 403,
-                "unauthorized", headers, None,
+                request.full_url,
+                401 if metadata else 403,
+                "unauthorized",
+                headers,
+                None,
             )
         raise AssertionError("Unexpected probe URL")
 
@@ -100,9 +111,7 @@ def test_access_preflight_accepts_only_its_own_edge_metadata(edge):
     assert report["windows_device"] == "not_tested"
     assert report["chatgpt_oauth"] == "not_tested"
     assert len(opener.urls) == 3
-    assert opener.urls[-1] == (
-        GENERIC_META if edge == "managed" else SCOPED_META
-    )
+    assert opener.urls[-1] == (GENERIC_META if edge == "managed" else SCOPED_META)
 
 
 @pytest.mark.parametrize("edge", ["jwt", "denied"])

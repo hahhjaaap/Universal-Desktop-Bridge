@@ -10,9 +10,7 @@ from tools import check_staging_worker_config as staging
 
 
 def test_repo_staging_config_is_isolated_and_offline():
-    result = staging.check_config(
-        staging.DEFAULT_STAGING, staging.DEFAULT_PRODUCTION
-    )
+    result = staging.check_config(staging.DEFAULT_STAGING, staging.DEFAULT_PRODUCTION)
     assert result["worker"] != "udb-private-relay"
     assert result["deployed"] is False
     assert result["oauth_verified"] is False

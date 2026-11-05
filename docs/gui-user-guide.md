@@ -143,8 +143,18 @@ remote WebSocket/OAuth session. The ChatGPT step stays **Chưa xác minh**
 until tested from the actual conversation. Unreadable local status must not
 retain a stale positive state. The guide does not store a password, test a remote endpoint,
 start a browser, approve an operation or grant computer permissions.
-The existing **Sao chép lệnh kiểm tra** control only copies the local
-diagnostics command.
+The **Sao chép lệnh kiểm tra** control copies `udb doctor --cloud --json`
+for Cloudflare-paired profiles, or `udb doctor --json` for local/Tunnel
+profiles. This fixes the case where a Cloudflare owner ran a local-only check
+and mistakenly assumed OAuth had been tested.
+
+A separate **Kiểm tra kết nối Cloudflare** button appears for paired devices.
+When explicitly clicked, it performs public, unauthenticated Worker/Access
+checks in the background and displays a fixed next action for missing pairing,
+an old Worker or an invalid Managed OAuth challenge. The button never reads
+device credentials, starts a Cloud Agent, changes owner grants, or logs into
+ChatGPT. Even when it reports **public checks passed**, the ChatGPT step
+remains unverified until a permitted read-only MCP call succeeds.
 
 ## Overview: three separate connection checks
 
@@ -158,9 +168,10 @@ The top of **Dự án** displays three compact indicators:
 
 On a failed local status refresh, the corresponding Agent/transport indicator
 must not retain a stale verified-ready state.
-Status is read-only; this feature sends no remote probe, stores no credential
-and grants no access. To verify end-to-end ChatGPT connectivity, run an actual
-**read-only** UDB tool in ChatGPT.
+Automatic status refresh is local-only and grants no access. Only the
+owner-clicked Cloudflare check performs a public, credential-free network
+probe. To verify end-to-end ChatGPT connectivity, run an actual **read-only**
+UDB tool in ChatGPT.
 
 
 

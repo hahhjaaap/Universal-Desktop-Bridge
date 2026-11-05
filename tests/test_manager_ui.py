@@ -504,6 +504,44 @@ def test_copy_safe_diagnostics_command_and_keyboard_shortcuts(manager):
     assert window.job_search.accessibleName() == "Tìm công việc theo thông tin"
 
 
+def test_paired_cloud_ui_copies_cloud_readiness_probe(tmp_path, manager, monkeypatch):
+    """Paired UDB should not offer the plain doctor command without --cloud."""
+    import json
+
+    from PySide6.QtWidgets import QApplication
+
+    from udb.manager import MainWindow, make_app
+    from udb.manager_widgets import MotionButton
+
+    app = make_app()
+    (tmp_path / "cloud-pairing.json").write_text(
+        json.dumps({
+            "relay": "https://example.workers.dev",
+            "device_id": "a" * 32,
+        }),
+        encoding="utf-8",
+    )
+    # Reuse the isolated GUI backend/status mocks from the existing fixture.
+    controller = DesktopController(tmp_path, monitor=False)
+    window = MainWindow(tmp_path, controller)
+    window.timer.stop()
+    try:
+        assert window.cloud_preferred is True
+        window.navigate(4)
+        buttons = window.stack.currentWidget().findChildren(MotionButton)
+        button = next(
+            widget for widget in buttons
+            if widget.accessibleName()
+            == "Sao chép lệnh udb doctor --cloud --json"
+        )
+        button.click()
+        assert QApplication.clipboard().text() == "udb doctor --cloud --json"
+        assert not (tmp_path / "cloud-device-token").exists()
+    finally:
+        window.close()
+        app.processEvents()
+
+
 def test_activity_timeline_uses_only_presented_metadata(manager, monkeypatch):
     window, _ = manager
     events = [

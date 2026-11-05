@@ -536,6 +536,26 @@ def test_paired_cloud_ui_copies_cloud_readiness_probe(tmp_path, manager, monkeyp
         )
         button.click()
         assert QApplication.clipboard().text() == "udb doctor --cloud --json"
+
+        monkeypatch.setattr(
+            "udb.cloud_preflight.paired_report",
+            lambda home: {
+                "result": "failed",
+                "reason": "oauth_challenge_missing_or_wrong_status",
+            },
+        )
+        monkeypatch.setattr(window, "run_background", lambda fn, done: done(fn()))
+        window.cloud_probe_button.click()
+        assert "Managed OAuth" in window.cloud_probe_status.text()
+        assert "chưa sẵn sàng" in window.cloud_probe_status.text()
+
+        monkeypatch.setattr(
+            "udb.cloud_preflight.paired_report",
+            lambda home: {"result": "passed_public_preflight"},
+        )
+        window.cloud_probe_button.click()
+        assert "công khai: đạt" in window.cloud_probe_status.text()
+        assert "ChatGPT" in window.cloud_probe_status.text()
         assert not (tmp_path / "cloud-device-token").exists()
     finally:
         window.close()

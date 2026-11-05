@@ -1,0 +1,75 @@
+name: Cloudflare staging read-only preflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-staging-preflight
+  cancel-in-progress: false
+
+jobs:
+  verify-staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: udb-staging
+    env:
+      UDB_STAGING_RELAY: ${{ vars.UDB_STAGING_RELAY }}
+      UDB_STAGING_DEVICE_ID: ${{ vars.UDB_STAGING_DEVICE_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate isolated staging configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$UDB_STAGING_RELAY" ] || [ -z "$UDB_STAGING_DEVICE_ID" ]; then
+            echo "::error::Configure both UDB_STAGING_RELAY and UDB_STAGING_DEVICE_ID in the udb-staging environment."
+            exit 1
+          fi
+          # Use an explicit staging Worker. Do not probe the personal production
+          # Worker or any other account merely because its URL is reachable.
+          python - <<'PY'
+          import os
+          from urllib.parse import urlsplit
+
+          relay = os.environ["UDB_STAGING_RELAY"]
+          device = os.environ["UDB_STAGING_DEVICE_ID"]
+          parsed = urlsplit(relay)
+          if (
+              parsed.scheme != "https"
+              or not parsed.hostname
+              or not parsed.hostname.endswith(".workers.dev")
+              or "staging" not in parsed.hostname.split(".")[0]
+              or parsed.path not in ("", "/")
+              or parsed.query
+              or parsed.fragment
+              or parsed.username
+              or parsed.password
+              or len(device) != 32
+              or any(c not in "0123456789abcdef" for c in device)
+          ):
+              raise SystemExit("Staging origin/device configuration rejected")
+          print("Staging configuration shape accepted (values not logged)")
+          PY
+      - name: Install audited source requirements
+        run: python -m pip install -e .
+      - name: Check deployed project-read capability and unauthenticated denial
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/check_cloudflare_deployment.py \
+            --relay "$UDB_STAGING_RELAY" \
+            --device-id "$UDB_STAGING_DEVICE_ID" \
+            --auth-mode cloudflare-access \
+            --require-project-read
+      - name: State acceptance boundary
+        if: always()
+        run: |
+          echo "This workflow checks staging metadata and unauthenticated denial only."
+          echo "It cannot verify owner OAuth consent, device grants or Windows file access."
+          echo "Complete docs/cloudflare-project-read-acceptance.md with human-reviewed fixture tests."

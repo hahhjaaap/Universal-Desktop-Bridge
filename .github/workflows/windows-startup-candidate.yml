@@ -1,0 +1,54 @@
+name: Windows startup layout acceptance
+on:
+  pull_request:
+    paths:
+      - 'src/udb/build.py'
+      - 'src/udb/build_identity.py'
+      - 'src/udb/cli.py'
+      - 'tools/udb.spec'
+      - 'tools/benchmark_startup.py'
+      - 'tools/check_frozen.py'
+      - 'tools/check_installer.py'
+      - 'tests/test_build_layout.py'
+      - '.github/workflows/windows-startup-candidate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: startup-layout-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  compare-and-accept:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install ".[office,dev,freeze]"
+      - run: python tools/fetch_build_assets.py
+      - name: Build current and candidate layouts from the same checkout
+        run: |
+          udb build --exe --layout onefile --output dist/startup-onefile
+          if ($LASTEXITCODE -ne 0) { throw 'Baseline build failed.' }
+          udb build --exe --layout onedir --output dist/startup-onedir
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate build failed.' }
+      - name: Measure fresh-process CLI and actual MCP startup
+        run: python tools/benchmark_startup.py --onefile dist/startup-onefile/udb.exe --onedir dist/startup-onedir/udb.exe --samples 5 --output reports/startup-layout.json
+      - name: Accept a copied candidate without repository or external Python
+        run: python tools/check_frozen.py dist/startup-onedir/udb.exe --layout onedir --expected-revision ${{ github.sha }}
+      - name: Verify onefile to onedir update and rollback with preserved owner data
+        run: |
+          $baseline = (Get-ChildItem dist/startup-onefile/udb-*-windows-standalone.zip | Select-Object -First 1).FullName
+          $candidate = (Get-ChildItem dist/startup-onedir/udb-*-windows-standalone.zip | Select-Object -First 1).FullName
+          python tools/check_installer.py install.ps1 $baseline --upgrade-archive $candidate --report reports/startup-installer.json
+          if ($LASTEXITCODE -ne 0) { throw 'Cross-layout installer acceptance failed.' }
+      - name: Preserve benchmark evidence
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-startup-layout-evidence
+          path: reports/startup-*.json
+          retention-days: 7

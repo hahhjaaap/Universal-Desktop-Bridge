@@ -34,6 +34,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
     parser.add_argument("--expected-revision")
+    parser.add_argument("--layout", choices=("onefile", "onedir"), default="onefile")
     args = parser.parse_args()
     source_executable = args.executable.resolve()
     env = {
@@ -70,7 +71,18 @@ def main():
         portable.mkdir()
         executable = portable / source_executable.name
         shutil.copyfile(source_executable, executable)
-        assert list(portable.iterdir()) == [executable]
+        if args.layout == "onedir":
+            source_runtime = source_executable.parent / "_internal"
+            assert source_runtime.is_dir(), "Missing onedir runtime"
+            for path in [source_runtime, *source_runtime.rglob("*")]:
+                assert (
+                    not path.is_symlink()
+                    and not getattr(path.lstat(), "st_file_attributes", 0) & 0x400
+                ), "Redirected runtime"
+            shutil.copytree(source_runtime, portable / "_internal")
+            assert set(portable.iterdir()) == {executable, portable / "_internal"}
+        else:
+            assert list(portable.iterdir()) == [executable]
         home = root / "home"
         project = root / "project"
         home.mkdir()
@@ -129,6 +141,7 @@ def main():
             assert identity["version"] == version
             assert identity["source_revision"] == info["source_revision"]
             assert identity["build_layout"] == info["build_layout"]
+            assert identity["build_layout"] == args.layout
             assert identity["publisher_verified"] is False
         if args.expected_revision:
             assert info["source_revision"] == args.expected_revision
@@ -207,9 +220,18 @@ def main():
             # The start CLI has fully exited. Native modules not yet loaded by
             # the background manager must still exist for later host commands.
             extracts = list(runtime_temp.glob("_MEI*"))
-            assert len(extracts) == 1, extracts
-            assert list(extracts[0].rglob("win32job*.pyd")), (
-                "The launcher removed the live manager's native runtime"
+            if args.layout == "onefile":
+                # The onefile background manager retains its extracted runtime
+                # after the short-lived starting CLI exits.
+                assert len(extracts) == 1, extracts
+                native_runtime = extracts[0]
+            else:
+                # A onedir manager imports from the copied bundle; its native
+                # modules must be present there without an extracted _MEI dir.
+                assert not extracts, extracts
+                native_runtime = portable / "_internal"
+            assert list(native_runtime.rglob("win32job*.pyd")), (
+                "The live manager's native runtime is missing"
             )
             status = json.loads(run("status", "--home", str(offline_home), "--json"))
             assert status["connection_mode"] == "offline"

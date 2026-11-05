@@ -156,12 +156,32 @@ def copy_notices(destination):
     return files
 
 
-def standalone_package(base, destination, asset_root, components):
+def standalone_package(base, destination, asset_root, components, *, layout="onefile"):
     """Create a binary-only distribution; logs, state and source are excluded."""
     executable = destination / "udb.exe"
     if not executable.is_file():
         raise ValueError("Standalone executable was not produced")
     files = [executable]
+    if layout not in {"onefile", "onedir"}:
+        raise ValueError("Unsupported standalone layout")
+    if layout == "onedir":
+        internal = destination / "_internal"
+        if not internal.is_dir():
+            raise ValueError("Onedir runtime is missing")
+        for path in [internal, *internal.rglob("*")]:
+            if (
+                path.is_symlink()
+                or getattr(path.lstat(), "st_file_attributes", 0) & 0x400
+            ):
+                raise ValueError("Linked runtime component refused")
+            if path.is_file():
+                if path.suffix.lower() in {
+                    ".dpapi",
+                    ".sqlite3",
+                    ".log",
+                } or path.name in {".env", "cloud-pairing.json", "connection.json"}:
+                    raise ValueError("Owner state cannot be packaged as runtime")
+                files.append(path)
     installer = destination / "install.ps1"
     shutil.copyfile(base / "install.ps1", installer)
     files.append(installer)
@@ -173,7 +193,12 @@ def standalone_package(base, destination, asset_root, components):
         "# Universal Desktop Bridge standalone\n\n"
         "The udb.exe application includes Python, UDB workers and installed Python runtime libraries. "
         "No Python installation, pip, Node.js, Git checkout or Desktop Commander is required on the target PC.\n\n"
-        "Commands (PowerShell, from this folder):\n\n"
+        + (
+            "Keep the _internal folder beside udb.exe. Copy the complete UDB directory, not only the executable.\n\n"
+            if layout == "onedir"
+            else ""
+        )
+        + "Commands (PowerShell, from this folder):\n\n"
         "~~~powershell\n"
         ".\\udb.exe runtime --probe\n"
         ".\\udb.exe init\n"
@@ -287,7 +312,9 @@ def standalone_package(base, destination, asset_root, components):
     return archive
 
 
-def run(exe=False, output=None, assets=None):
+def run(exe=False, output=None, assets=None, layout="onefile"):
+    if layout not in {"onefile", "onedir"} or (not exe and layout != "onefile"):
+        raise ValueError("The onedir layout requires --exe")
     base = source_root()
     destination = Path(output).absolute() if output else base / "dist"
     asset_root = Path(assets).absolute() if assets else base / "build-assets"
@@ -299,13 +326,15 @@ def run(exe=False, output=None, assets=None):
     if exe:
         if os.name != "nt":
             raise ValueError("A Windows executable must be built on Windows")
+        if layout == "onedir" and destination.exists() and any(destination.iterdir()):
+            raise ValueError("Onedir builds require a fresh output directory")
         info = base / "src/udb/build_info.json"
         with info.open("x", encoding="utf-8") as stream:
             json.dump(
                 dict(
                     version=VERSION,
                     **source_stamp(base),
-                    build_layout="onefile",
+                    build_layout=layout,
                     source_files=runtime_manifest(base / "src/udb"),
                     components=components,
                     python_embedded=True,
@@ -326,6 +355,8 @@ def run(exe=False, output=None, assets=None):
                 str(base / "src") + os.pathsep + env.get("PYTHONPATH", "")
             )
             env["UDB_BUILD_ASSETS"] = str(asset_root)
+            env["UDB_BUILD_LAYOUT"] = layout
+            env["UDB_COLLECTION_NAME"] = destination.name
             subprocess.run(
                 [
                     sys.executable,
@@ -334,7 +365,7 @@ def run(exe=False, output=None, assets=None):
                     "--noconfirm",
                     "--clean",
                     "--distpath",
-                    str(destination),
+                    str(destination.parent if layout == "onedir" else destination),
                     str(base / "tools/udb.spec"),
                 ],
                 cwd=base,
@@ -356,7 +387,7 @@ def run(exe=False, output=None, assets=None):
     for template in ("udb.example.toml", "MCP_CONFIGURATION.example.json"):
         (destination / template).write_bytes((base / template).read_bytes())
     if exe:
-        standalone_package(base, destination, asset_root, components)
+        standalone_package(base, destination, asset_root, components, layout=layout)
     files = [
         p
         for p in destination.iterdir()

@@ -33,6 +33,7 @@ def temporary_directory():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
+    parser.add_argument("--expected-revision")
     args = parser.parse_args()
     source_executable = args.executable.resolve()
     env = {
@@ -123,6 +124,15 @@ def main():
         manifest = json.loads(run("manifest"))
         info = json.loads(run("build-info"))
         assert catalog["version"] == manifest["version"] == info["version"] == version
+        if "source_revision" in info:
+            identity = json.loads(run("version", "--json"))
+            assert identity["version"] == version
+            assert identity["source_revision"] == info["source_revision"]
+            assert identity["build_layout"] == info["build_layout"]
+            assert identity["publisher_verified"] is False
+        if args.expected_revision:
+            assert info["source_revision"] == args.expected_revision
+            assert info["source_dirty"] is False
         assert catalog["tool_count"] == 59 and catalog["backend_count"] == 67
         if os.name == "nt":
             assert info["kind"] == "frozen" and info["release_provenance"]

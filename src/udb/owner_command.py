@@ -21,6 +21,7 @@ import urllib.request
 from pathlib import Path
 
 from ._version import VERSION
+from .build_identity import runtime_identity
 from .config import manager_options
 from .connection import is_tunnel_id
 from .launcher import worker_command
@@ -249,6 +250,7 @@ def inspect(home: Path, exe: Path, running=manager_running, ready=tunnel_ready) 
     reason = reason if reason in ("", "tunnel_unready") else ""
     return dict(
         companion_version=VERSION,
+        build=runtime_identity(),
         manager_running=active,
         manager_mode=(
             "headless" if hidden else "legacy_or_unknown" if active else "stopped"

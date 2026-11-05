@@ -63,6 +63,8 @@ def render_report(report, as_json=False):
     print(
         f"UDB: local tunnel {tunnel}; background {report['background']}; mode {report['manager_mode']}."
     )
+    if report.get("build", {}).get("build_id"):
+        print("Build: " + report["build"]["build_id"])
     print(report["next_action"])
     for check in report.get("checks", []):
         mark = (

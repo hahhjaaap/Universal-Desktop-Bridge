@@ -114,13 +114,14 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         "init",
         "build",
         "build-info",
+        "version",
         "manifest",
         "mcp-config",
     )
     for name in command_names:
         command = subcommands.add_parser(name)
         add_settings(command, suppress=True)
-        if name in ("autostart", "update", "rollback"):
+        if name in ("autostart", "update", "rollback", "version"):
             command.add_argument(
                 "--json", action="store_true", default=argparse.SUPPRESS
             )
@@ -442,6 +443,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             from .build import build_info
 
             print(json.dumps(build_info(), sort_keys=True))
+            return 0
+        if action == "version":
+            from .build_identity import display_identity, runtime_identity
+
+            print(
+                json.dumps(runtime_identity(), sort_keys=True)
+                if args.json
+                else display_identity()
+            )
             return 0
         if action == "tools":
             from .registry import catalog

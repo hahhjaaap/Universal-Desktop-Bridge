@@ -15,6 +15,42 @@ from pathlib import Path
 from ._version import VERSION
 
 
+def source_stamp(base):
+    """Build-time Git inspection only; runtime status never executes Git."""
+    try:
+        git_exe = shutil.which("git")
+        if not git_exe:
+            raise OSError("Git not available")
+        revision = subprocess.run(
+            [git_exe, "-C", str(base), "rev-parse", "--verify", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout.strip()
+        from .build_identity import _SHA
+
+        if not _SHA.fullmatch(revision):
+            raise ValueError("Invalid source revision")
+        status = subprocess.run(
+            [
+                git_exe,
+                "-C",
+                str(base),
+                "status",
+                "--porcelain",
+                "--untracked-files=normal",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return dict(source_revision=revision, source_dirty=bool(status.stdout.strip()))
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return dict(source_revision=None, source_dirty=None)
+
+
 def runtime_manifest(package=None):
     package = Path(package) if package else Path(__file__).parent
     result = {}
@@ -38,6 +74,7 @@ def build_info():
         kind="source",
         code_signed=False,
         source_files=runtime_manifest(),
+        **source_stamp(Path(__file__).resolve().parents[2]),
     )
 
 
@@ -267,6 +304,8 @@ def run(exe=False, output=None, assets=None):
             json.dump(
                 dict(
                     version=VERSION,
+                    **source_stamp(base),
+                    build_layout="onefile",
                     source_files=runtime_manifest(base / "src/udb"),
                     components=components,
                     python_embedded=True,

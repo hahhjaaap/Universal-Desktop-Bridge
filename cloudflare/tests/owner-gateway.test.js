@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { handleMcp } from "../src/mcp.js";
+import { READ_TOOLS } from "../src/read-tools.js";
+import { OWNER_TOOLS } from "../src/owner-tools.js";
 
 const DEVICE = "a".repeat(32);
 const OTHER_DEVICE = "b".repeat(32);
@@ -114,4 +116,43 @@ test("legacy JWT resource cannot inherit Access-only owner tool scope", async ()
     env, DEVICE, stub, fetch, access());
   assert.equal(reply.status, 503);
   assert.equal(forwarded.length, 0);
+});
+
+test("explicit full owner grant discovers all 36 local tools without auto-running them", async () => {
+  const all = [...READ_TOOLS, ...OWNER_TOOLS];
+  assert.equal(all.length, 36);
+  const env = {
+    ...base(),
+    UDB_DEVICE_GRANTS: JSON.stringify({ [DEVICE]: { [OWNER]: READ_TOOLS } }),
+    UDB_ENABLE_OWNER_TOOLS: "true",
+    UDB_OWNER_TOOL_GRANTS: JSON.stringify({ [DEVICE]: { [OWNER]: OWNER_TOOLS } }),
+  };
+  const forwarded = [];
+  const stub = { async fetch(request) {
+    const rpc = await request.json();
+    forwarded.push(rpc);
+    return new Response(JSON.stringify({
+      jsonrpc: "2.0", id: rpc.id,
+      result: { tools: all.map((name) => ({
+        name, inputSchema: { type: "object", properties: { fixture: { type: "string" } } },
+      })) },
+    }));
+  } };
+  const list = await handleMcp(makeRequest(71, "tools/list"),
+    env, DEVICE, stub, fetch, access());
+  assert.equal(list.status, 200);
+  const tools = (await list.json()).result.tools;
+  assert.equal(tools.length, 36);
+  assert.deepEqual(tools.map((tool) => tool.name), all);
+  assert.ok(tools.every((tool) => tool.inputSchema.properties.fixture.type === "string"));
+  assert.equal(forwarded.length, 1);
+  assert.equal(forwarded[0].method, "tools/list");
+
+  // Removing either opt-in never changes the normal six-tool baseline.
+  delete env.UDB_ENABLE_OWNER_TOOLS;
+  const reduced = await handleMcp(makeRequest(72, "tools/list"),
+    env, DEVICE, stub, fetch, access());
+  assert.deepEqual((await reduced.json()).result.tools.map((tool) => tool.name),
+    READ_TOOLS);
+  assert.equal(forwarded.length, 2);
 });

@@ -234,7 +234,15 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         h = label(title, "H1", True)
         h.setMinimumHeight(40)
         hl.addWidget(h)
-        hl.addWidget(label(subtitle, "Subtitle", True))
+        description = label(subtitle, "Subtitle", True)
+        hl.addWidget(description)
+        # The stacked page may be height-constrained on a compact Windows
+        # desktop. Qt can compress a word-wrapped QLabel far below its
+        # height-for-width hint, letting it overlap the title. Reserve its
+        # full content height so other content yields first.
+        header.setMinimumHeight(
+            h.minimumHeight() + hl.spacing() + description.sizeHint().height()
+        )
         header.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         layout.addWidget(header)
         return p, layout

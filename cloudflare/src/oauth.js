@@ -2,6 +2,7 @@
 // The OAuth authorization-code + PKCE flow is owned by the configured external IdP.
 // This module never issues tokens or substitutes an admin/device key for user identity.
 import { READ_TOOLS, isReadTool } from "./read-tools.js";
+import { tenantDeviceGrant } from "./tenant-policy.js";
 const ID = /^[a-f0-9]{32}$/;
 // Strictly project-scoped read-only tools. Writes, host operations, desktop
 // control and legacy aliases are never permitted by the udb:read scope.
@@ -84,6 +85,10 @@ async function boundedJwks(url, fetchImpl) {
 }
 
 export function deviceGrant(env, deviceId, subject) {
+  // Owner-managed tenant policy is opt-in. When configured it is authoritative:
+  // an invalid, empty or revoked policy never falls back to legacy grants.
+  if (env?.UDB_TENANT_POLICY !== undefined)
+    return tenantDeviceGrant(env.UDB_TENANT_POLICY, deviceId, subject);
   if (!ID.test(deviceId) || typeof subject !== "string" || !subject || subject.length > 200)
     return [];
   const raw = env?.UDB_DEVICE_GRANTS;

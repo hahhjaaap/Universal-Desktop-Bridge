@@ -15,13 +15,13 @@ Add-Type -AssemblyName PresentationFramework
 </Window>
 '@
 $window=[Windows.Markup.XamlReader]::Load([Xml.XmlNodeReader]::new($xaml))
-# A WPF Loaded handler publishes the HWND without waiting for composition/
-# ContentRendered, which may stall on unattended Windows CI desktops.
-$window.Add_Loaded({
- $handle=[Windows.Interop.WindowInteropHelper]::new($window).Handle.ToInt64()
- [IO.File]::WriteAllText($ReadyPath+'.tmp',(@{hwnd=$handle;pid=$PID}|ConvertTo-Json -Compress))
- [IO.File]::Move($ReadyPath+'.tmp',$ReadyPath)
-})
+# Show() synchronously creates the native HWND. Publish it immediately,
+# rather than waiting for Loaded/ContentRendered: CI desktop composition may
+# delay those WPF events indefinitely even when a window handle already exists.
 $window.Add_Closed({[Windows.Threading.Dispatcher]::CurrentDispatcher.BeginInvokeShutdown([Windows.Threading.DispatcherPriority]::Normal)})
 $window.Show()
+$handle=[Windows.Interop.WindowInteropHelper]::new($window).Handle.ToInt64()
+if($handle -le 0){throw 'Synthetic WPF window has no native handle'}
+[IO.File]::WriteAllText($ReadyPath+'.tmp',(@{hwnd=$handle;pid=$PID}|ConvertTo-Json -Compress))
+[IO.File]::Move($ReadyPath+'.tmp',$ReadyPath)
 [Windows.Threading.Dispatcher]::Run()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import errno
 import os
 import threading
+import time
 from pathlib import Path
 
 from .core import PolicyError, reject_links
@@ -30,40 +31,50 @@ class TaskPool:
         self.folder = Path(folder)
 
     def claim(self):
-        with _claim_lock:
-            reject_links(self.folder)
-            self.folder.mkdir(parents=True, exist_ok=True)
-            for number in range(MAX_CONCURRENT):
-                path = self.folder / f"slot-{number}.lock"
-                reject_links(path)
-                fd = os.open(
-                    path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600
-                )
-                stream = os.fdopen(fd, "r+b", buffering=0)
-                try:
-                    if os.fstat(fd).st_nlink != 1:
-                        raise PolicyError("Linked capacity slot refused")
-                    if os.fstat(fd).st_size == 0:
-                        stream.write(b"0")
-                    stream.seek(0)
-                    if os.name == "nt":
-                        import msvcrt
+        # Windows can briefly retain byte-range locks after a terminated
+        # process has exited. Retry *lock acquisition*, not any background job.
+        # The ten-slot limit, link checks and fail-closed errors stay intact.
+        attempts = 4 if os.name == "nt" else 1
+        for attempt in range(attempts):
+            with _claim_lock:
+                reject_links(self.folder)
+                self.folder.mkdir(parents=True, exist_ok=True)
+                for number in range(MAX_CONCURRENT):
+                    path = self.folder / f"slot-{number}.lock"
+                    reject_links(path)
+                    fd = os.open(
+                        path,
+                        os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0),
+                        0o600,
+                    )
+                    stream = os.fdopen(fd, "r+b", buffering=0)
+                    try:
+                        if os.fstat(fd).st_nlink != 1:
+                            raise PolicyError("Linked capacity slot refused")
+                        if os.fstat(fd).st_size == 0:
+                            stream.write(b"0")
+                        stream.seek(0)
+                        if os.name == "nt":
+                            import msvcrt
 
-                        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
-                    else:
-                        import fcntl
+                            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                        else:
+                            import fcntl
 
-                        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    return Slot(stream)
-                except OSError as exc:
-                    stream.close()
-                    if exc.errno not in (errno.EACCES, errno.EAGAIN) and getattr(
-                        exc, "winerror", None
-                    ) not in (33, 36, 158):
+                            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        return Slot(stream)
+                    except OSError as exc:
+                        stream.close()
+                        if exc.errno not in (errno.EACCES, errno.EAGAIN) and getattr(
+                            exc, "winerror", None
+                        ) not in (33, 36, 158):
+                            raise
+                    except BaseException:
+                        stream.close()
                         raise
-                except BaseException:
-                    stream.close()
-                    raise
+            if attempt + 1 < attempts:
+                time.sleep(0.02 * (attempt + 1))
+
         raise PolicyError(
             "Maximum 10 active background jobs; wait for completion or stop an owned job"
         )

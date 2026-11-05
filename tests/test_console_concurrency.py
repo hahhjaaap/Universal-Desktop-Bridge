@@ -1,5 +1,6 @@
 """One-console startup and the shared ten-job ceiling, including crashes."""
 
+import errno
 import io
 import json
 import subprocess
@@ -84,6 +85,32 @@ def test_slots_are_shared_across_processes_and_released_after_crash(tmp_path):
         child.stderr.close()
     slots = [pool.claim() for _ in range(10)]
     for slot in slots:
+        slot.close()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows byte-range locks")
+def test_capacity_slot_recovers_from_transient_postcrash_windows_lock(
+    tmp_path, monkeypatch
+):
+    import msvcrt
+
+    original_lock = msvcrt.locking
+    calls = [0]
+
+    def delayed_release(fd, mode, count):
+        calls[0] += 1
+        if calls[0] <= MAX_CONCURRENT:
+            raise PermissionError(errno.EACCES, "simulated post-crash lock")
+        return original_lock(fd, mode, count)
+
+    monkeypatch.setattr(msvcrt, "locking", delayed_release)
+    pool = TaskPool(tmp_path / "post-crash")
+    slot = pool.claim()
+    try:
+        # All ten slots briefly reject a lock, then the bounded second scan
+        # must recover without increasing MAX_CONCURRENT or starting a task.
+        assert calls[0] == MAX_CONCURRENT + 1
+    finally:
         slot.close()
 
 

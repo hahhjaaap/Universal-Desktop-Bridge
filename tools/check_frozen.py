@@ -220,9 +220,18 @@ def main():
             # The start CLI has fully exited. Native modules not yet loaded by
             # the background manager must still exist for later host commands.
             extracts = list(runtime_temp.glob("_MEI*"))
-            assert len(extracts) == 1, extracts
-            assert list(extracts[0].rglob("win32job*.pyd")), (
-                "The launcher removed the live manager's native runtime"
+            if args.layout == "onefile":
+                # The onefile background manager retains its extracted runtime
+                # after the short-lived starting CLI exits.
+                assert len(extracts) == 1, extracts
+                native_runtime = extracts[0]
+            else:
+                # A onedir manager imports from the copied bundle; its native
+                # modules must be present there without an extracted _MEI dir.
+                assert not extracts, extracts
+                native_runtime = portable / "_internal"
+            assert list(native_runtime.rglob("win32job*.pyd")), (
+                "The live manager's native runtime is missing"
             )
             status = json.loads(run("status", "--home", str(offline_home), "--json"))
             assert status["connection_mode"] == "offline"

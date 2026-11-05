@@ -39,6 +39,48 @@ def test_embedded_identity_distinguishes_same_version_revisions_and_dirty_build(
     assert identity("b" * 40, True)["build_id"].endswith(".dirty")
 
 
+@pytest.mark.parametrize("layout", ["onefile", "onedir"])
+def test_frozen_archive_without_git_keeps_unverified_revision(layout, tmp_path):
+    (tmp_path / "build_info.json").write_text(
+        json.dumps(
+            {
+                "version": VERSION,
+                "kind": "frozen",
+                "release_provenance": True,
+                "python_embedded": True,
+                "code_signed": False,
+                "source_revision": None,
+                "source_dirty": None,
+                "build_layout": layout,
+            }
+        )
+    )
+    value = build_identity.identify(tmp_path, frozen=True)
+    assert value["build_layout"] == layout
+    assert value["identity_source"] == "embedded-layout-only"
+    assert value["source_revision"] is None
+    assert value["source_dirty"] is None
+    assert value["build_id"] == VERSION + "+unidentified"
+    assert value["publisher_verified"] is False
+
+
+def test_layout_only_cannot_be_claimed_without_frozen_metadata(tmp_path):
+    (tmp_path / "build_info.json").write_text(
+        json.dumps(
+            {
+                "version": VERSION,
+                "source_revision": None,
+                "source_dirty": None,
+                "build_layout": "onedir",
+            }
+        )
+    )
+    value = build_identity.identify(tmp_path, frozen=True)
+    assert value["build_layout"] == "unknown"
+    assert value["identity_source"] == "unavailable"
+    assert not value["publisher_verified"]
+
+
 @pytest.mark.parametrize(
     "bad",
     [

@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 
 from . import __version__
 from .activity_presenter import ActivityFeed
+from .build_identity import display_identity
 from .core import reject_links
 from .desktop import DesktopController
 from .manager_dialogs import ApprovalDialog, ConnectionDialog, SourceDialog
@@ -83,7 +84,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.activity_signature = None
         self._closing = False
         self._last_project_auth_check = 0.0
-        self.setWindowTitle("Universal Desktop Bridge · " + __version__)
+        self.setWindowTitle("Universal Desktop Bridge · " + display_identity())
         self.resize(1220, 820)
         self.setMinimumSize(940, 640)
         self.setWindowIcon(icon("brand", ACCENT, 32))
@@ -149,6 +150,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.sidebar_footer = label("DESKTOP BRIDGE", "Eyebrow")
         nav.addWidget(self.sidebar_footer)
         self.sidebar_version = label("Agent " + __version__, "Fine")
+        self.sidebar_version.setToolTip(display_identity())
         nav.addWidget(self.sidebar_version)
         body.addWidget(sidebar)
         self.stack = QStackedWidget()

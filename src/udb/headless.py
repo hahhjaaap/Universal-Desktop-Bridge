@@ -17,6 +17,7 @@ import uuid
 from pathlib import Path
 
 from . import __version__
+from .build_identity import runtime_identity
 from .core import PolicyError, reject_links
 from .desktop import DesktopController
 from .host_client import _read_json, atomic_json
@@ -84,6 +85,7 @@ def publish(controller, instance: str, phase="running"):
         dict(
             mode="headless",
             version=__version__,
+            build=runtime_identity(),
             pid=os.getpid(),
             instance=instance,
             at=time.time(),

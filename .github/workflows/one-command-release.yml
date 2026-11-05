@@ -52,7 +52,7 @@ jobs:
       - name: Validate the exact executable and installer before publication
         if: steps.gate.outputs.publish == 'true'
         run: |
-          python tools/check_frozen.py dist/udb.exe
+          python tools/check_frozen.py dist/udb.exe --expected-revision "$env:UDB_RELEASE_SHA"
           if ($LASTEXITCODE -ne 0) { throw 'Frozen acceptance failed.' }
           python tools/check_installer.py install.ps1 dist/udb-${{ steps.gate.outputs.version }}-windows-standalone.zip
           if ($LASTEXITCODE -ne 0) { throw 'Installer acceptance failed.' }

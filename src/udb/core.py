@@ -689,6 +689,7 @@ class Agent(AutonomyMixin):
 
     def diagnostics(self):
         from . import __version__
+        from .build_identity import runtime_identity
         from .host_client import status as host_status
         from .sandbox import available
 
@@ -704,6 +705,7 @@ class Agent(AutonomyMixin):
         return {
             "name": "Universal Desktop Bridge",
             "version": __version__,
+            "build": runtime_identity(),
             "manager": manager,
             "readiness": readiness_report(manager, hs, computer, projects),
             "computer_access": computer,

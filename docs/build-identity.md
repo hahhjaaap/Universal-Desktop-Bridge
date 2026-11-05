@@ -16,6 +16,13 @@ project code or a runtime worker. This is the checkout HEAD, **not** a statement
 that its working tree is clean or that an installed executable matches it.
 `udb build-info` provides the heavier source inventory and build-time Git state.
 
+A frozen build made from a source ZIP without Git metadata cannot prove a
+source revision. When the embedded frozen-build markers are well-formed,
+`udb version --json` reports the `onefile`/`onedir` layout with
+`identity_source: embedded-layout-only`, but keeps `source_revision` and
+`source_dirty` as `null` and the build ID as `unidentified`. That layout is
+informational, **not** a verified source identity or publisher signature.
+
 Missing, oversized, linked or invalid embedded metadata reports an unidentified
 build instead of inventing provenance. Runtime reports do not execute Git or
 open a GUI. Build-time source inspection may execute the installed Git binary.

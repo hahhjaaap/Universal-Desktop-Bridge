@@ -69,16 +69,28 @@ def identify(package, *, frozen=False):
             if not isinstance(value, dict) or value.get("version") != VERSION:
                 raise ValueError("Wrong build version")
             candidate = value.get("source_revision")
-            if not isinstance(candidate, str) or not _SHA.fullmatch(candidate):
-                raise ValueError("Unknown build revision")
             candidate_layout = value.get("build_layout", "onefile")
             if candidate_layout not in ("onefile", "onedir"):
                 raise ValueError("Invalid build layout")
             candidate_dirty = value.get("source_dirty")
-            if type(candidate_dirty) is not bool:
-                raise ValueError("Unknown build source state")
-            revision, dirty = candidate, candidate_dirty
-            layout, origin = candidate_layout, "embedded"
+            if candidate is None and candidate_dirty is None:
+                # A GitHub source archive has no Git metadata. Report its
+                # embedded layout, but never manufacture a verified revision.
+                if (
+                    value.get("kind") != "frozen"
+                    or value.get("release_provenance") is not True
+                    or value.get("python_embedded") is not True
+                    or value.get("code_signed") is not False
+                ):
+                    raise ValueError("Untrusted layout-only build metadata")
+                layout, origin = candidate_layout, "embedded-layout-only"
+            else:
+                if not isinstance(candidate, str) or not _SHA.fullmatch(candidate):
+                    raise ValueError("Unknown build revision")
+                if type(candidate_dirty) is not bool:
+                    raise ValueError("Unknown build source state")
+                revision, dirty = candidate, candidate_dirty
+                layout, origin = candidate_layout, "embedded"
         except (OSError, ValueError):
             pass  # Unknown identity never becomes a claim of a verified build.
     else:

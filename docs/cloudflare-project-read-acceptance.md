@@ -24,6 +24,35 @@ After reconnect a fresh local proxy initializes and sends the initialized
 notification before forwarding a resumed call, with one shared deadline. It never
 replays that call. `initialize` reports the actual negotiated device protocol.
 
+## Automated staging-only preflight (manual)
+
+The workflow [Cloudflare staging read-only preflight](../.github/workflows/cloudflare-staging-read-preflight.yml)
+can be run manually after a **separate staging** Worker and disposable staging
+device are provisioned by the account owner.
+
+Configure GitHub environment `udb-staging` with the non-secret environment
+variables `UDB_STAGING_RELAY` and `UDB_STAGING_DEVICE_ID` (do not put a
+Windows device token or any OAuth credentials in these variables). The
+staging Worker hostname must contain `staging` and end in `.workers.dev`,
+to prevent this workflow from inadvertently testing a personal production
+Worker. Use a dedicated disposable project and device; avoid real private
+project contents.
+
+From GitHub Actions, select **Cloudflare staging read-only preflight** →
+**Run workflow**. It installs the checked-out source and runs
+`check_cloudflare_deployment.py --auth-mode cloudflare-access
+--require-project-read`. It makes only public health/metadata requests
+and one **unauthenticated** MCP request expected to be rejected. The
+workflow provides no production secret and does **not** deploy Workers,
+change Access policies, start Windows UDB or update device grants.
+
+A successful run is necessary but **not sufficient** for end-to-end
+acceptance. An authorized owner must still prove authenticated ChatGPT
+`tools/list` and `read_file` on the staging device, verify a local file
+hash and negative access cases, and check revocation/reconnect. A failure
+`project_read_not_advertised` means the deployed staging Worker is not
+yet advertising the scoped-read source capability.
+
 ## Before deploying
 
 - Review the source commit and successful **complete** CI matrix, including Node

@@ -25,7 +25,9 @@ def _sha256(content: bytes) -> str:
 def create_fixture(root: Path) -> dict:
     """Create an isolated fixture once; fail rather than overwrite any path."""
     if not root.is_absolute() or not root.parent.is_dir():
-        raise ValueError("Fixture requires a new absolute directory with an existing parent")
+        raise ValueError(
+            "Fixture requires a new absolute directory with an existing parent"
+        )
     # mkdir is exclusive. A repeat run or a pre-existing symlink must fail.
     root.mkdir(mode=0o700, exist_ok=False)
     project = root / "project"
@@ -65,7 +67,9 @@ def main() -> int:
         manifest = create_fixture(args.root)
     except (OSError, ValueError):
         # Never print unreviewed local paths or arbitrary filesystem errors.
-        print(json.dumps({"result": "failed", "reason": "fixture_directory_unavailable"}))
+        print(
+            json.dumps({"result": "failed", "reason": "fixture_directory_unavailable"})
+        )
         return 1
     print(
         json.dumps(

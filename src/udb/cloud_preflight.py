@@ -33,6 +33,14 @@ _FIXES = {
         "access",
         "Check Cloudflare Access on the exact device MCP path and enable Managed OAuth; leave the WebSocket path unprotected.",
     ),
+    "access_metadata_untrusted": (
+        "access",
+        "The OAuth challenge advertises an unexpected metadata URL. Inspect the Access application on the exact device MCP path; do not follow an untrusted URL.",
+    ),
+    "access_metadata_invalid": (
+        "access",
+        "The Cloudflare Access metadata is incomplete or invalid. Review the exact MCP path, Managed OAuth and organization configuration.",
+    ),
     "preflight_failed": (
         "network",
         "Check the public Worker health and network connection.",
@@ -232,17 +240,27 @@ def paired_report(home, *, auth_mode="cloudflare-access", opener=None) -> dict:
 
 
 def failure_reason(exc) -> str:
-    # Never expose arbitrary upstream errors, URLs, IDs or credentials.
+    # Only return fixed, audited status codes; upstream errors may contain secrets.
+    if not isinstance(exc, ValueError):
+        return "preflight_failed"
+    value = str(exc)
+    if value == "Untrusted Cloudflare resource metadata URL":
+        return "access_metadata_untrusted"
+    if value in {
+        "Missing Cloudflare resource metadata URL",
+        "Invalid Cloudflare Access metadata type",
+        "Missing Cloudflare Access team domain",
+        "Invalid Cloudflare Access team domain",
+        "Invalid Cloudflare authorization servers",
+        "Invalid Cloudflare Access resource metadata",
+    }:
+        return "access_metadata_invalid"
     known = {
         "project_read_not_advertised",
         "oauth_challenge_missing_or_wrong_status",
         "Access-aware Worker code has not been deployed",
     }
-    return (
-        str(exc)
-        if isinstance(exc, ValueError) and str(exc) in known
-        else "preflight_failed"
-    )
+    return value if value in known else "preflight_failed"
 
 
 def main(checker=None) -> int:

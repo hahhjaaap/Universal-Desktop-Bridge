@@ -323,7 +323,11 @@ def doctor(
                 if passed
                 else "Public preflight failed ("
                 + public["reason"]
-                + "). Inspect local pairing and the deployed OAuth configuration.",
+                + "). "
+                + public.get(
+                    "next_action",
+                    "Inspect local pairing and the deployed OAuth configuration.",
+                ),
             )
         )
         checks.append(

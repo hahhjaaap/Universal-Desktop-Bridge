@@ -3,6 +3,7 @@
 import { readJson, validRpc } from "./auth.js";
 import { AuthError, authorize, oauthConfig } from "./oauth.js";
 import { accessConfig, authorizeAccess } from "./access.js";
+import { isReadTool } from "./read-tools.js";
 export { authorizeAccess } from "./access.js";
 
 const supported = new Set(["2025-03-26", "2025-06-18", "2025-11-25"]);
@@ -109,7 +110,10 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
       return error(502, "device_initialize_rejected");
     return json({ jsonrpc: "2.0", id: rpc.id, result: {
       protocolVersion: answer.result.protocolVersion, capabilities: { tools: { listChanged: false } },
-      serverInfo: { name: "udb-cloud-readonly", version: "0.1.0" },
+      serverInfo: {
+        name: user.ownerTools?.length ? "udb-cloud-owner-gated" : "udb-cloud-readonly",
+        version: "0.1.0",
+      },
     } });
   }
   if (rpc.method === "ping") return json({ jsonrpc: "2.0", id: rpc.id, result: {} });
@@ -130,7 +134,13 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
     if (!Array.isArray(reply.result?.tools)) return error(502, "invalid_device_catalog");
     reply.result = { tools: reply.result.tools.filter((tool) =>
       tool && user.allowTools.includes(tool.name)).map((tool) => ({
-        ...tool, securitySchemes: [{ type: "oauth2", scopes: ["udb:read"] }],
+        ...tool,
+        // Access Managed OAuth binds the client to the exact protected
+        // application; non-read privileges are checked by separate owner
+        // grants and local approvals, not falsely labeled udb:read.
+        securitySchemes: [{
+          type: "oauth2", scopes: isReadTool(tool.name) ? ["udb:read"] : [],
+        }],
       })) };
   }
   return json(reply);

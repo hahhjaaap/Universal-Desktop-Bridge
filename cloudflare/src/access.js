@@ -3,6 +3,7 @@
 // paths Cloudflare forwards a signed Cf-Access-Jwt-Assertion to the origin.
 // Never use an unverified header, opaque OAuth token, cookie or email as identity.
 import { AuthError, deviceGrant } from "./oauth.js";
+import { ownerToolGrant } from "./owner-tools.js";
 
 const MAX_ASSERTION = 8192;
 const MAX_JWKS = 16384;
@@ -135,7 +136,9 @@ export async function authorizeAccess(access, env, deviceId, request = null,
     } catch { /* WARP/runtime identity may be unavailable: verify signed header */ }
   }
   if (!subject) subject = await verifyAccessAssertion(request, env, fetchImpl);
-  const allowTools = deviceGrant(env, deviceId, subject);
-  if (allowTools.length === 0) throw new AuthError();
-  return { subject, allowTools };
+  const readTools = deviceGrant(env, deviceId, subject);
+  // Owner tools never replace the independently granted read identity.
+  if (readTools.length === 0) throw new AuthError();
+  const ownerTools = ownerToolGrant(env, deviceId, subject);
+  return { subject, allowTools: [...readTools, ...ownerTools], ownerTools };
 }

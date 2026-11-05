@@ -15,7 +15,6 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from .cloud_agent import CLOUD_USER_AGENT, device_url
 
-
 _FIXES = {
     "pairing_missing": ("pairing", "Pair the device from the local UDB Manager."),
     "pairing_invalid": ("pairing", "Verify the local device pairing before reconnecting."),

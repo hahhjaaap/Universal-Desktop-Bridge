@@ -515,10 +515,12 @@ def test_paired_cloud_ui_copies_cloud_readiness_probe(tmp_path, manager, monkeyp
 
     app = make_app()
     (tmp_path / "cloud-pairing.json").write_text(
-        json.dumps({
-            "relay": "https://example.workers.dev",
-            "device_id": "a" * 32,
-        }),
+        json.dumps(
+            {
+                "relay": "https://example.workers.dev",
+                "device_id": "a" * 32,
+            }
+        ),
         encoding="utf-8",
     )
     # Reuse the isolated GUI backend/status mocks from the existing fixture.
@@ -530,9 +532,9 @@ def test_paired_cloud_ui_copies_cloud_readiness_probe(tmp_path, manager, monkeyp
         window.navigate(4)
         buttons = window.stack.currentWidget().findChildren(MotionButton)
         button = next(
-            widget for widget in buttons
-            if widget.accessibleName()
-            == "Sao chép lệnh udb doctor --cloud --json"
+            widget
+            for widget in buttons
+            if widget.accessibleName() == "Sao chép lệnh udb doctor --cloud --json"
         )
         button.click()
         assert QApplication.clipboard().text() == "udb doctor --cloud --json"

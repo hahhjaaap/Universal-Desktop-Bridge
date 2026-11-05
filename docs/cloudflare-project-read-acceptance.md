@@ -172,7 +172,7 @@ and per-subject grants before attempting reconnects. The Worker does not
 automatically update the plugin's registered tool catalog.
 
 
-## Authenticated acceptance in ChatGPT
+For a deterministic, disposable local project and expected SHA-256/denial cases,\nsee [the offline staging fixture guide](staging-fixture.md). Creating the fixture\nalone does not establish authenticated Cloudflare/ChatGPT access.\n\n## Authenticated acceptance in ChatGPT
 
 1. Refresh/reconnect the exact device MCP connection and complete the owner OAuth
    login/consent. A fixed plugin tool allowlist also needs an owner-managed catalog

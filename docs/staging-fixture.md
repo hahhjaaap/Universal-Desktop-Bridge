@@ -12,7 +12,8 @@ the **separate staging** connection. Choose a NEW absolute directory whose
 parent already exists (example uses an explicitly chosen test folder):
 
 ```powershell
-python tools/prepare_staging_fixture.py --root C:\\udb-staging-fixture-2026
+$fixtureRoot = Join-Path $env:USERPROFILE 'UDB-Staging-Fixture-2026'
+python tools/prepare_staging_fixture.py --root $fixtureRoot
 ```
 
 The command refuses an existing destination and never overwrites it. It creates:

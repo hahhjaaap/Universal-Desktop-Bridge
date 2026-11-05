@@ -215,6 +215,9 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
             )
         if name == "build":
             command.add_argument("--exe", action="store_true")
+            command.add_argument(
+                "--layout", choices=("onefile", "onedir"), default="onefile"
+            )
             command.add_argument("--output")
             command.add_argument(
                 "--assets", help="Inventoried public runtime helper directory"
@@ -433,7 +436,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if action == "build":
             from .build import run
 
-            return run(args.exe, args.output, assets=args.assets)
+            return run(args.exe, args.output, assets=args.assets, layout=args.layout)
         if action == "runtime":
             from .components import runtime_report
 

@@ -7,9 +7,11 @@ import http.server
 import json
 import os
 import shutil
+import statistics
 import subprocess
 import tempfile
 import threading
+import time
 import zipfile
 from pathlib import Path
 
@@ -18,6 +20,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("installer", type=Path)
     parser.add_argument("archive", type=Path)
+    parser.add_argument("--upgrade-archive", type=Path)
+    parser.add_argument("--report", type=Path)
     args = parser.parse_args()
     installer = args.installer.resolve()
     windows = Path(os.environ["SystemRoot"])
@@ -72,6 +76,32 @@ def main():
         home.mkdir()
         sentinel = home / "keep.txt"
         sentinel.write_text("existing owner data")
+        managed_timings = {}
+
+        def measure_managed(layout, version):
+            durations = []
+            for _ in range(3):
+                started = time.perf_counter()
+                result = subprocess.run(
+                    [
+                        str(windows / "System32/cmd.exe"),
+                        "/d",
+                        "/c",
+                        str(install / "bin/udb.cmd"),
+                        "--version",
+                    ],
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=90,
+                )
+                if result.returncode != 0 or result.stdout.strip() != version:
+                    raise RuntimeError("Managed startup measurement failed")
+                durations.append((time.perf_counter() - started) * 1000)
+            managed_timings[layout] = dict(
+                samples_ms=[round(value, 3) for value in durations],
+                p50_ms=round(statistics.median(durations), 3),
+            )
 
         def run_install(target=install, expect_success=True):
             result = subprocess.run(
@@ -116,9 +146,9 @@ def main():
             assert not success or result.returncode == 0, result.stdout + result.stderr
             return json.loads(result.stdout)
 
-        def publish_variant(note, replacement=None):
+        def publish_variant(note, replacement=None, source_archive=None):
             # Change only test-package public bytes; never write to owner state.
-            with zipfile.ZipFile(args.archive) as original:
+            with zipfile.ZipFile(source_archive or args.archive) as original:
                 files = {name: original.read(name) for name in original.namelist()}
             files["UDB/STANDALONE.md"] += ("\n" + note).encode()
             if replacement is not None:
@@ -285,11 +315,27 @@ def main():
             preference.write_text('{"schema":1,"mode":"offline"}')
             app("start", "--detach", "--json", "--wait", "60")
             before_mode = preference.read_bytes()
-            publish_variant("Synthetic update test")
+            initial_identity = (
+                app("version", "--json") if args.upgrade_archive else None
+            )
+            if args.upgrade_archive:
+                measure_managed("onefile", first["version"])
+            publish_variant(
+                "Synthetic update test", source_archive=args.upgrade_archive
+            )
             run_install()
             second = json.loads(record_path.read_text(encoding="utf-8"))
             assert second["exe"] != first["exe"] and second["previous"] == first
             assert_shortcut_uses_managed_launcher()
+            if args.upgrade_archive:
+                updated_identity = app("version", "--json", image=second["exe"])
+                assert initial_identity["build_layout"] == "onefile"
+                assert updated_identity["build_layout"] == "onedir"
+                assert (
+                    updated_identity["source_revision"]
+                    == initial_identity["source_revision"]
+                )
+                measure_managed("onedir", second["version"])
             switched = app("status", "--json", image=second["exe"])
             assert (
                 switched["manager_running"] and switched["connection_mode"] == "offline"
@@ -302,6 +348,8 @@ def main():
             assert rollback["home_preserved"]
             restored = json.loads(record_path.read_text(encoding="utf-8"))
             assert restored["exe"] == first["exe"]
+            if args.upgrade_archive:
+                assert app("version", "--json") == initial_identity
             assert_shortcut_uses_managed_launcher()
             assert app("status", "--json")["manager_running"]
             assert preference.read_bytes() == before_mode
@@ -397,32 +445,44 @@ public class FailedStart {
             (unknown / "keep.txt").write_text("preserve")
             run_install(target=unknown, expect_success=False)
             assert (unknown / "keep.txt").read_text() == "preserve"
-            print(
-                json.dumps(
-                    dict(
-                        result="PASS",
-                        http_download=True,
-                        clean_system_path=True,
-                        no_python_or_node=True,
-                        bundled_helper_probes=True,
-                        paths_with_spaces=True,
-                        launcher=True,
-                        mcp_config=True,
-                        reinstall_idempotent=True,
-                        preserves_owner_data=True,
-                        checksum_rejection=True,
-                        traversal_rejection=True,
-                        unrelated_folder_preserved=True,
-                        redirected_setup_refused=True,
-                        running_offline_update=True,
-                        manual_rollback=True,
-                        automatic_failure_rollback=True,
-                        transient_download_retry=True,
-                        owner_access_not_granted=True,
-                        user_path_not_changed_by_test=True,
-                    )
-                )
+            report = dict(
+                result="PASS",
+                http_download=True,
+                clean_system_path=True,
+                no_python_or_node=True,
+                bundled_helper_probes=True,
+                paths_with_spaces=True,
+                launcher=True,
+                mcp_config=True,
+                reinstall_idempotent=True,
+                preserves_owner_data=True,
+                checksum_rejection=True,
+                traversal_rejection=True,
+                unrelated_folder_preserved=True,
+                redirected_setup_refused=True,
+                running_offline_update=True,
+                manual_rollback=True,
+                automatic_failure_rollback=True,
+                transient_download_retry=True,
+                owner_access_not_granted=True,
+                user_path_not_changed_by_test=True,
             )
+            if managed_timings:
+                report["managed_startup"] = dict(
+                    scope="Fresh managed cmd launcher processes on the same runner; OS/AV caches uncontrolled",
+                    layouts=managed_timings,
+                    p50_speedup=round(
+                        managed_timings["onefile"]["p50_ms"]
+                        / max(0.001, managed_timings["onedir"]["p50_ms"]),
+                        3,
+                    ),
+                )
+            if args.report:
+                args.report.parent.mkdir(parents=True, exist_ok=True)
+                args.report.write_text(
+                    json.dumps(report, indent=2) + "\n", encoding="utf-8"
+                )
+            print(json.dumps(report))
         finally:
             if (install / "install.json").exists():
                 active = json.loads((install / "install.json").read_text("utf-8"))

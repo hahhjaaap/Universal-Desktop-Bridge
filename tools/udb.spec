@@ -43,7 +43,20 @@ a = Analysis(
     noarchive=False,
 )
 pyz = PYZ(a.pure)
-exe = EXE(
-    pyz, a.scripts, a.binaries, a.datas, [],
-    name="udb", debug=False, strip=False, upx=False, console=True,
-)
+layout = os.environ.get("UDB_BUILD_LAYOUT", "onefile")
+if layout == "onedir":
+    name = os.environ.get("UDB_COLLECTION_NAME", "udb")
+    if not name or name in (".", "..") or "/" in name or "\\" in name:
+        raise ValueError("Invalid standalone directory name")
+    exe = EXE(
+        pyz, a.scripts, [], exclude_binaries=True,
+        name="udb", debug=False, strip=False, upx=False, console=True,
+    )
+    bundle = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name=name)
+elif layout == "onefile":
+    exe = EXE(
+        pyz, a.scripts, a.binaries, a.datas, [],
+        name="udb", debug=False, strip=False, upx=False, console=True,
+    )
+else:
+    raise ValueError("Unsupported standalone layout")

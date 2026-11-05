@@ -34,6 +34,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
     parser.add_argument("--expected-revision")
+    parser.add_argument("--layout", choices=("onefile", "onedir"), default="onefile")
     args = parser.parse_args()
     source_executable = args.executable.resolve()
     env = {
@@ -70,7 +71,18 @@ def main():
         portable.mkdir()
         executable = portable / source_executable.name
         shutil.copyfile(source_executable, executable)
-        assert list(portable.iterdir()) == [executable]
+        if args.layout == "onedir":
+            source_runtime = source_executable.parent / "_internal"
+            assert source_runtime.is_dir(), "Missing onedir runtime"
+            for path in [source_runtime, *source_runtime.rglob("*")]:
+                assert (
+                    not path.is_symlink()
+                    and not getattr(path.lstat(), "st_file_attributes", 0) & 0x400
+                ), "Redirected runtime"
+            shutil.copytree(source_runtime, portable / "_internal")
+            assert set(portable.iterdir()) == {executable, portable / "_internal"}
+        else:
+            assert list(portable.iterdir()) == [executable]
         home = root / "home"
         project = root / "project"
         home.mkdir()
@@ -129,6 +141,7 @@ def main():
             assert identity["version"] == version
             assert identity["source_revision"] == info["source_revision"]
             assert identity["build_layout"] == info["build_layout"]
+            assert identity["build_layout"] == args.layout
             assert identity["publisher_verified"] is False
         if args.expected_revision:
             assert info["source_revision"] == args.expected_revision

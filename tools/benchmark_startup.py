@@ -160,7 +160,7 @@ def mcp_probe(exe, env, root):
         process.stdin.write(b'{"jsonrpc":"2.0","method":"notifications/initialized"}\n')
         process.stdin.flush()
         tools = rpc(2, "tools/list", {})["tools"]
-        if len(tools) != 59:
+        if len(tools) != 36:
             raise RuntimeError("Packaged tool catalog changed")
         discovered = (time.perf_counter() - started) * 1000
         status = rpc(3, "tools/call", {"name": "bridge_status", "arguments": {}})

@@ -16,6 +16,22 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from .cloud_agent import CLOUD_USER_AGENT, device_url
 
 
+_FIXES = {
+    "pairing_missing": ("pairing", "Pair the device from the local UDB Manager."),
+    "pairing_invalid": ("pairing", "Verify the local device pairing before reconnecting."),
+    "project_read_not_advertised": ("worker", "Deploy a project-read-capable Worker to staging."),
+    "Access-aware Worker code has not been deployed": ("worker", "Check the deployed Worker build for Access support."),
+    "oauth_challenge_missing_or_wrong_status": ("access", "Check Cloudflare Access on the exact device MCP path and enable Managed OAuth; leave the WebSocket path unprotected."),
+    "preflight_failed": ("network", "Check the public Worker health and network connection."),
+    "passed_public_preflight": ("live_check", "Public checks passed only. Verify owner login and a permitted fixture read in ChatGPT."),
+}
+
+
+def recovery(reason: str) -> dict[str, str]:
+    stage, action = _FIXES.get(reason, _FIXES["preflight_failed"])
+    return {"stage": stage, "next_action": action}
+
+
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
@@ -180,16 +196,20 @@ def paired_report(home, *, auth_mode="cloudflare-access", opener=None) -> dict:
             raise ValueError("Invalid pairing")
         device_url(relay, device_id)
     except FileNotFoundError:
-        return {**report, "reason": "pairing_missing"}
+        return {**report, "reason": "pairing_missing", **recovery("pairing_missing")}
     except (OSError, ValueError, KeyError, TypeError, CommandError):
-        return {**report, "reason": "pairing_invalid"}
+        return {**report, "reason": "pairing_invalid", **recovery("pairing_invalid")}
     try:
         result = check(
             relay, device_id, opener, auth_mode=auth_mode, require_project_read=True
         )
     except (OSError, ValueError, TypeError, HTTPError, URLError) as exc:
-        return {**report, "reason": failure_reason(exc)}
-    return {**report, **result, "result": "passed_public_preflight"}
+        reason = failure_reason(exc)
+        return {**report, "reason": reason, **recovery(reason)}
+    return {
+        **report, **result, "result": "passed_public_preflight",
+        **recovery("passed_public_preflight"),
+    }
 
 
 def failure_reason(exc) -> str:

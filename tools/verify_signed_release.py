@@ -111,8 +111,8 @@ def verify_archive_manifest(package: zipfile.ZipFile) -> dict:
             item.is_dir()
             or not name.startswith("UDB/")
             or len(name) > 512
-            or "\\\\" in name
-            or "\\x00" in name
+            or "\\" in name
+            or "\x00" in name
             or any(part in ("", ".", "..") for part in name.split("/"))
             or name.casefold() in seen_casefold
             or ((item.external_attr >> 16) & 0o170000) == 0o120000
@@ -139,11 +139,11 @@ def verify_archive_manifest(package: zipfile.ZipFile) -> dict:
         manifest = manifest_bytes.decode("ascii")
     except UnicodeDecodeError:
         raise ValueError("Standalone manifest must be ASCII") from None
-    if not manifest.endswith("\\n"):
+    if not manifest.endswith("\n"):
         raise ValueError("Standalone manifest missing final newline")
     expected = {}
     for line in manifest.splitlines():
-        match = re.fullmatch(r"([0-9a-f]{64})  ([^\\r\\n]+)", line)
+        match = re.fullmatch(r"([0-9a-f]{64})  ([^\r\n]+)", line)
         if not match:
             raise ValueError("Invalid standalone checksum line")
         digest, relative = match.groups()

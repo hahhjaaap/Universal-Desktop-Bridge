@@ -106,10 +106,29 @@ test("origin mismatch and unsupported protocol cannot reach a device", async () 
     method: "ping" }, { headers: { Origin: "https://evil.example" } }),
   env, id, stub, fetchImpl);
   assert.equal(badOrigin.status, 403);
+  // Protocol negotiation runs only *after* a verified Access subject/device
+  // grant. A syntactically valid version header must not become an auth bypass.
+  const accessEnv = { UDB_AUTH_MODE: "cloudflare-access",
+    UDB_ACCESS_AUD: "version-test-audience",
+    UDB_DEVICE_GRANTS: JSON.stringify({ [id]: {
+      "owner@example.test": ["bridge_status"],
+    } }) };
+  const access = { aud: "version-test-audience",
+    getIdentity: async () => ({ email: "owner@example.test" }) };
   const wrongVersion = await handleMcp(request({ jsonrpc: "2.0", id: 1,
     method: "ping" }, { headers: { "MCP-Protocol-Version": "other" } }),
-  env, id, stub, fetchImpl);
+  accessEnv, id, stub, fetch, access);
   assert.equal(wrongVersion.status, 400);
+  const details = await wrongVersion.json();
+  assert.equal(details.error.code, -32022);
+  assert.equal(details.error.data.requested, "other");
+  assert.ok(details.error.data.supported.includes("2026-07-28"));
+  const denied = await handleMcp(request({ jsonrpc: "2.0", id: 2,
+    method: "ping" }, { headers: { "MCP-Protocol-Version": "other" } }),
+  accessEnv, id, stub, fetch, {
+    ...access, getIdentity: async () => ({ email: "outsider@example.test" }),
+  });
+  assert.equal(denied.status, 403);
 });
 
 test("gateway discovers and calls explicitly granted project read tools only", async () => {

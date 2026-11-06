@@ -261,6 +261,17 @@ before forwarding to the existing 2025 Windows stdio proxy; its local bootstrap
 and serial execution remain unchanged. Discovery/catalog responses are private
 and not cacheable across identities. No additional backend RPC method is enabled.
 
+The gateway is **dual-era**: authenticated `server/discover` accurately lists
+both `2026-07-28` and the supported 2025 initialize-handshake revisions.
+This is intentional and permitted by the MCP versioning specification;
+it is not permission to use a newer tool or bypass the local approval rules.
+After authenticating the Access identity and exact device grant, unsupported
+protocol versions now return HTTP 400 with a JSON-RPC
+`UnsupportedProtocolVersionError` (`-32022`) and the fixed list of
+supported versions. A mismatch between the HTTP protocol version and
+per-request metadata instead returns `-32020`. Malformed RPC IDs and
+oversized version headers fail without reflecting the untrusted value.
+
 During the live staging investigation, rejected requests carried
 `MCP-Protocol-Version: 2026-07-28` and received HTTP 400, while legacy requests
 and dispatched device RPCs returned 200. Increasing FIFO capacity alone does

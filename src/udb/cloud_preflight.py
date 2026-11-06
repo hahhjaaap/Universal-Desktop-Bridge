@@ -71,7 +71,7 @@ def _trusted_authorization_servers(value) -> bool:
     for item in value:
         if not isinstance(item, str) or not item or len(item) > 500:
             return False
-        if item.strip() != item:
+        if item.strip() != item or any(ord(ch) < 32 for ch in item):
             return False
         try:
             url = urlsplit(item)
@@ -82,7 +82,6 @@ def _trusted_authorization_servers(value) -> bool:
                 or url.password is not None
                 or url.query
                 or url.fragment
-                or url.port is not None
             ):
                 return False
         except ValueError:
@@ -182,7 +181,7 @@ def check(
         challenge = exc.headers.get("WWW-Authenticate", "")
         if (
             exc.code != 401
-            or not re.match(r"^Bearer\\s", challenge, re.IGNORECASE)
+            or not re.match(r"^Bearer\s", challenge, re.IGNORECASE)
             or "resource_metadata=" not in challenge
         ):
             raise ValueError("oauth_challenge_missing_or_wrong_status") from None

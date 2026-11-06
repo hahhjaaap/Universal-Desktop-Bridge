@@ -117,7 +117,9 @@ def run(path: Path) -> dict:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("report", type=Path, help="Owner-reviewed redacted JSON checklist")
+    parser.add_argument(
+        "report", type=Path, help="Owner-reviewed redacted JSON checklist"
+    )
     args = parser.parse_args(argv)
     result = run(args.report)
     print(json.dumps(result, sort_keys=True))

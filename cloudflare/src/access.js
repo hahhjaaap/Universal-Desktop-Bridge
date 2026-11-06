@@ -147,6 +147,20 @@ export async function authorizeAccess(access, env, deviceId, request = null,
     const identity = await verifiedAccessIdentity(request, env, fetchImpl);
     if (typeof identity.sub !== "string" || !ACCESS_SUB.test(identity.sub))
       throw new AuthError();
+    // If the Access runtime separately exposes an identity, it must not
+    // disagree with the signed assertion. WARP may expose only aud; in that
+    // case the signature remains the sole source of user identity.
+    if (typeof access?.getIdentity === "function") {
+      let observed = null;
+      try { observed = await access.getIdentity(); }
+      catch { /* Optional runtime identity unavailable; signed JWT required. */ }
+      if (observed) {
+        if ((emailSubject(observed.email) && observed.email !== identity.email) ||
+            (typeof observed.user_uuid === "string" &&
+              observed.user_uuid.toLowerCase() !== identity.sub.toLowerCase()))
+          throw new AuthError();
+      }
+    }
     subject = cfg.team + "#" + identity.sub.toLowerCase();
   } else {
     if (access) {

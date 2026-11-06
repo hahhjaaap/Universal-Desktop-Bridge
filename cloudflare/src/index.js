@@ -10,12 +10,10 @@ const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
     "x-content-type-options": "nosniff" }
 });
 const failure = (status, code) => json({ error: code }, status);
-// The Windows stdio proxy stays strictly serial. Accept a bounded FIFO
-// burst of up to ten read-only requests (one active, nine waiting), without
-// sending concurrent RPC frames to stdio. Mutations are never queued/replayed.
-const MAX_PENDING_PER_DEVICE = 1;
-const MAX_QUEUED_READS = 9;
-const READ_QUEUE_WAIT_MS = 20000;
+// A device may run up to ten independent read RPCs at once. Each request
+// retains a distinct relay ID and a separate local stdio proxy on Windows.
+// Side-effecting RPCs remain exclusive (no read/mutation overlap or replay).
+const MAX_PENDING_PER_DEVICE = 10;
 const isReadRpc = (rpc) => (
   ["initialize", "tools/list", "ping"].includes(rpc.method) ||
   (rpc.method === "tools/call" &&
@@ -129,8 +127,6 @@ export class DeviceRelay {
     this.ctx = ctx;
     this.env = env;
     this.pending = new Map();
-    this.waitingReads = [];
-    this.queuedReads = 0;
   }
 
   deviceSocket() {
@@ -223,36 +219,29 @@ export class DeviceRelay {
       if (!connection) return failure(503, "device_offline");
       const rpc = await readJson(request);
       if (!validRpc(rpc)) return failure(400, "invalid_rpc");
-      if (this.pending.size >= MAX_PENDING_PER_DEVICE || this.waitingReads.length) {
-        if (!isReadRpc(rpc) || this.waitingReads.length >= MAX_QUEUED_READS)
-          return failure(429, "device_busy");
-        return await new Promise((resolve) => {
-          const waiter = { ws: connection, rpc, resolve, timer: null };
-          waiter.timer = setTimeout(() => {
-            const index = this.waitingReads.indexOf(waiter);
-            if (index < 0) return;
-            this.waitingReads.splice(index, 1);
-            this.queuedReads--;
-            resolve(failure(429, "device_busy"));
-          }, READ_QUEUE_WAIT_MS);
-          this.waitingReads.push(waiter);
-          this.queuedReads++;
-          this.dispatchQueuedRead();
-        });
-      }
+      // Reads may share the device only with reads. Mutation RPCs are
+      // exclusive, so concurrent desktop/file writes cannot race each other.
+      const readOnly = isReadRpc(rpc);
+      if (this.pending.size >= MAX_PENDING_PER_DEVICE ||
+          (this.pending.size && (!readOnly ||
+            [...this.pending.values()].some((entry) => !entry.readOnly))))
+        return failure(429, "device_busy");
       return await this.dispatchRpc(connection, rpc);
     }
     return failure(404, "not_found");
   }
 
   dispatchRpc(connection, rpc) {
-    // Reservation and dispatch occur synchronously: exactly one active RPC,
-    // even if many HTTP handlers are waiting on the same Durable Object.
+    // Reservation and dispatch occur synchronously in this Durable Object.
+    // Up to ten reads can be active; mutations reserve the entire device.
     const current = this.deviceSocket();
     if (!current) return Promise.resolve(failure(503, "device_offline"));
     if (current !== connection)
       return Promise.resolve(failure(503, "device_connection_changed"));
-    if (this.pending.size >= MAX_PENDING_PER_DEVICE)
+    const readOnly = isReadRpc(rpc);
+    if (this.pending.size >= MAX_PENDING_PER_DEVICE ||
+        (this.pending.size && (!readOnly ||
+          [...this.pending.values()].some((entry) => !entry.readOnly))))
       return Promise.resolve(failure(429, "device_busy"));
     const requestId = crypto.randomUUID();
     return new Promise((resolve) => {
@@ -263,7 +252,7 @@ export class DeviceRelay {
         // and discard its queue instead of forwarding a second RPC to it.
         this.webSocketClose(connection, 1011, "rpc_deadline_exceeded");
       }, 25000);
-      this.pending.set(requestId, { ws: connection, resolve, timeout, rpcId: rpc.id });
+      this.pending.set(requestId, { ws: connection, resolve, timeout, rpcId: rpc.id, readOnly });
       try {
         connection.send(JSON.stringify({ kind: "rpc", id: requestId, rpc }));
       } catch {
@@ -273,28 +262,6 @@ export class DeviceRelay {
         this.webSocketClose(connection, 1011, "device_send_failed");
       }
     });
-  }
-
-  dispatchQueuedRead() {
-    if (this.pending.size >= MAX_PENDING_PER_DEVICE) return;
-    while (this.waitingReads.length) {
-      const next = this.waitingReads.shift();
-      this.queuedReads--;
-      clearTimeout(next.timer);
-      const current = this.deviceSocket();
-      if (!current) {
-        next.resolve(failure(503, "device_offline"));
-        continue;
-      }
-      if (current !== next.ws) {
-        next.resolve(failure(503, "device_connection_changed"));
-        continue;
-      }
-      // dispatchRpc installs the active entry synchronously, preserving FIFO.
-      // A queued request is never retried, even on timeout or disconnect.
-      this.dispatchRpc(next.ws, next.rpc).then(next.resolve);
-      return;
-    }
   }
 
   webSocketMessage(ws, message) {
@@ -326,7 +293,6 @@ export class DeviceRelay {
       return;
     }
     waiting.resolve(json(rpc));
-    this.dispatchQueuedRead();
   }
 
   webSocketClose(ws, code, reason) {
@@ -337,17 +303,6 @@ export class DeviceRelay {
         pending.resolve(failure(503, "device_disconnected_outcome_unknown"));
       }
     }
-    // No queued read may jump to a new device connection after replacement.
-    const current = this.deviceSocket();
-    const queuedError = current && current !== ws ?
-      "device_connection_changed" : "device_offline";
-    this.waitingReads = this.waitingReads.filter((waiter) => {
-      if (waiter.ws !== ws) return true;
-      clearTimeout(waiter.timer);
-      this.queuedReads--;
-      waiter.resolve(failure(503, queuedError));
-      return false;
-    });
     try { ws.close(code || 1000, reason || "closed"); } catch { /* already closed */ }
   }
   webSocketError(ws) {

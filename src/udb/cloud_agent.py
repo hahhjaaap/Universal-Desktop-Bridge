@@ -277,7 +277,9 @@ class ParallelLocalProxies:
         with self.lock:
             # A poisoned local stdio worker may have completed a mutation with
             # an unknown outcome. Fail closed until a fresh device connection.
-            if self.closed or self.failed.is_set():
+            if self.closed:
+                raise RuntimeError("Cloud RPC pool is closed")
+            if self.failed.is_set():
                 raise RuntimeError("Cloud RPC pool is unavailable")
             return self.executor.submit(self._invoke, rpc)
 

@@ -198,14 +198,13 @@ def check(
             # Never accept a different device or a broad origin as proof that
             # a device-specific Access policy was applied at the edge.
             scoped_metadata = parsed.path.endswith("/v1/devices/" + device_id + "/mcp")
-            valid_resource = (
+            valid_resource = isinstance(resource_id, str) and (
                 resource_id == resource
                 if scoped_metadata
                 else resource_id in {origin, resource}
             )
             if (
                 access_metadata.get("protected") is not True
-                or not isinstance(resource_id, str)
                 or not valid_resource
                 or "https://" + team_host not in servers
             ):

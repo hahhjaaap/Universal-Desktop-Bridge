@@ -92,7 +92,6 @@ def valid_remote_rpc(rpc: object) -> bool:
     return True
 
 
-
 def encode_relay_result(relay_id: str, reply: dict) -> str:
     """Bound the complete WebSocket envelope, not just the inner stdio reply.
 

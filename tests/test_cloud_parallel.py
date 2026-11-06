@@ -279,3 +279,44 @@ def test_unexpected_worker_exception_fails_closed_without_leaking(monkeypatch, t
     assert responses[0]["rpc"]["id"] == 1
     assert responses[0]["rpc"]["error"]["message"] == "InternalError"
     assert "private" not in json.dumps(responses)
+
+
+def test_agent_releases_pool_even_when_websocket_close_raises(monkeypatch, tmp_path):
+    created = []
+
+    class TrackingPool:
+        def __init__(self, _settings):
+            self.closed = False
+            created.append(self)
+
+        def close(self):
+            self.closed = True
+
+    class BrokenSocket:
+        def settimeout(self, value):
+            assert value is None
+
+        def recv(self):
+            return ""
+
+        def close(self):
+            raise OSError("connection already failed")
+
+    monkeypatch.setattr(
+        cloud_agent,
+        "load_pairing",
+        lambda _home: ("https://staging.workers.dev", "a" * 32, tmp_path / "token"),
+    )
+    monkeypatch.setattr(cloud_agent, "load_device_token", lambda *_args: "x" * 48)
+    monkeypatch.setattr(cloud_agent, "ParallelLocalProxies", TrackingPool)
+    monkeypatch.setattr(
+        websocket, "create_connection", lambda *_args, **_kwargs: BrokenSocket()
+    )
+    monkeypatch.setattr(
+        cloud_agent.time,
+        "sleep",
+        lambda _delay: (_ for _ in ()).throw(KeyboardInterrupt),
+    )
+    assert cloud_agent.run(SimpleNamespace(home=tmp_path)) == 0
+    assert len(created) == 1
+    assert created[0].closed

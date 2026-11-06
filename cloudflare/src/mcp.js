@@ -152,8 +152,9 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
       }, user) });
     if (!["tools/list", "tools/call"].includes(rpc.method))
       return rpcError(rpc, -32601, "Method not found", 404);
-    // The gateway adapts modern stateless HTTP to the existing serial 2025
-    // stdio proxy, whose LocalProxy bootstraps itself before the first call.
+    // The gateway adapts modern stateless HTTP to the 2025 stdio proxies.
+    // Each Windows proxy remains serial, but independent reads may use
+    // separate proxy instances; initialization happens per instance.
     // Untrusted client metadata never controls local initialization/identity.
     rpc = { ...rpc, params: { ...rpc.params } };
     delete rpc.params._meta;

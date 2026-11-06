@@ -18,8 +18,9 @@ No reconnect or code deployment automatically changes a grant. Never add write,
 execution, desktop, approval or legacy tools to `udb:read`. Local project edit/test
 workflows use their existing, separate owner approvals; this gateway remains read-only.
 
-The relay uses the same six-tool classification for authorization and bounded
-read queuing. A queued request cannot move onto a replacement device socket.
+The relay uses the same six-tool classification for authorization and concurrent
+read scheduling. Up to ten read RPCs can run on separate local stdio workers;
+an outstanding RPC cannot move onto a replacement device socket.
 After reconnect a fresh local proxy initializes and sends the initialized
 notification before forwarding a resumed call, with one shared deadline. It never
 replays that call. `initialize` reports the actual negotiated device protocol.
@@ -209,29 +210,34 @@ The staging reliability experiment on 2026-11-06 proved 30/30 sequential
 ChatGPT reads but only 17/30 valid responses under five concurrent reads
 (issue #94). Do not mark burst concurrency accepted from sequential results.
 
-The proposed relay FIFO permits **one active request and nine waiting
-read-only requests** for a single paired device. It does **not** execute ten
-Windows operations in parallel: the local stdio proxy remains serial, and
-all writes, host/terminal, desktop and other mutation RPCs are rejected
-while the device is busy. Waiters have a bounded admission deadline; an
-eleventh concurrent read is rejected. A timeout with unknown device
-outcome closes that device socket and rejects waiting requests rather than
-replaying them. A socket replacement cannot take over old queued reads.
+The new relay scheduler permits **up to ten active read-only requests**
+for a paired device. Its Windows agent lazily starts at most ten independent
+stdio proxies and runs these calls in parallel threads. The eleventh active
+request returns HTTP 429. Mutation RPCs are **exclusive** and cannot overlap
+with reads or another mutation; this is not unrestricted parallel desktop
+control or simultaneous file writes.
+
+Each RPC has a distinct correlation ID and a bounded local timeout. A
+connection timeout, poisoned local worker, or socket replacement fails
+outstanding calls without replaying them. Per-device identity grants and
+Windows owner permission checks are unchanged. Real throughput depends
+on Windows CPU, memory, the startup cost of independent stdio workers and
+network conditions, so ten active calls is **not** a guarantee of 10× speed.
 
 After source CI and a reviewed deployment **only to the isolated staging
 Worker**, repeat the real owner-authenticated ChatGPT fixture test:
 
 - 30 batches of five simultaneous `read_file` calls, each returning both
   fixture SHA-256s and expected contents; separately try a burst of ten.
-- Verify queue overflow, unexpected identities/devices, revocation, blocked
-  paths and mutating tools still fail closed. Ensure queue admission never
-  changes `UDB_DEVICE_GRANTS` or local project permissions.
+- Verify the eleventh concurrent read is rejected, mutations are exclusive,
+  and unexpected identities/devices, revocation and protected paths are denied.
+  Concurrency must never change `UDB_DEVICE_GRANTS` or local permissions.
 - Measure response success rate, p50/p95 latency, HTTP status/reason where
-  available, total queue wait and reconnect behaviour. Do not log personal
+  available, peak active operations and reconnect behaviour. Do not log personal
   data, file content, headers, or tokens.
 - Test client timeouts and network-loss cases. **No promise of 10×
-  throughput:** FIFO admits a burst but executes requests one at a time;
-  client-side and upstream timeouts may still limit completion.
+  throughput:** process startup, machine load and upstream timeouts can
+  still limit completion.
 - Keep #94 open until owner OAuth reads, real second-identity denial,
   network-condition matrix and security review all pass.
 

@@ -47,7 +47,9 @@ class FakeOpener:
             401,
             "unauthorized",
             {
-                "WWW-Authenticate": 'Bearer resource_metadata="https://example.workers.dev"'
+                "WWW-Authenticate": 'Bearer resource_metadata="https://example.workers.dev/.well-known/oauth-protected-resource/v1/devices/'
+                + "a" * 32
+                + '/mcp"'
             },
             None,
         )

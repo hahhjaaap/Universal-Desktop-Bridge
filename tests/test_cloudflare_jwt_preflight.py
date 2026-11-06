@@ -36,9 +36,7 @@ class PublicJwt:
         self.urls = []
         self.challenge = challenge
         self.servers = (
-            ["https://identity.example.org/tenant/"]
-            if servers is None
-            else servers
+            ["https://identity.example.org/tenant/"] if servers is None else servers
         )
         self.header_prefix = header_prefix
 
@@ -50,17 +48,23 @@ class PublicJwt:
         if request.full_url == ORIGIN + "/health":
             return Response({"status": "ok", "kind": "private-relay-prototype"})
         if request.full_url == METADATA:
-            return Response({
-                "resource": RESOURCE,
-                "authorization_servers": self.servers,
-            })
+            return Response(
+                {
+                    "resource": RESOURCE,
+                    "authorization_servers": self.servers,
+                }
+            )
         if request.full_url == RESOURCE:
             raise HTTPError(
                 RESOURCE,
                 401,
                 "denied",
-                {"WWW-Authenticate": self.header_prefix
-                 + 'resource_metadata="' + self.challenge + '"'},
+                {
+                    "WWW-Authenticate": self.header_prefix
+                    + 'resource_metadata="'
+                    + self.challenge
+                    + '"'
+                },
                 None,
             )
         raise AssertionError("Unexpected request")

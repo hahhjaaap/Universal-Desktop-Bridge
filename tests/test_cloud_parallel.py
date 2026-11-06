@@ -181,3 +181,101 @@ def test_cloud_agent_sends_ten_parallel_results_with_distinct_ids(
     assert all(
         item["rpc"]["result"]["parallel"] == item["rpc"]["id"] for item in received
     )
+
+
+def test_dead_stdio_process_poisoned_even_when_flag_is_false(monkeypatch):
+    calls = []
+
+    class DeadProxy:
+        unusable = False
+
+        def __init__(self, _settings):
+            self.process = SimpleNamespace(poll=lambda: 7)
+
+        def call(self, rpc):
+            calls.append(rpc["id"])
+            raise RuntimeError("Local UDB proxy is unavailable")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(cloud_agent, "LocalProxy", DeadProxy)
+    pool = cloud_agent.ParallelLocalProxies(SimpleNamespace())
+    try:
+        future = pool.submit({"jsonrpc": "2.0", "id": 10, "method": "tools/list"})
+        with pytest.raises(RuntimeError, match="unavailable"):
+            future.result(timeout=5)
+        assert pool.failed.is_set()
+        with pytest.raises(RuntimeError, match="unavailable"):
+            pool.submit({"jsonrpc": "2.0", "id": 11, "method": "tools/list"})
+        assert calls == [10]
+    finally:
+        pool.close()
+
+
+def test_unexpected_worker_exception_fails_closed_without_leaking(monkeypatch, tmp_path):
+    responses = []
+    response_ready = threading.Event()
+    closed = threading.Event()
+
+    class FailingProxy:
+        unusable = False
+
+        def __init__(self, _settings):
+            pass
+
+        def call(self, _rpc):
+            raise LookupError("private path or secret must not be exposed")
+
+        def close(self):
+            pass
+
+    class FakeSocket:
+        index = 0
+
+        def settimeout(self, value):
+            assert value is None
+
+        def recv(self):
+            if self.index == 0:
+                self.index += 1
+                return json.dumps(
+                    {
+                        "kind": "rpc",
+                        "id": "relay-1",
+                        "rpc": {"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+                    }
+                )
+            assert response_ready.wait(timeout=10)
+            return ""
+
+        def send(self, frame):
+            responses.append(json.loads(frame))
+            response_ready.set()
+
+        def close(self):
+            closed.set()
+
+    monkeypatch.setattr(
+        cloud_agent,
+        "load_pairing",
+        lambda _home: ("https://staging.workers.dev", "a" * 32, tmp_path / "token"),
+    )
+    monkeypatch.setattr(cloud_agent, "load_device_token", lambda *_args: "x" * 48)
+    monkeypatch.setattr(cloud_agent, "LocalProxy", FailingProxy)
+    monkeypatch.setattr(
+        websocket, "create_connection", lambda *_args, **_kwargs: FakeSocket()
+    )
+    monkeypatch.setattr(
+        cloud_agent.time,
+        "sleep",
+        lambda _delay: (_ for _ in ()).throw(KeyboardInterrupt),
+    )
+    assert cloud_agent.run(SimpleNamespace(home=tmp_path)) == 0
+    assert response_ready.is_set()
+    assert closed.is_set()
+    assert len(responses) == 1
+    assert responses[0]["id"] == "relay-1"
+    assert responses[0]["rpc"]["id"] == 1
+    assert responses[0]["rpc"]["error"]["message"] == "InternalError"
+    assert "private" not in json.dumps(responses)

@@ -40,27 +40,24 @@ def offline_start_failure_evidence(
     """
     result = {
         "stage": "frozen_offline_manager_start",
-        "child_exit": "timeout" if returncode is None else
-        "nonzero" if returncode else "zero",
+        "child_exit": "timeout"
+        if returncode is None
+        else "nonzero"
+        if returncode
+        else "zero",
         "reported_status": "missing_or_invalid",
         "reported_running": False,
         "reported_mode": "unknown",
         "lock_present": (home / "state" / "manager.lock").is_file(),
-        "headless_status_present": (
-            home / "state" / "headless-status.json"
-        ).is_file(),
-        "onefile_extract_count": min(
-            20, sum(1 for _ in runtime_temp.glob("_MEI*"))
-        ),
+        "headless_status_present": (home / "state" / "headless-status.json").is_file(),
+        "onefile_extract_count": min(20, sum(1 for _ in runtime_temp.glob("_MEI*"))),
     }
     if len(stdout) <= 8192:
         try:
             payload = json.loads(stdout)
             if isinstance(payload, dict):
                 result["reported_status"] = "json"
-                result["reported_running"] = (
-                    payload.get("manager_running") is True
-                )
+                result["reported_running"] = payload.get("manager_running") is True
                 mode = payload.get("connection_mode")
                 if mode in ("offline", "online", "unknown"):
                     result["reported_mode"] = mode

@@ -26,9 +26,7 @@ def test_offline_manager_failure_evidence_contains_only_fixed_fields(tmp_path):
             "home": str(home),
         }
     )
-    result = offline_start_failure_evidence(
-        home, runtime, returncode=2, stdout=output
-    )
+    result = offline_start_failure_evidence(home, runtime, returncode=2, stdout=output)
     assert result == {
         "stage": "frozen_offline_manager_start",
         "child_exit": "nonzero",

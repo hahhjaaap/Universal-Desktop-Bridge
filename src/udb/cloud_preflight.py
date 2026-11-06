@@ -62,6 +62,34 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
+def _trusted_authorization_servers(value) -> bool:
+    """Validate untrusted discovery values without following them."""
+    if not isinstance(value, list) or not 1 <= len(value) <= 4:
+        return False
+    if len(set(v for v in value if isinstance(v, str))) != len(value):
+        return False
+    for item in value:
+        if not isinstance(item, str) or not item or len(item) > 500:
+            return False
+        if item.strip() != item:
+            return False
+        try:
+            url = urlsplit(item)
+            if (
+                url.scheme != "https"
+                or not url.hostname
+                or url.username is not None
+                or url.password is not None
+                or url.query
+                or url.fragment
+                or url.port is not None
+            ):
+                return False
+        except ValueError:
+            return False
+    return True
+
+
 def check(
     relay: str,
     device_id: str,
@@ -126,7 +154,9 @@ def check(
         if (
             not isinstance(metadata_value, dict)
             or metadata_value.get("resource") != resource
-            or not metadata_value.get("authorization_servers")
+            or not _trusted_authorization_servers(
+                metadata_value.get("authorization_servers")
+            )
         ):
             raise ValueError("Invalid OAuth protected resource metadata")
         report["oauth_metadata"] = "ok"
@@ -150,8 +180,19 @@ def check(
         opener.open(request, timeout=8)
     except HTTPError as exc:
         challenge = exc.headers.get("WWW-Authenticate", "")
-        if exc.code != 401 or "resource_metadata=" not in challenge:
+        if (
+            exc.code != 401
+            or not re.match(r"^Bearer\\s", challenge, re.IGNORECASE)
+            or "resource_metadata=" not in challenge
+        ):
             raise ValueError("oauth_challenge_missing_or_wrong_status") from None
+        if auth_mode == "jwt":
+            # A mere resource_metadata token is not proof that this Worker
+            # challenges for the exact device-scoped resource. Do not follow
+            # arbitrary locations or treat another device as authenticated.
+            match = re.search(r'resource_metadata="([^"]+)"', challenge)
+            if not match or match.group(1) != metadata:
+                raise ValueError("Untrusted Cloudflare resource metadata URL")
         if auth_mode == "cloudflare-access":
             # A 403, an internal JWT challenge, or a fake string containing
             # "cloudflare" cannot establish Managed OAuth readiness. Fetch

@@ -45,13 +45,23 @@ def test_native_overlay_follows_registered_tab_without_input(tmp_path, monkeypat
     )
     pointer = None
     try:
-        deadline = time.monotonic() + 20
+        # Hosted Windows runners may be busy initializing a WPF compositor;
+        # allow a bounded longer startup before declaring an actual failure.
+        wait_seconds = 45 if os.environ.get("CI") == "true" else 20
+        deadline = time.monotonic() + wait_seconds
         while not ready.exists() and time.monotonic() < deadline:
             error = ready.with_name(ready.name + ".error")
             assert process.alive(), (
                 error.read_text() if error.exists() else "Fixture exited"
             )
             time.sleep(0.05)
+        if not ready.exists():
+            error = ready.with_name(ready.name + ".error")
+            pytest.fail(
+                error.read_text() if error.exists()
+                else "Synthetic WPF fixture did not publish a window within "
+                f"{wait_seconds}s; verify the runner's interactive desktop"
+            )
         hwnd = json.loads(ready.read_text())["hwnd"]
         pid = win32process.GetWindowThreadProcessId(hwnd)[1]
         assert process.owns_pid(pid)

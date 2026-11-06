@@ -102,6 +102,19 @@ export function deviceGrant(env, deviceId, subject) {
         !Object.hasOwn(users, subject)) return [];
     const tools = users[subject];
     if (!Array.isArray(tools) || tools.length > READ_TOOLS.length) return [];
+    // Opt-in migration guard for old per-device secrets. Historically a
+    // corrupted mixed grant silently kept any recognized tools. Strict mode
+    // rejects the entire subject grant instead of narrowing it, including
+    // duplicate entries. A missing/false flag preserves existing deployments.
+    const strict = env?.UDB_STRICT_LEGACY_GRANTS;
+    if (strict !== undefined && strict !== "true" && strict !== "false")
+      return [];
+    if (strict === "true") {
+      if (tools.length === 0 || new Set(tools).size !== tools.length ||
+          !tools.every((name) => typeof name === "string" && isReadTool(name)))
+        return [];
+      return [...tools];
+    }
     return [...new Set(tools.filter((name) => typeof name === "string" && isReadTool(name)))];
   } catch { return []; }
 }

@@ -342,3 +342,28 @@ def test_pool_cleanup_continues_after_one_worker_close_fails():
     assert cleaned == ["broken", "healthy"]
     assert pool.closed
     assert pool.failed.is_set()
+
+
+def test_large_stdio_reply_is_redacted_before_cloudflare_frame_limit():
+    minimal = {"jsonrpc": "2.0", "id": 17, "result": {"content": ""}}
+    overhead = len(json.dumps(minimal, separators=(",", ":")))
+    # The child response fits within its local 1 MiB frame, but once an
+    # additional relay envelope is added it would exceed Cloudflare's limit.
+    reply = {
+        "jsonrpc": "2.0",
+        "id": 17,
+        "result": {"content": "sensitive" * 1 + "x" * (cloud_agent._MAX_FRAME - overhead - 25)},
+    }
+    assert len(json.dumps(reply, separators=(",", ":"))) < cloud_agent._MAX_FRAME
+    wire = cloud_agent.encode_relay_result("relay-17", reply)
+    assert len(wire.encode("utf-8")) <= cloud_agent._MAX_FRAME
+    payload = json.loads(wire)
+    assert payload["id"] == "relay-17"
+    assert payload["rpc"] == {
+        "jsonrpc": "2.0",
+        "id": 17,
+        "error": {"code": -32000, "message": "ResponseTooLarge"},
+    }
+    assert "sensitive" not in wire
+    small = {"jsonrpc": "2.0", "id": 18, "result": {"ok": True}}
+    assert json.loads(cloud_agent.encode_relay_result("relay-18", small))["rpc"] == small

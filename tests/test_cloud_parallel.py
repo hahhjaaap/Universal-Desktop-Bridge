@@ -352,7 +352,9 @@ def test_large_stdio_reply_is_redacted_before_cloudflare_frame_limit():
     reply = {
         "jsonrpc": "2.0",
         "id": 17,
-        "result": {"content": "sensitive" * 1 + "x" * (cloud_agent._MAX_FRAME - overhead - 25)},
+        "result": {
+            "content": "sensitive" + "x" * (cloud_agent._MAX_FRAME - overhead - 25)
+        },
     }
     assert len(json.dumps(reply, separators=(",", ":"))) < cloud_agent._MAX_FRAME
     wire = cloud_agent.encode_relay_result("relay-17", reply)
@@ -367,3 +369,24 @@ def test_large_stdio_reply_is_redacted_before_cloudflare_frame_limit():
     assert "sensitive" not in wire
     small = {"jsonrpc": "2.0", "id": 18, "result": {"ok": True}}
     assert json.loads(cloud_agent.encode_relay_result("relay-18", small))["rpc"] == small
+
+
+def test_queued_worker_does_not_start_after_pool_failure(monkeypatch):
+    created = []
+
+    class FakeProxy:
+        def __init__(self, _settings):
+            created.append(True)
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(cloud_agent, "LocalProxy", FakeProxy)
+    pool = cloud_agent.ParallelLocalProxies(SimpleNamespace())
+    try:
+        pool.failed.set()
+        with pytest.raises(RuntimeError, match="unavailable"):
+            pool._invoke({"jsonrpc": "2.0", "id": 20, "method": "tools/list"})
+        assert created == []
+    finally:
+        pool.close()

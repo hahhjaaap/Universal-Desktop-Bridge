@@ -129,7 +129,9 @@ def test_invalid_manifest_encoding_or_missing_final_newline_is_rejected(tmp_path
             verify(pkg)
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Candidate Authenticode gate is Windows-only")
+@pytest.mark.skipif(
+    os.name != "nt", reason="Candidate Authenticode gate is Windows-only"
+)
 def test_archive_manifest_is_required_before_pinned_signature_can_pass(
     tmp_path, monkeypatch
 ):

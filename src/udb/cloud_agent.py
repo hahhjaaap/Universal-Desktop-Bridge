@@ -92,6 +92,36 @@ def valid_remote_rpc(rpc: object) -> bool:
     return True
 
 
+
+def encode_relay_result(relay_id: str, reply: dict) -> str:
+    """Bound the complete WebSocket envelope, not just the inner stdio reply.
+
+    A valid near-1 MiB child response can exceed the Durable Object's byte
+    limit once relay IDs and escaping are added. Return a redacted RPC error
+    instead of letting the edge terminate every in-flight request.
+    """
+    wire = json.dumps(
+        {"kind": "rpc_result", "id": relay_id, "rpc": reply},
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    if len(wire) <= _MAX_FRAME:
+        return wire
+    error = {
+        "jsonrpc": "2.0",
+        "id": reply.get("id") if isinstance(reply, dict) else None,
+        "error": {"code": -32000, "message": "ResponseTooLarge"},
+    }
+    bounded = json.dumps(
+        {"kind": "rpc_result", "id": relay_id, "rpc": error},
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    if len(bounded) > _MAX_FRAME:
+        raise ValueError("RPC response ID exceeds relay frame limit")
+    return bounded
+
+
 class LocalProxy:
     """One outstanding MCP RPC per local worker; unknown outcomes aren't retried."""
 
@@ -352,11 +382,7 @@ def run(settings) -> int:
                     # websocket-client serializes sends, but keep the result
                     # framing and close decision ordered across callbacks.
                     with lock:
-                        socket.send(
-                            json.dumps(
-                                {"kind": "rpc_result", "id": relay_id, "rpc": reply}
-                            )
-                        )
+                        socket.send(encode_relay_result(relay_id, reply))
 
                 def rejected(rpc, error):
                     return {

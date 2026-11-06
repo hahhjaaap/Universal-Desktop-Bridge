@@ -320,3 +320,23 @@ def test_agent_releases_pool_even_when_websocket_close_raises(monkeypatch, tmp_p
     assert cloud_agent.run(SimpleNamespace(home=tmp_path)) == 0
     assert len(created) == 1
     assert created[0].closed
+
+
+def test_pool_cleanup_continues_after_one_worker_close_fails():
+    cleaned = []
+
+    class Broken:
+        def close(self):
+            cleaned.append("broken")
+            raise OSError("broken pipe")
+
+    class Healthy:
+        def close(self):
+            cleaned.append("healthy")
+
+    pool = cloud_agent.ParallelLocalProxies(SimpleNamespace())
+    pool.proxies.extend([Broken(), Healthy()])
+    pool.close()
+    assert cleaned == ["broken", "healthy"]
+    assert pool.closed
+    assert pool.failed.is_set()

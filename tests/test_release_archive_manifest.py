@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import warnings
 import zipfile
 
 import pytest
 
+from tools import verify_signed_release
 from tools.verify_signed_release import verify_archive_manifest
 
 FILES = {
@@ -125,3 +127,35 @@ def test_invalid_manifest_encoding_or_missing_final_newline_is_rejected(tmp_path
         pkg = archive(directory, overrides={"UDB/STANDALONE-SHA256SUMS": replacement})
         with pytest.raises(ValueError, match="manifest"):
             verify(pkg)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Candidate Authenticode gate is Windows-only")
+def test_archive_manifest_is_required_before_pinned_signature_can_pass(
+    tmp_path, monkeypatch
+):
+    seen = []
+
+    def synthetic_signature(path):
+        seen.append(path.name)
+        return {
+            "Status": 0,
+            "SignerCertificate": {"Thumbprint": "ab" * 20},
+        }
+
+    monkeypatch.setattr(verify_signed_release, "read_signature", synthetic_signature)
+    report = verify_signed_release.verify_archive(archive(tmp_path), "ab" * 20)
+    assert report == {
+        "verified": True,
+        "signer_thumbprint": "AB" * 20,
+        "members_verified": 3,
+        "manifest_consistent": True,
+    }
+    assert seen == ["udb.exe"]
+    tampered = tmp_path / "tampered"
+    tampered.mkdir()
+    invalid = archive(
+        tampered, overrides={"UDB/install.ps1": b"changed synthetic installer"}
+    )
+    with pytest.raises(ValueError, match="checksum mismatch"):
+        verify_signed_release.verify_archive(invalid, "ab" * 20)
+    assert seen == ["udb.exe"], "Invalid archive must fail before signer check"

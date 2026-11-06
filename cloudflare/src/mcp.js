@@ -8,6 +8,9 @@ export { authorizeAccess } from "./access.js";
 
 const supported = new Set(["2025-03-26", "2025-06-18", "2025-11-25"]);
 const MODERN_VERSION = "2026-07-28";
+// UDB is a dual-era server: it supports both modern per-request metadata
+// and the legacy initialize handshake, so discovery lists both honestly.
+const SUPPORTED_VERSIONS = Object.freeze([MODERN_VERSION, ...supported]);
 const META = "io.modelcontextprotocol/";
 const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(value), {
   status, headers: { "content-type": "application/json; charset=utf-8",
@@ -86,9 +89,8 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   if (origin && origin !== new URL(request.url).origin) return error(403, "invalid_origin");
   if (request.method !== "POST") return error(405, "method_not_allowed");
   const version = request.headers.get("MCP-Protocol-Version") || "2025-03-26";
-  if (!supported.has(version) && version !== MODERN_VERSION)
-    return error(400, "unsupported_protocol_version");
   // Choose exactly one auth scheme; an unknown mode must fail closed.
+  // Even version negotiation must not bypass owner identity/device grants.
   const mode = env?.UDB_AUTH_MODE || "jwt";
   if (mode !== "jwt" && mode !== "cloudflare-access")
     return error(503, "invalid_auth_mode");
@@ -118,6 +120,19 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   const claimedVersion = rpc.params?._meta?.[META + "protocolVersion"];
   if (claimedVersion !== undefined && claimedVersion !== version)
     return rpcError(rpc, -32020, "Protocol header/body mismatch");
+  if (!supported.has(version) && !modern) {
+    // The modern spec requires this structured error so clients can
+    // negotiate; never send arbitrary request arguments or identities.
+    // Validate the id before reflecting it in a JSON-RPC response.
+    if (!((typeof rpc.id === "string" && rpc.id !== "" && rpc.id.length <= 256) ||
+          Number.isSafeInteger(rpc.id)))
+      return error(400, "invalid_rpc_id");
+    if (version.length > 64) return error(400, "invalid_protocol_version");
+    return json({ jsonrpc: "2.0", id: rpc.id, error: {
+      code: -32022, message: "Unsupported protocol version",
+      data: { supported: SUPPORTED_VERSIONS, requested: version },
+    } }, 400);
+  }
   if (modern) {
     const meta = rpc.params?._meta;
     const caps = meta?.[META + "clientCapabilities"];
@@ -132,7 +147,7 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
       return rpcError(rpc, -32600, "Invalid RPC ID");
     if (rpc.method === "server/discover")
       return json({ jsonrpc: "2.0", id: rpc.id, result: modernResult({
-        supportedVersions: [MODERN_VERSION, ...supported], capabilities: { tools: {} },
+         supportedVersions: SUPPORTED_VERSIONS, capabilities: { tools: {} },
         ttlMs: 0, cacheScope: "private",
       }, user) });
     if (!["tools/list", "tools/call"].includes(rpc.method))

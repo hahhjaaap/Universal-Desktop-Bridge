@@ -86,6 +86,11 @@ def test_pool_marks_uncertain_result_failed_without_replaying(monkeypatch):
             future.result(timeout=5)
         assert pool.failed.is_set()
         assert calls == [3]
+        # Once an outcome is uncertain, subsequent RPCs must not be sent on
+        # that device connection, even if free thread slots remain.
+        with pytest.raises(RuntimeError, match="unavailable"):
+            pool.submit({"jsonrpc": "2.0", "id": 4, "method": "tools/list"})
+        assert calls == [3]
     finally:
         pool.close()
 

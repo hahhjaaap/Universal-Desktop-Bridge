@@ -461,8 +461,12 @@ def run(settings) -> int:
                             )
                         )
                 finally:
-                    ws.close()
-                    pool.close()
+                    # WebSocket shutdown itself can raise after network loss.
+                    # Always release the local processes and threads regardless.
+                    try:
+                        ws.close()
+                    finally:
+                        pool.close()
                 # Reset backoff only after a sustained healthy connection.
                 # Brief accept/close cycles otherwise hammer Cloudflare Free.
                 if time.monotonic() - connected_at >= 60:

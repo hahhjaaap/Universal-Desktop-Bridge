@@ -153,6 +153,54 @@ test("queued reads are cancelled and never replayed after socket replacement", a
   assert.equal(h.relay.queuedReads, 0);
 });
 
+test("thirty five-request read bursts complete without lost or duplicated replies", async () => {
+  for (let batch = 0; batch < 30; batch++) {
+    const h = harness();
+    const calls = [h.send(1, "tools/list")];
+    await sent(h);
+    for (let id = 2; id <= 5; id++)
+      calls.push(h.send(id, "tools/call",
+        { name: "read_file", arguments: { project: "fixture", path: "README.md" } }));
+    for (let i = 0; i < 40 && h.relay.queuedReads < 4; i++)
+      await setImmediate();
+    assert.equal(h.relay.queuedReads, 4, "four pending reads in burst " + batch);
+    for (let id = 1; id <= 5; id++) {
+      assert.equal(h.frames[id - 1]?.rpc.id, id, "FIFO in burst " + batch);
+      h.relay.webSocketMessage(h.ws, JSON.stringify({
+        kind: "rpc_result", id: h.frames[id - 1].id,
+        rpc: { jsonrpc: "2.0", id, result: { batch, id } },
+      }));
+      const response = await calls[id - 1];
+      assert.equal(response.status, 200);
+      assert.deepEqual((await response.json()).result, { batch, id });
+      if (id < 5) for (let tries = 0; tries < 20 && h.frames.length <= id; tries++)
+        await setImmediate();
+    }
+    assert.equal(h.frames.length, 5);
+    assert.equal(h.relay.queuedReads, 0);
+    assert.equal(h.relay.pending.size, 0);
+  }
+});
+
+test("invalid active RPC response cancels waiting reads without dispatch", async () => {
+  const h = harness();
+  const first = h.send(1, "tools/list");
+  const forwarded = await sent(h);
+  const queued = [h.send(2, "tools/list"), h.send(3, "tools/list")];
+  for (let i = 0; i < 40 && h.relay.queuedReads < 2; i++)
+    await setImmediate();
+  assert.equal(h.relay.queuedReads, 2);
+  h.relay.webSocketMessage(h.ws, JSON.stringify({
+    kind: "rpc_result", id: forwarded.id,
+    rpc: { jsonrpc: "2.0", id: "unexpected", result: {} },
+  }));
+  assert.equal((await first).status, 502);
+  for (const response of await Promise.all(queued)) assert.equal(response.status, 503);
+  assert.equal(h.frames.length, 1, "No queued request can follow a corrupt reply");
+  assert.equal(h.relay.queuedReads, 0);
+  assert.equal(h.closed[0].code, 1008);
+});
+
 test("queued reads fail closed if the device disconnects", async () => {
   const h = harness();
   const first = h.send();

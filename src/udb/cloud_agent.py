@@ -295,7 +295,12 @@ class ParallelLocalProxies:
         # deadlines; never cancel an already dispatched mutation and replay it.
         self.executor.shutdown(wait=True, cancel_futures=True)
         for proxy in self.proxies:
-            proxy.close()
+            try:
+                proxy.close()
+            except Exception:
+                # One damaged process/pipe must not strand the other workers.
+                # The WebSocket is already closing, so no RPC is retried.
+                self.failed.set()
 
 
 def load_pairing(home: Path) -> tuple[str, str, Path]:

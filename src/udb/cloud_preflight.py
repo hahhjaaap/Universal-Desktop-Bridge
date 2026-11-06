@@ -191,7 +191,7 @@ def check(
             # arbitrary locations or treat another device as authenticated.
             match = re.search(r'resource_metadata="([^"]+)"', challenge)
             if not match or match.group(1) != metadata:
-                raise ValueError("Untrusted Cloudflare resource metadata URL")
+                raise ValueError("Untrusted Cloudflare resource metadata URL") from None
         if auth_mode == "cloudflare-access":
             # A 403, an internal JWT challenge, or a fake string containing
             # "cloudflare" cannot establish Managed OAuth readiness. Fetch

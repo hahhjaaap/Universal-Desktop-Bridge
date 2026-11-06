@@ -213,7 +213,9 @@ def test_dead_stdio_process_poisoned_even_when_flag_is_false(monkeypatch):
         pool.close()
 
 
-def test_unexpected_worker_exception_fails_closed_without_leaking(monkeypatch, tmp_path):
+def test_unexpected_worker_exception_fails_closed_without_leaking(
+    monkeypatch, tmp_path
+):
     responses = []
     response_ready = threading.Event()
     closed = threading.Event()

@@ -131,7 +131,8 @@ export async function authorizeAccess(access, env, deviceId, request = null,
     fetchImpl = fetch) {
   const cfg = accessConfig(env);
   if (!cfg) throw new AuthError();
-  const mode = env?.UDB_ACCESS_PRINCIPAL_MODE ?? "email";
+  const mode = env?.UDB_ACCESS_PRINCIPAL_MODE === undefined
+    ? "email" : env.UDB_ACCESS_PRINCIPAL_MODE;
   // An unknown identity mode must never silently fall back to email grants.
   if (mode !== "email" && mode !== "issuer-sub") throw new AuthError();
   // A conflicting runtime app audience cannot be bypassed by a signed JWT.

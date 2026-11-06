@@ -282,3 +282,39 @@ test("opt-in signed principal never activates legacy owner/desktop tools", async
     allowTools: ["bridge_status", "read_file"],
   });
 });
+
+test("issuer-sub mode rejects conflicting runtime identity and signed assertion", async () => {
+  const { authorizeAccess } = await import("../src/access.js");
+  const f = await fixture();
+  const qualified = TEAM + "#" + SUBJECT_ID;
+  f.env.UDB_ACCESS_TEAM_DOMAIN = TEAM;
+  f.env.UDB_ACCESS_PRINCIPAL_MODE = "issuer-sub";
+  f.env.UDB_DEVICE_GRANTS = JSON.stringify({
+    [DEVICE]: { [qualified]: ["bridge_status"] },
+  });
+  const request = f.request(await f.token());
+  const matching = { aud: AUD, getIdentity: async () => ({
+    email: EMAIL, user_uuid: SUBJECT_ID,
+  }) };
+  assert.deepEqual(await authorizeAccess(
+    matching, f.env, DEVICE, request, f.fetchImpl), {
+    subject: qualified, allowTools: ["bridge_status"],
+  });
+  const wrongEmail = { aud: AUD, getIdentity: async () => ({
+    email: "different@example.test", user_uuid: SUBJECT_ID,
+  }) };
+  await assert.rejects(authorizeAccess(
+    wrongEmail, f.env, DEVICE, request, f.fetchImpl), AuthError);
+  const wrongSub = { aud: AUD, getIdentity: async () => ({
+    email: EMAIL, user_uuid: OTHER_SUBJECT_ID,
+  }) };
+  await assert.rejects(authorizeAccess(
+    wrongSub, f.env, DEVICE, request, f.fetchImpl), AuthError);
+  // Cloudflare may expose aud only for WARP; a signed JWT remains mandatory.
+  const unavailable = { aud: AUD, getIdentity: async () => {
+    throw new Error("runtime identity unavailable");
+  } };
+  const result = await authorizeAccess(
+    unavailable, f.env, DEVICE, request, f.fetchImpl);
+  assert.equal(result.subject, qualified);
+});

@@ -24,7 +24,7 @@ MAX_DOCUMENT = 32 * 1024 * 1024
 VERSIONS = {
     "openpyxl": "3.1.5",
     "python-docx": "1.2.0",
-    "pypdf": "6.10.0",
+    "pypdf": "6.21.4",
     "reportlab": "4.4.9",
 }
 

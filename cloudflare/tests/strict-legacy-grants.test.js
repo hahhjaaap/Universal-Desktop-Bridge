@@ -12,7 +12,7 @@ const AUD = "strict-grant-test-app-audience";
 const environment = (tools, flag = "true") => ({
   UDB_AUTH_MODE: "cloudflare-access",
   UDB_ACCESS_AUD: AUD,
-  ...(flag === undefined ? {} : { UDB_STRICT_LEGACY_GRANTS: flag }),
+  ...(flag === "absent" ? {} : { UDB_STRICT_LEGACY_GRANTS: flag }),
   UDB_DEVICE_GRANTS: JSON.stringify({
     [DEVICE]: { [SUBJECT]: tools },
   }),
@@ -52,7 +52,7 @@ test("strict mode permits only explicit unique read tool names", () => {
 
 test("migration flag is opt-in; mistyped values fail closed", () => {
   const malformed = ["read_file", "computer_execute"];
-  assert.deepEqual(deviceGrant(environment(malformed, undefined),
+  assert.deepEqual(deviceGrant(environment(malformed, "absent"),
     DEVICE, SUBJECT), ["read_file"]);
   assert.deepEqual(deviceGrant(environment(malformed, "false"),
     DEVICE, SUBJECT), ["read_file"]);

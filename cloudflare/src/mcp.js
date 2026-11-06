@@ -7,10 +7,32 @@ import { isReadTool } from "./read-tools.js";
 export { authorizeAccess } from "./access.js";
 
 const supported = new Set(["2025-03-26", "2025-06-18", "2025-11-25"]);
+const MODERN_VERSION = "2026-07-28";
+const META = "io.modelcontextprotocol/";
 const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(value), {
   status, headers: { "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store", "x-content-type-options": "nosniff", ...headers } });
 const error = (status, code) => json({ error: code }, status);
+const rpcError = (rpc, code, message, status = 400) => json({
+  jsonrpc: "2.0", id: rpc.id, error: { code, message },
+}, status);
+const serverInfo = (user) => ({
+  name: user.ownerTools?.length ? "udb-cloud-owner-gated" : "udb-cloud-readonly",
+  version: "0.1.0",
+});
+const modernResult = (result, user) => ({
+  ...result, resultType: "complete",
+  _meta: { ...result._meta, [META + "serverInfo"]: serverInfo(user) },
+});
+function mirroredName(value) {
+  if (value?.startsWith("=?base64?") && value.endsWith("?=")) {
+    try {
+      const bytes = Uint8Array.from(atob(value.slice(9, -2)), c => c.charCodeAt(0));
+      return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch { return null; }
+  }
+  return value;
+}
 export const metadataPath = (id) => "/.well-known/oauth-protected-resource/v1/devices/" + id + "/mcp";
 
 export function protectedResource(request, env, id) {
@@ -62,7 +84,8 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   if (origin && origin !== new URL(request.url).origin) return error(403, "invalid_origin");
   if (request.method !== "POST") return error(405, "method_not_allowed");
   const version = request.headers.get("MCP-Protocol-Version") || "2025-03-26";
-  if (!supported.has(version)) return error(400, "unsupported_protocol_version");
+  if (!supported.has(version) && version !== MODERN_VERSION)
+    return error(400, "unsupported_protocol_version");
   // Choose exactly one auth scheme; an unknown mode must fail closed.
   const mode = env?.UDB_AUTH_MODE || "jwt";
   if (mode !== "jwt" && mode !== "cloudflare-access")
@@ -89,6 +112,35 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   try { rpc = await readJson(request); }
   catch { return error(400, "invalid_json_rpc"); }
   if (rpc.jsonrpc !== "2.0" || typeof rpc.method !== "string") return error(400, "invalid_json_rpc");
+  const modern = version === MODERN_VERSION;
+  const claimedVersion = rpc.params?._meta?.[META + "protocolVersion"];
+  if (claimedVersion !== undefined && claimedVersion !== version)
+    return rpcError(rpc, -32020, "Protocol header/body mismatch");
+  if (modern) {
+    const meta = rpc.params?._meta;
+    const caps = meta?.[META + "clientCapabilities"];
+    if (claimedVersion !== MODERN_VERSION || !caps || typeof caps !== "object" || Array.isArray(caps))
+      return rpcError(rpc, -32602, "Missing or invalid per-request protocol metadata");
+    if (request.headers.get("Mcp-Method") !== rpc.method ||
+        (rpc.method === "tools/call" &&
+         (typeof rpc.params?.name !== "string" ||
+          mirroredName(request.headers.get("Mcp-Name")) !== rpc.params.name)))
+      return rpcError(rpc, -32020, "Required MCP headers must match the request body");
+    if (!((typeof rpc.id === "string" && rpc.id !== "") || Number.isSafeInteger(rpc.id)))
+      return rpcError(rpc, -32600, "Invalid RPC ID");
+    if (rpc.method === "server/discover")
+      return json({ jsonrpc: "2.0", id: rpc.id, result: modernResult({
+        supportedVersions: [MODERN_VERSION, ...supported], capabilities: { tools: {} },
+        ttlMs: 0, cacheScope: "private",
+      }, user) });
+    if (!["tools/list", "tools/call"].includes(rpc.method))
+      return rpcError(rpc, -32601, "Method not found", 404);
+    // The gateway adapts modern stateless HTTP to the existing serial 2025
+    // stdio proxy, whose LocalProxy bootstraps itself before the first call.
+    // Untrusted client metadata never controls local initialization/identity.
+    rpc = { ...rpc, params: { ...rpc.params } };
+    delete rpc.params._meta;
+  }
   if (rpc.method === "notifications/initialized" && rpc.id === undefined)
     return new Response(null, { status: 202, headers: { "cache-control": "no-store" } });
   if (!((typeof rpc.id === "string" && rpc.id !== "") || Number.isSafeInteger(rpc.id)))
@@ -142,6 +194,13 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
           type: "oauth2", scopes: isReadTool(tool.name) ? ["udb:read"] : [],
         }],
       })) };
+  }
+  if (modern && reply.result) {
+    if (typeof reply.result !== "object" || Array.isArray(reply.result))
+      return error(502, "invalid_device_response");
+    reply.result = modernResult(reply.result, user);
+    if (rpc.method === "tools/list")
+      Object.assign(reply.result, { ttlMs: 0, cacheScope: "private" });
   }
   return json(reply);
 }

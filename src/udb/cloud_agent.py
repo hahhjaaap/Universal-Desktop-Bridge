@@ -286,6 +286,10 @@ class ParallelLocalProxies:
         self.closed = False
 
     def _invoke(self, rpc: dict) -> dict:
+        # A queued task must not start a new process after another worker has
+        # poisoned the connection, even if it passed submit() earlier.
+        if self.failed.is_set():
+            raise RuntimeError("Cloud RPC pool is unavailable")
         proxy = getattr(self.local, "proxy", None)
         if proxy is None:
             try:
@@ -296,6 +300,8 @@ class ParallelLocalProxies:
             self.local.proxy = proxy
             with self.lock:
                 self.proxies.append(proxy)
+        if self.failed.is_set():
+            raise RuntimeError("Cloud RPC pool is unavailable")
         try:
             return proxy.call(rpc)
         except (RuntimeError, TimeoutError, ValueError):

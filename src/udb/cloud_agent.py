@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import queue
+from concurrent.futures import ThreadPoolExecutor
 import re
 import subprocess
 import threading
@@ -29,6 +30,18 @@ _ALLOWED_METHODS = {"initialize", "ping", "tools/list", "tools/call"}
 _MAX_FRAME = 1024 * 1024
 _MIN_RETRY_SECONDS = 5
 _MAX_RETRY_SECONDS = 120
+_MAX_PARALLEL_CALLS = 10
+_REMOTE_READ_TOOLS = frozenset({
+    "bridge_status", "list_projects", "list_files", "read_file",
+    "search_files", "check_python_syntax",
+})
+
+
+def is_parallel_read_rpc(rpc: dict) -> bool:
+    return rpc["method"] in {"initialize", "ping", "tools/list"} or (
+        rpc["method"] == "tools/call"
+        and rpc["params"]["name"] in _REMOTE_READ_TOOLS
+    )
 
 
 def device_url(relay: str, device_id: str) -> str:
@@ -219,6 +232,61 @@ class LocalProxy:
                 reader.join(timeout=1)
 
 
+
+class ParallelLocalProxies:
+    """Ten lazy, independent stdio workers, one outstanding RPC per worker.
+
+    A separate proxy per thread is intentional: the legacy stdio proxy is
+    serial, and sharing its response queue would misroute concurrent IDs.
+    """
+
+    def __init__(self, settings):
+        self.settings = settings
+        self.executor = ThreadPoolExecutor(
+            max_workers=_MAX_PARALLEL_CALLS, thread_name_prefix="udb-cloud-rpc"
+        )
+        self.local = threading.local()
+        self.lock = threading.Lock()
+        self.proxies = []
+        self.failed = threading.Event()
+        self.closed = False
+
+    def _invoke(self, rpc: dict) -> dict:
+        proxy = getattr(self.local, "proxy", None)
+        if proxy is None:
+            try:
+                proxy = LocalProxy(self.settings)
+            except OSError:
+                self.failed.set()
+                raise
+            self.local.proxy = proxy
+            with self.lock:
+                self.proxies.append(proxy)
+        try:
+            return proxy.call(rpc)
+        except (RuntimeError, TimeoutError, ValueError):
+            if proxy.unusable:
+                self.failed.set()
+            raise
+
+    def submit(self, rpc: dict):
+        with self.lock:
+            if self.closed:
+                raise RuntimeError("Cloud RPC pool is closed")
+            return self.executor.submit(self._invoke, rpc)
+
+    def close(self):
+        with self.lock:
+            if self.closed:
+                return
+            self.closed = True
+        # Wait for in-flight calls to finish or reach their own bounded
+        # deadlines; never cancel an already dispatched mutation and replay it.
+        self.executor.shutdown(wait=True, cancel_futures=True)
+        for proxy in self.proxies:
+            proxy.close()
+
+
 def load_pairing(home: Path) -> tuple[str, str, Path]:
     file = home / "cloud-pairing.json"
     if file.is_symlink() or not file.is_file() or file.stat().st_size > 2048:
@@ -239,8 +307,7 @@ def run(settings) -> int:
     url = device_url(relay, device_id)
     # Windows uses Credential Manager keyed by device ID; no plaintext file.
     token = load_device_token(settings.home, device_id)
-    # Avoid spawning the local MCP process when the cloud is offline or idle.
-    proxy = None
+    # Worker processes are lazy and exist only during an active connection.
     retry_seconds = _MIN_RETRY_SECONDS
     print("UDB cloud agent: private relay enabled for this Windows user.")
     try:
@@ -260,6 +327,51 @@ def run(settings) -> int:
                 # Keep idle WebSockets open for Cloudflare hibernation.
                 ws.settimeout(None)
                 print("UDB cloud agent: connected.")
+                pool = ParallelLocalProxies(settings)
+                send_lock = threading.Lock()
+                admission_lock = threading.Lock()
+                inflight = 0
+                mutation_active = False
+
+                def send_reply(relay_id, reply):
+                    # websocket-client serializes sends, but keep the result
+                    # framing and close decision ordered across callbacks.
+                    with send_lock:
+                        ws.send(json.dumps({
+                            "kind": "rpc_result", "id": relay_id, "rpc": reply
+                        }))
+
+                def rejected(rpc, error):
+                    return {
+                        "jsonrpc": "2.0",
+                        "id": rpc.get("id") if isinstance(rpc, dict) else None,
+                        "error": {"code": -32000, "message": error},
+                    }
+
+                def finished(future, relay_id, rpc, read_only):
+                    nonlocal inflight, mutation_active
+                    try:
+                        try:
+                            reply = future.result()
+                        except (OSError, RuntimeError, TimeoutError, ValueError) as error:
+                            # Never include local filenames, arguments or secrets.
+                            reply = rejected(rpc, type(error).__name__)
+                        send_reply(relay_id, reply)
+                    except (OSError, websocket.WebSocketException):
+                        pool.failed.set()
+                    finally:
+                        with admission_lock:
+                            inflight -= 1
+                            if not read_only:
+                                mutation_active = False
+                    if pool.failed.is_set():
+                        # At least one stdio outcome may be unknown. Close the
+                        # connection so the DO fails other requests closed.
+                        try:
+                            ws.close()
+                        except (OSError, websocket.WebSocketException):
+                            pass
+
                 try:
                     while True:
                         frame = ws.recv()
@@ -283,43 +395,39 @@ def run(settings) -> int:
                         rpc = request.get("rpc")
                         if not isinstance(relay_id, str) or len(relay_id) > 80:
                             break
-                        try:
-                            if not valid_remote_rpc(rpc):
-                                raise ValueError("Unsupported remote RPC")
-                            if proxy is None:
-                                proxy = LocalProxy(settings)
-                            response = proxy.call(rpc)
-                        except (RuntimeError, TimeoutError, ValueError) as error:
-                            # Do not leak file paths, arguments, data or credentials.
-                            response = {
-                                "jsonrpc": "2.0",
-                                "id": rpc.get("id") if isinstance(rpc, dict) else None,
-                                "error": {
-                                    "code": -32000,
-                                    "message": type(error).__name__,
-                                },
-                            }
-                            if proxy is not None and proxy.unusable:
-                                ws.send(
-                                    json.dumps(
-                                        {
-                                            "kind": "rpc_result",
-                                            "id": relay_id,
-                                            "rpc": response,
-                                        }
-                                    )
-                                )
-                                return 2
-                        ws.send(
-                            json.dumps(
-                                {"kind": "rpc_result", "id": relay_id, "rpc": response}
+                        if not valid_remote_rpc(rpc):
+                            send_reply(relay_id, rejected(rpc, "ValueError"))
+                            continue
+                        read_only = is_parallel_read_rpc(rpc)
+                        with admission_lock:
+                            busy = (
+                                inflight >= _MAX_PARALLEL_CALLS
+                                or (inflight > 0 and
+                                    (not read_only or mutation_active))
                             )
+                            if not busy:
+                                inflight += 1
+                                if not read_only:
+                                    mutation_active = True
+                        if busy:
+                            send_reply(relay_id, rejected(rpc, "DeviceBusy"))
+                            continue
+                        try:
+                            future = pool.submit(rpc)
+                        except RuntimeError:
+                            with admission_lock:
+                                inflight -= 1
+                                if not read_only:
+                                    mutation_active = False
+                            send_reply(relay_id, rejected(rpc, "RuntimeError"))
+                            break
+                        future.add_done_callback(
+                            lambda f, rid=relay_id, request_rpc=rpc, ro=read_only:
+                                finished(f, rid, request_rpc, ro)
                         )
                 finally:
                     ws.close()
-                    if proxy is not None:
-                        proxy.close()
-                        proxy = None
+                    pool.close()
                 # Reset backoff only after a sustained healthy connection.
                 # Brief accept/close cycles otherwise hammer Cloudflare Free.
                 if time.monotonic() - connected_at >= 60:
@@ -339,6 +447,3 @@ def run(settings) -> int:
                 retry_seconds = min(retry_seconds * 2, _MAX_RETRY_SECONDS)
     except KeyboardInterrupt:
         return 0
-    finally:
-        if proxy is not None:
-            proxy.close()

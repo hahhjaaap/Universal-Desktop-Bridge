@@ -90,7 +90,9 @@ def test_pool_marks_uncertain_result_failed_without_replaying(monkeypatch):
         pool.close()
 
 
-def test_cloud_agent_sends_ten_parallel_results_with_distinct_ids(monkeypatch, tmp_path):
+def test_cloud_agent_sends_ten_parallel_results_with_distinct_ids(
+    monkeypatch, tmp_path
+):
     barrier = threading.Barrier(10)
     lock = threading.Lock()
     active = 0
@@ -112,7 +114,8 @@ def test_cloud_agent_sends_ten_parallel_results_with_distinct_ids(monkeypatch, t
             try:
                 barrier.wait(timeout=10)
                 return {
-                    "jsonrpc": "2.0", "id": rpc["id"],
+                    "jsonrpc": "2.0",
+                    "id": rpc["id"],
                     "result": {"parallel": rpc["id"]},
                 }
             finally:
@@ -132,10 +135,13 @@ def test_cloud_agent_sends_ten_parallel_results_with_distinct_ids(monkeypatch, t
             if self.index < 10:
                 self.index += 1
                 ident = self.index
-                return json.dumps({
-                    "kind": "rpc", "id": f"relay-{ident}",
-                    "rpc": {"jsonrpc": "2.0", "id": ident, "method": "tools/list"},
-                })
+                return json.dumps(
+                    {
+                        "kind": "rpc",
+                        "id": f"relay-{ident}",
+                        "rpc": {"jsonrpc": "2.0", "id": ident, "method": "tools/list"},
+                    }
+                )
             assert replies_ready.wait(timeout=15)
             return ""
 
@@ -148,21 +154,25 @@ def test_cloud_agent_sends_ten_parallel_results_with_distinct_ids(monkeypatch, t
         def close(self):
             pass
 
-    monkeypatch.setattr(cloud_agent, "load_pairing", lambda _home: (
-        "https://staging.workers.dev", "a" * 32, tmp_path / "token"
-    ))
+    monkeypatch.setattr(
+        cloud_agent,
+        "load_pairing",
+        lambda _home: ("https://staging.workers.dev", "a" * 32, tmp_path / "token"),
+    )
     monkeypatch.setattr(cloud_agent, "load_device_token", lambda *_args: "x" * 48)
     monkeypatch.setattr(cloud_agent, "LocalProxy", FakeProxy)
-    monkeypatch.setattr(websocket, "create_connection", lambda *_args, **_kwargs: FakeSocket())
     monkeypatch.setattr(
-        cloud_agent.time, "sleep",
+        websocket, "create_connection", lambda *_args, **_kwargs: FakeSocket()
+    )
+    monkeypatch.setattr(
+        cloud_agent.time,
+        "sleep",
         lambda _delay: (_ for _ in ()).throw(KeyboardInterrupt),
     )
     assert cloud_agent.run(SimpleNamespace(home=tmp_path)) == 0
     assert peak == 10
-    assert {item["id"] for item in received} == {
-        f"relay-{i}" for i in range(1, 11)
-    }
+    assert {item["id"] for item in received} == {f"relay-{i}" for i in range(1, 11)}
     assert {item["rpc"]["id"] for item in received} == set(range(1, 11))
-    assert all(item["rpc"]["result"]["parallel"] == item["rpc"]["id"]
-               for item in received)
+    assert all(
+        item["rpc"]["result"]["parallel"] == item["rpc"]["id"] for item in received
+    )

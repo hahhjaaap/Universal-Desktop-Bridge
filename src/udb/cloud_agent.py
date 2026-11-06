@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import json
 import queue
-from concurrent.futures import ThreadPoolExecutor
 import re
 import subprocess
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -330,14 +330,13 @@ def run(settings) -> int:
                 pool = ParallelLocalProxies(settings)
                 send_lock = threading.Lock()
                 admission_lock = threading.Lock()
-                inflight = 0
-                mutation_active = False
+                state = {"inflight": 0, "mutation_active": False}
 
-                def send_reply(relay_id, reply):
+                def send_reply(relay_id, reply, *, socket=ws, lock=send_lock):
                     # websocket-client serializes sends, but keep the result
                     # framing and close decision ordered across callbacks.
-                    with send_lock:
-                        ws.send(json.dumps({
+                    with lock:
+                        socket.send(json.dumps({
                             "kind": "rpc_result", "id": relay_id, "rpc": reply
                         }))
 
@@ -348,27 +347,30 @@ def run(settings) -> int:
                         "error": {"code": -32000, "message": error},
                     }
 
-                def finished(future, relay_id, rpc, read_only):
-                    nonlocal inflight, mutation_active
+                def finished(
+                    future, relay_id, rpc, read_only, *,
+                    session=state, local_pool=pool, socket=ws,
+                    lock=admission_lock, reply_sender=send_reply,
+                ):
                     try:
                         try:
                             reply = future.result()
                         except (OSError, RuntimeError, TimeoutError, ValueError) as error:
                             # Never include local filenames, arguments or secrets.
                             reply = rejected(rpc, type(error).__name__)
-                        send_reply(relay_id, reply)
+                        reply_sender(relay_id, reply)
                     except (OSError, websocket.WebSocketException):
-                        pool.failed.set()
+                        local_pool.failed.set()
                     finally:
-                        with admission_lock:
-                            inflight -= 1
+                        with lock:
+                            session["inflight"] -= 1
                             if not read_only:
-                                mutation_active = False
-                    if pool.failed.is_set():
+                                session["mutation_active"] = False
+                    if local_pool.failed.is_set():
                         # At least one stdio outcome may be unknown. Close the
                         # connection so the DO fails other requests closed.
                         try:
-                            ws.close()
+                            socket.close()
                         except (OSError, websocket.WebSocketException):
                             pass
 
@@ -401,14 +403,14 @@ def run(settings) -> int:
                         read_only = is_parallel_read_rpc(rpc)
                         with admission_lock:
                             busy = (
-                                inflight >= _MAX_PARALLEL_CALLS
-                                or (inflight > 0 and
-                                    (not read_only or mutation_active))
+                                state["inflight"] >= _MAX_PARALLEL_CALLS
+                                or (state["inflight"] > 0 and
+                                    (not read_only or state["mutation_active"]))
                             )
                             if not busy:
-                                inflight += 1
+                                state["inflight"] += 1
                                 if not read_only:
-                                    mutation_active = True
+                                    state["mutation_active"] = True
                         if busy:
                             send_reply(relay_id, rejected(rpc, "DeviceBusy"))
                             continue
@@ -416,14 +418,15 @@ def run(settings) -> int:
                             future = pool.submit(rpc)
                         except RuntimeError:
                             with admission_lock:
-                                inflight -= 1
+                                state["inflight"] -= 1
                                 if not read_only:
-                                    mutation_active = False
+                                    state["mutation_active"] = False
                             send_reply(relay_id, rejected(rpc, "RuntimeError"))
                             break
                         future.add_done_callback(
-                            lambda f, rid=relay_id, request_rpc=rpc, ro=read_only:
-                                finished(f, rid, request_rpc, ro)
+                            lambda f, rid=relay_id, request_rpc=rpc,
+                            ro=read_only, finish_call=finished:
+                                finish_call(f, rid, request_rpc, ro)
                         )
                 finally:
                     ws.close()

@@ -14,7 +14,7 @@
 | Desktop and applications | Owner-enabled Windows UI and process operations | Windows session/UAC limits; local owner consent |
 | Browser | Isolated Chrome/Edge, CDP virtual input, bounded DOM snapshots, open Shadow DOM locators, mutation-based waits and navigation | Own profile, local login handoff; explicit same-origin file transfers require separate file access |
 | Accounting work tools | Read-only Vietnamese XLSX invoice audit and a **new** review workbook | No original-file overwrite, tax filing, MISA posting or legal tax determination |
-| Operations | Activity logs, status/doctor, up to 10 concurrent RPC calls and 10 shared background work slots | Capacity is a limit, not a promise of 10 simultaneous heavy workloads |
+| Operations | Activity logs, status/doctor, up to 10 concurrent remote read RPCs (separate lazy stdio workers) and 10 shared background work slots | Remote mutations remain exclusive; hardware and process startup limit throughput |
 | Recovery | Saved job state, safe read/recovery paths and managed installer rollback | Uncertain mutations are **never** automatically replayed |
 
 The local HTTP MCP boundary requires authorization, accepts loopback clients only, rejects ambiguous authentication headers and bounds request bodies. These controls do not protect against a compromised Windows account or malicious authorized client. See [ARCHITECTURE.md](ARCHITECTURE.md) for ownership, dispatch and isolation.

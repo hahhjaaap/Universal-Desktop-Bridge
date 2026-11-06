@@ -13,9 +13,11 @@ const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(
   status, headers: { "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store", "x-content-type-options": "nosniff", ...headers } });
 const error = (status, code) => json({ error: code }, status);
-const rpcError = (rpc, code, message, status = 400) => json({
-  jsonrpc: "2.0", id: rpc.id, error: { code, message },
-}, status);
+const rpcError = (rpc, code, message, status = 400) => {
+  // Only bounded, static protocol categories; never IDs, arguments or identity.
+  console.warn(JSON.stringify({ event: "mcp_protocol_rejected", code, reason: message }));
+  return json({ jsonrpc: "2.0", id: rpc.id, error: { code, message } }, status);
+};
 const serverInfo = (user) => ({
   name: user.ownerTools?.length ? "udb-cloud-owner-gated" : "udb-cloud-readonly",
   version: "0.1.0",

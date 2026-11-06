@@ -269,7 +269,10 @@ class ParallelLocalProxies:
         try:
             return proxy.call(rpc)
         except (RuntimeError, TimeoutError, ValueError):
-            if proxy.unusable:
+            # A dead child process can be unusable without setting its flag:
+            # LocalProxy.call() detects process.poll() before _exchange().
+            child = getattr(proxy, "process", None)
+            if proxy.unusable or (child is not None and child.poll() is not None):
                 self.failed.set()
             raise
 
@@ -380,8 +383,16 @@ def run(settings) -> int:
                         ) as error:
                             # Never include local filenames, arguments or secrets.
                             reply = rejected(rpc, type(error).__name__)
+                        except Exception:
+                            # An unexpected worker exception may have occurred
+                            # after dispatch. Fail closed instead of silently
+                            # dropping its response until the relay times out.
+                            local_pool.failed.set()
+                            reply = rejected(rpc, "InternalError")
                         reply_sender(relay_id, reply)
-                    except (OSError, websocket.WebSocketException):
+                    except Exception:
+                        # A send/framing failure also makes the reply outcome
+                        # uncertain. Never reuse this device connection.
                         local_pool.failed.set()
                     finally:
                         with lock:

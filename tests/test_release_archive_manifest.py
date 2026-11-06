@@ -10,7 +10,6 @@ import pytest
 
 from tools.verify_signed_release import verify_archive_manifest
 
-
 FILES = {
     "UDB/udb.exe": b"MZ\x00\x01synthetic-not-signed",
     "UDB/install.ps1": b"Write-Output 'safe synthetic fixture'",
@@ -56,22 +55,36 @@ def test_a_modified_signed_exe_or_installer_breaks_checksum(tmp_path):
 
 def test_extra_file_not_in_manifest_is_refused(tmp_path):
     with pytest.raises(ValueError, match="does not cover exact archive"):
-        verify(archive(tmp_path, data={
-            **FILES,
-            "UDB/extra.txt": b"extra",
-        }, omit="UDB/extra.txt"))
+        verify(
+            archive(
+                tmp_path,
+                data={
+                    **FILES,
+                    "UDB/extra.txt": b"extra",
+                },
+                omit="UDB/extra.txt",
+            )
+        )
 
 
-@pytest.mark.parametrize("bad_name", [
-    "UDB/../outside.txt",
-    "UDB/./install.ps1",
-    "UDB//double.txt",
-    "outside.txt",
-    "UDB\\suspicious.txt",
-])
+@pytest.mark.parametrize(
+    "bad_name",
+    [
+        "UDB/../outside.txt",
+        "UDB/./install.ps1",
+        "UDB//double.txt",
+        "outside.txt",
+        "UDB\\suspicious.txt",
+    ],
+)
 def test_unsafe_archive_member_is_rejected(tmp_path, bad_name):
     pkg = archive(tmp_path, data={**FILES, bad_name: b"synthetic"})
-    with pytest.raises(ValueError, match="Unsafe standalone archive entry"):
+    # zipfile normalizes backslashes to POSIX slashes on Windows; reject
+    # either at entry validation or at the subsequent exact-manifest gate.
+    with pytest.raises(
+        ValueError,
+        match="Unsafe standalone archive entry|does not cover exact archive",
+    ):
         verify(pkg)
 
 
@@ -99,7 +112,7 @@ def test_symlink_archive_member_is_rejected(tmp_path):
     with zipfile.ZipFile(pkg, "a") as z:
         item = zipfile.ZipInfo("UDB/link")
         item.create_system = 3
-        item.external_attr = (0o120777 << 16)
+        item.external_attr = 0o120777 << 16
         z.writestr(item, b"../outside")
     with pytest.raises(ValueError, match="Unsafe standalone archive entry"):
         verify(pkg)
@@ -109,8 +122,6 @@ def test_invalid_manifest_encoding_or_missing_final_newline_is_rejected(tmp_path
     for suffix, replacement in (("bad", b"\xff"), ("missing-newline", b"0" * 64)):
         directory = tmp_path / suffix
         directory.mkdir()
-        pkg = archive(
-            directory, overrides={"UDB/STANDALONE-SHA256SUMS": replacement}
-        )
+        pkg = archive(directory, overrides={"UDB/STANDALONE-SHA256SUMS": replacement})
         with pytest.raises(ValueError, match="manifest"):
             verify(pkg)

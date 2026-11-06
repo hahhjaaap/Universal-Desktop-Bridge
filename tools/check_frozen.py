@@ -30,6 +30,42 @@ def temporary_directory():
                 time.sleep(0.2)
 
 
+def offline_start_failure_evidence(
+    home: Path, runtime_temp: Path, *, returncode: int | None, stdout: str = ""
+) -> dict:
+    """Return fixed non-secret categories when a frozen CLI fails to start.
+
+    The CI test home is disposable; never read child logs, credentials,
+    manager lock PID, the caller's command line or raw subprocess output.
+    """
+    result = {
+        "stage": "frozen_offline_manager_start",
+        "child_exit": "timeout"
+        if returncode is None
+        else "nonzero"
+        if returncode
+        else "zero",
+        "reported_status": "missing_or_invalid",
+        "reported_running": False,
+        "reported_mode": "unknown",
+        "lock_present": (home / "state" / "manager.lock").is_file(),
+        "headless_status_present": (home / "state" / "headless-status.json").is_file(),
+        "onefile_extract_count": min(20, sum(1 for _ in runtime_temp.glob("_MEI*"))),
+    }
+    if len(stdout) <= 8192:
+        try:
+            payload = json.loads(stdout)
+            if isinstance(payload, dict):
+                result["reported_status"] = "json"
+                result["reported_running"] = payload.get("manager_running") is True
+                mode = payload.get("connection_mode")
+                if mode in ("offline", "online", "unknown"):
+                    result["reported_mode"] = mode
+        except (ValueError, TypeError):
+            pass
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
@@ -94,16 +130,32 @@ def main():
                 if input_text is None
                 else {"input": input_text}
             )
-            result = subprocess.run(
-                [str(executable), *arguments],
-                cwd=root,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=120,
-                **io_args,
-            )
+            try:
+                result = subprocess.run(
+                    [str(executable), *arguments],
+                    cwd=root,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                    **io_args,
+                )
+            except subprocess.TimeoutExpired:
+                if arguments and arguments[0] == "start":
+                    evidence = offline_start_failure_evidence(
+                        offline_home, runtime_temp, returncode=None
+                    )
+                    raise AssertionError(json.dumps(evidence, sort_keys=True)) from None
+                raise
             if expect_success:
+                if result.returncode != 0 and arguments and arguments[0] == "start":
+                    evidence = offline_start_failure_evidence(
+                        offline_home,
+                        runtime_temp,
+                        returncode=result.returncode,
+                        stdout=result.stdout,
+                    )
+                    raise AssertionError(json.dumps(evidence, sort_keys=True))
                 assert result.returncode == 0, result.stderr + result.stdout
                 assert "Failed to remove temporary directory" not in result.stderr, (
                     result.stderr

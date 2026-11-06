@@ -11,6 +11,8 @@ const RESOURCE = ROOT + "/v1/devices/" + DEVICE + "/mcp";
 const TEAM = "https://owner-check.cloudflareaccess.com";
 const AUD = "9a9a9a9a-1111-2222-3333-444444444444";
 const EMAIL = "owner@example.test";
+const SUBJECT_ID = "7335d417-61da-459d-899c-0a01c76a2f94";
+const OTHER_SUBJECT_ID = "7335d417-61da-459d-899c-0a01c76a2f95";
 const b64 = (value) => Buffer.from(value).toString("base64url");
 // Production JWKS is cached briefly by team domain. Tests must use one stable
 // team signing key rather than minting a new key at the same certs URL.
@@ -26,7 +28,7 @@ async function fixture() {
   async function token(overrides = {}, header = {}) {
     const h = b64(JSON.stringify({ alg: "RS256", kid: "access-signing-key", ...header }));
     const p = b64(JSON.stringify({ iss: TEAM, aud: [AUD], exp: now + 300,
-      iat: now, email: EMAIL, ...overrides }));
+      iat: now, email: EMAIL, sub: SUBJECT_ID, ...overrides }));
     const msg = h + "." + p;
     const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5",
       pair.privateKey, new TextEncoder().encode(msg));
@@ -173,4 +175,146 @@ test("Access config refuses unpinned or unsafe team domains", () => {
       UDB_ACCESS_TEAM_DOMAIN: team }), null);
   }
   assert.equal(accessConfig({ UDB_ACCESS_AUD: AUD }).team, null);
+});
+
+
+test("opt-in issuer-sub mode requires signed JWT and exact tenant grant", async () => {
+  const { handleMcp } = await import("../src/mcp.js");
+  const f = await fixture();
+  const qualified = TEAM + "#" + SUBJECT_ID;
+  f.env.UDB_ACCESS_TEAM_DOMAIN = TEAM;
+  f.env.UDB_ACCESS_PRINCIPAL_MODE = "issuer-sub";
+  f.env.UDB_TENANT_POLICY = JSON.stringify({
+    version: 1,
+    tenants: [{
+      id: "tenant-a",
+      owners: [qualified],
+      members: [qualified],
+      devices: [{ id: DEVICE, grants: [{
+        subject: qualified, tools: ["bridge_status"],
+      }] }],
+    }],
+  });
+  // A verified email from the runtime alone must not be enough.
+  const runtime = { aud: AUD, getIdentity: async () => ({ email: EMAIL }) };
+  const withoutJwt = await handleMcp(
+    f.request(null), f.env, DEVICE, f.env.DEVICES.get(), f.fetchImpl, runtime);
+  assert.equal(withoutJwt.status, 403);
+  assert.equal(f.forwards.length, 0);
+
+  const response = await handleMcp(
+    f.request(await f.token()), f.env, DEVICE, f.env.DEVICES.get(),
+    f.fetchImpl, runtime);
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).result.tools.map(x => x.name),
+    ["bridge_status"]);
+  assert.equal(f.forwards.length, 1);
+
+  // Same signed email, but another Access user UUID has zero capabilities.
+  const reassignedEmail = await handleMcp(
+    f.request(await f.token({ sub: OTHER_SUBJECT_ID })), f.env, DEVICE,
+    f.env.DEVICES.get(), f.fetchImpl, runtime);
+  assert.equal(reassignedEmail.status, 403);
+  assert.equal(f.forwards.length, 1);
+
+  // An email grant from an older deployment must not substitute for the
+  // tenant's issuer-qualified subject.
+  f.env.UDB_DEVICE_GRANTS = JSON.stringify({
+    [DEVICE]: { [EMAIL]: ["bridge_status"] },
+  });
+  f.env.UDB_TENANT_POLICY = JSON.stringify({
+    version: 1, tenants: [{
+      id: "tenant-a", owners: [qualified], members: [qualified],
+      devices: [{ id: DEVICE, grants: [] }],
+    }],
+  });
+  const revoked = await handleMcp(
+    f.request(await f.token()), f.env, DEVICE,
+    f.env.DEVICES.get(), f.fetchImpl, runtime);
+  assert.equal(revoked.status, 403);
+  assert.equal(f.forwards.length, 1);
+});
+
+test("issuer-sub mode fails closed for missing or malformed signed subjects", async () => {
+  const { authorizeAccess } = await import("../src/access.js");
+  const f = await fixture();
+  f.env.UDB_ACCESS_PRINCIPAL_MODE = "issuer-sub";
+  const runtime = { aud: AUD, getIdentity: async () => ({ email: EMAIL }) };
+  await assert.rejects(authorizeAccess(
+    runtime, f.env, DEVICE, f.request(await f.token()), f.fetchImpl), AuthError);
+  f.env.UDB_ACCESS_TEAM_DOMAIN = TEAM;
+  for (const sub of [null, "", 123, "not-a-uuid",
+    "7335d417-61da-459d-899c-0a01c76a2f94#other"]) {
+    await assert.rejects(authorizeAccess(
+      runtime, f.env, DEVICE, f.request(await f.token({ sub })),
+      f.fetchImpl), AuthError);
+  }
+  const valid = await f.token();
+  for (const mode of ["issuer_sub", "", 0, null, false]) {
+    f.env.UDB_ACCESS_PRINCIPAL_MODE = mode;
+    await assert.rejects(authorizeAccess(
+      runtime, f.env, DEVICE, f.request(valid), f.fetchImpl), AuthError);
+  }
+  f.env.UDB_ACCESS_PRINCIPAL_MODE = "issuer-sub";
+  await assert.rejects(authorizeAccess(
+    { ...runtime, aud: "another-access-application" }, f.env, DEVICE,
+    f.request(valid), f.fetchImpl), AuthError);
+  assert.equal(f.forwards.length, 0);
+});
+
+test("opt-in signed principal never activates legacy owner/desktop tools", async () => {
+  const { authorizeAccess } = await import("../src/access.js");
+  const f = await fixture();
+  const qualified = TEAM + "#" + SUBJECT_ID;
+  f.env.UDB_ACCESS_TEAM_DOMAIN = TEAM;
+  f.env.UDB_ACCESS_PRINCIPAL_MODE = "issuer-sub";
+  f.env.UDB_DEVICE_GRANTS = JSON.stringify({
+    [DEVICE]: { [qualified]: ["bridge_status", "read_file"] },
+  });
+  f.env.UDB_ENABLE_OWNER_TOOLS = "true";
+  f.env.UDB_OWNER_TOOL_GRANTS = JSON.stringify({
+    [DEVICE]: { [qualified]: ["computer_execute"] },
+  });
+  const result = await authorizeAccess(null, f.env, DEVICE,
+    f.request(await f.token()), f.fetchImpl);
+  assert.deepEqual(result, {
+    subject: qualified,
+    allowTools: ["bridge_status", "read_file"],
+  });
+});
+
+test("issuer-sub mode rejects conflicting runtime identity and signed assertion", async () => {
+  const { authorizeAccess } = await import("../src/access.js");
+  const f = await fixture();
+  const qualified = TEAM + "#" + SUBJECT_ID;
+  f.env.UDB_ACCESS_TEAM_DOMAIN = TEAM;
+  f.env.UDB_ACCESS_PRINCIPAL_MODE = "issuer-sub";
+  f.env.UDB_DEVICE_GRANTS = JSON.stringify({
+    [DEVICE]: { [qualified]: ["bridge_status"] },
+  });
+  const request = f.request(await f.token());
+  const matching = { aud: AUD, getIdentity: async () => ({
+    email: EMAIL, user_uuid: SUBJECT_ID,
+  }) };
+  assert.deepEqual(await authorizeAccess(
+    matching, f.env, DEVICE, request, f.fetchImpl), {
+    subject: qualified, allowTools: ["bridge_status"],
+  });
+  const wrongEmail = { aud: AUD, getIdentity: async () => ({
+    email: "different@example.test", user_uuid: SUBJECT_ID,
+  }) };
+  await assert.rejects(authorizeAccess(
+    wrongEmail, f.env, DEVICE, request, f.fetchImpl), AuthError);
+  const wrongSub = { aud: AUD, getIdentity: async () => ({
+    email: EMAIL, user_uuid: OTHER_SUBJECT_ID,
+  }) };
+  await assert.rejects(authorizeAccess(
+    wrongSub, f.env, DEVICE, request, f.fetchImpl), AuthError);
+  // Cloudflare may expose aud only for WARP; a signed JWT remains mandatory.
+  const unavailable = { aud: AUD, getIdentity: async () => {
+    throw new Error("runtime identity unavailable");
+  } };
+  const result = await authorizeAccess(
+    unavailable, f.env, DEVICE, request, f.fetchImpl);
+  assert.equal(result.subject, qualified);
 });

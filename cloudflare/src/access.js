@@ -8,6 +8,8 @@ import { ownerToolGrant } from "./owner-tools.js";
 const MAX_ASSERTION = 8192;
 const MAX_JWKS = 16384;
 const TEAM = /^https:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com$/;
+// Access app-token sub is an account-scoped user UUID, not an email.
+const ACCESS_SUB = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 let cachedJwks = { url: "", until: 0, keys: [] };
 
 export function accessConfig(env) {
@@ -80,7 +82,7 @@ function emailSubject(subject) {
 
 // This function does not trust a client-supplied header. The header must be a
 // valid RS256 JWT signed by the pinned Cloudflare Access team signing key.
-export async function verifyAccessAssertion(request, env, fetchImpl = fetch) {
+async function verifiedAccessIdentity(request, env, fetchImpl = fetch) {
   const config = accessConfig(env);
   if (!config?.team) throw new AuthError();
   const token = request?.headers?.get("Cf-Access-Jwt-Assertion") || "";
@@ -116,26 +118,61 @@ export async function verifyAccessAssertion(request, env, fetchImpl = fetch) {
       new TextEncoder().encode(parts[0] + "." + parts[1]));
   } catch { throw new AuthError(); }
   if (!valid) throw new AuthError();
-  return payload.email;
+  return { email: payload.email, sub: payload.sub };
+}
+
+// Preserve the legacy public API for integrations using email grants.
+export async function verifyAccessAssertion(request, env, fetchImpl = fetch) {
+  const identity = await verifiedAccessIdentity(request, env, fetchImpl);
+  return identity.email;
 }
 
 export async function authorizeAccess(access, env, deviceId, request = null,
     fetchImpl = fetch) {
   const cfg = accessConfig(env);
   if (!cfg) throw new AuthError();
+  const mode = env?.UDB_ACCESS_PRINCIPAL_MODE === undefined
+    ? "email" : env.UDB_ACCESS_PRINCIPAL_MODE;
+  // An unknown identity mode must never silently fall back to email grants.
+  if (mode !== "email" && mode !== "issuer-sub") throw new AuthError();
+  // A conflicting runtime app audience cannot be bypassed by a signed JWT.
+  if (access && access.aud !== cfg.aud) throw new AuthError();
+
   let subject = null;
-  if (access) {
-    // A conflicting runtime app audience must not be silently bypassed using
-    // a different header, even if the latter carries a valid signed assertion.
-    if (access.aud !== cfg.aud) throw new AuthError();
-    try {
-      if (typeof access.getIdentity === "function") {
-        const identity = await access.getIdentity();
-        if (emailSubject(identity?.email)) subject = identity.email;
+  if (mode === "issuer-sub") {
+    // Opt-in staging pilot: require the signed assertion even when ctx.access
+    // supplies a valid email. The authenticated issuer + account-scoped sub
+    // must match an explicit grant; email and legacy grants never substitute.
+    if (!cfg.team) throw new AuthError();
+    const identity = await verifiedAccessIdentity(request, env, fetchImpl);
+    if (typeof identity.sub !== "string" || !ACCESS_SUB.test(identity.sub))
+      throw new AuthError();
+    // If the Access runtime separately exposes an identity, it must not
+    // disagree with the signed assertion. WARP may expose only aud; in that
+    // case the signature remains the sole source of user identity.
+    if (typeof access?.getIdentity === "function") {
+      let observed = null;
+      try { observed = await access.getIdentity(); }
+      catch { /* Optional runtime identity unavailable; signed JWT required. */ }
+      if (observed) {
+        if ((emailSubject(observed.email) && observed.email !== identity.email) ||
+            (typeof observed.user_uuid === "string" &&
+              observed.user_uuid.toLowerCase() !== identity.sub.toLowerCase()))
+          throw new AuthError();
       }
-    } catch { /* WARP/runtime identity may be unavailable: verify signed header */ }
+    }
+    subject = cfg.team + "#" + identity.sub.toLowerCase();
+  } else {
+    if (access) {
+      try {
+        if (typeof access.getIdentity === "function") {
+          const identity = await access.getIdentity();
+          if (emailSubject(identity?.email)) subject = identity.email;
+        }
+      } catch { /* WARP/runtime identity may be unavailable: verify signed header */ }
+    }
+    if (!subject) subject = await verifyAccessAssertion(request, env, fetchImpl);
   }
-  if (!subject) subject = await verifyAccessAssertion(request, env, fetchImpl);
   const readTools = deviceGrant(env, deviceId, subject);
   // Owner tools never replace the independently granted read identity.
   if (readTools.length === 0) throw new AuthError();

@@ -17,7 +17,7 @@ UDB_TENANT_POLICY or legacy UDB_DEVICE_GRANTS (explicit, default-deny)
     │ permitted tool list and exactly one tenant owning each device ID
     ▼
 Durable Object for that device / authenticated outbound Cloud Agent socket
-    │ serial RPC, bounded read queue, no retry after unknown outcome
+    │ up to 10 independent read RPCs; mutations exclusive; no unknown-outcome replay
     ▼
 Windows UDB MCP proxy / local registered-project permissions
     │ protected path policy and local owner grants still apply
@@ -140,6 +140,38 @@ Unit test security matrix (all `403` or no granted tools unless allowed):
 | Removal of a grant after an earlier success | New call denied |
 | Disconnect/reconnect or expired OAuth token | Requires fresh verified authentication |
 | Protected path and unregistered project | Denied independently by Windows proxy |
+
+## P0-A synthetic denial-matrix regression (2026-11-06)
+
+Run `node --test cloudflare/tests/owner-device-denial-matrix.test.js` in
+addition to the existing tenant-policy, Access-assertion and relay suites.
+
+The regression verifies ten concurrently submitted requests from synthetic
+two-tenant/two-owner fixtures. It checks unauthorized cross-tenant reads,
+ungranted collaborators, unknown principals, disallowed writes and desktop
+operations, discovery filtering, removal of an existing grant and refusal to
+fall back to permissive legacy secrets. The optional owner-tool feature is
+explicitly enabled in the fixture to verify that a strict tenant policy still
+prevents remote execution.
+
+These tests operate entirely against in-memory gateway stubs. They cannot
+validate the Cloudflare Access configuration, issuer-qualified identity
+stability, proof of Windows device ownership, network-specific concurrency,
+or a malicious/compromised actual endpoint. In particular:
+
+- A newly revoked grant blocks **new authorization**; in-flight authorized
+  operations cannot be assumed cancelled by a policy edit.
+- A device ID is a route selector, **not** proof of ownership.
+- Ten read RPCs are a concurrency ceiling, **not** ten simultaneous mutations.
+- Authenticated caller identity remains email-based in the Access pilot; a
+  stable issuer-qualified principal is a required follow-up, not implemented.
+- Do not widen permissions or change production OAuth/Cloudflare grants to
+  obtain a passing test; use independently paired owner devices and synthetic
+  fixture projects for staging acceptance.
+
+The remaining live gate stays tracked in
+[issue #95](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/95)
+and [project read acceptance](cloudflare-project-read-acceptance.md).
 
 ## Required production design beyond this milestone
 

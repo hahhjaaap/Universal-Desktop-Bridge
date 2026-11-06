@@ -18,6 +18,26 @@ pins the expected certificate thumbprint, rather than accepting an arbitrary
 signed publisher. It has a bounded payload size and does not execute the EXE,
 install software, access owner state or query the network.
 
+## Archive manifest consistency is not publisher authentication
+
+The signed-release candidate verifier also checks **all** members of the
+standalone ZIP against its `STANDALONE-SHA256SUMS` manifest. It rejects
+missing/extra/duplicate members, Windows case-colliding names, traversal,
+symlink entries, oversized members, malformed checksums and mismatched file
+hashes. This catches ordinary repackaging errors such as signing
+`dist/udb.exe` *after* creating a ZIP without updating the embedded EXE and
+checksums.
+
+**Important limitation:** `STANDALONE-SHA256SUMS` is stored in the same
+ZIP and is not itself signed. An attacker able to replace both a file and
+the manifest can recompute matching hashes. Authenticode verification on
+`udb.exe` authenticates that executable, **not** the companion installer
+script, runtime DLLs, manifests or extra helper scripts. Public beta still
+requires an independently authenticated artifact provenance / release
+attestation and verified signing of executable code, plus an operator-approved
+release workflow. A green manifest check alone is **not** a public-release
+security pass.
+
 After a future publisher signing certificate is provisioned, on Windows:
 
 ```powershell

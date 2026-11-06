@@ -203,6 +203,42 @@ Only those real authenticated observations establish this path. Tests in this
 repository cover the Worker/DO with controlled fixtures and the actual local
 stdio/project workflow separately; they do not substitute for this production test.
 
+## Read-burst reliability gate (10 concurrent requests)
+
+The staging reliability experiment on 2026-11-06 proved 30/30 sequential
+ChatGPT reads but only 17/30 valid responses under five concurrent reads
+(issue #94). Do not mark burst concurrency accepted from sequential results.
+
+The proposed relay FIFO permits **one active request and nine waiting
+read-only requests** for a single paired device. It does **not** execute ten
+Windows operations in parallel: the local stdio proxy remains serial, and
+all writes, host/terminal, desktop and other mutation RPCs are rejected
+while the device is busy. Waiters have a bounded admission deadline; an
+eleventh concurrent read is rejected. A timeout with unknown device
+outcome closes that device socket and rejects waiting requests rather than
+replaying them. A socket replacement cannot take over old queued reads.
+
+After source CI and a reviewed deployment **only to the isolated staging
+Worker**, repeat the real owner-authenticated ChatGPT fixture test:
+
+- 30 batches of five simultaneous `read_file` calls, each returning both
+  fixture SHA-256s and expected contents; separately try a burst of ten.
+- Verify queue overflow, unexpected identities/devices, revocation, blocked
+  paths and mutating tools still fail closed. Ensure queue admission never
+  changes `UDB_DEVICE_GRANTS` or local project permissions.
+- Measure response success rate, p50/p95 latency, HTTP status/reason where
+  available, total queue wait and reconnect behaviour. Do not log personal
+  data, file content, headers, or tokens.
+- Test client timeouts and network-loss cases. **No promise of 10×
+  throughput:** FIFO admits a burst but executes requests one at a time;
+  client-side and upstream timeouts may still limit completion.
+- Keep #94 open until owner OAuth reads, real second-identity denial,
+  network-condition matrix and security review all pass.
+
+The test harness and CI only prove deterministic queue properties. The
+previous ChatGPT generic internal errors did not expose upstream status,
+so their root cause is not conclusively established.
+
 ## Rollback and remaining scope
 
 If the Worker regresses, restore the recorded previous Worker version through

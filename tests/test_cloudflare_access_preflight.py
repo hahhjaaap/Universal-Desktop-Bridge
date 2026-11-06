@@ -8,6 +8,7 @@ import pytest
 
 from tools.check_cloudflare_deployment import check
 from udb.cloud_agent import CLOUD_USER_AGENT
+from udb.cloud_preflight import failure_reason
 
 ORIGIN = "https://example.workers.dev"
 DEVICE = "a" * 32
@@ -165,3 +166,12 @@ def test_scoped_metadata_cannot_authorize_other_device():
     with pytest.raises(ValueError, match="Invalid Cloudflare Access resource"):
         check(ORIGIN, DEVICE, opener, auth_mode="cloudflare-access")
     assert opener.urls[-1] == SCOPED_META
+
+
+@pytest.mark.parametrize("edge", ["managed", "managed-scoped"])
+@pytest.mark.parametrize("invalid_resource", [{}, []])
+def test_access_preflight_normalizes_non_string_resource(edge, invalid_resource):
+    opener = Opener(edge=edge, scoped_resource=invalid_resource)
+    with pytest.raises(ValueError, match="Invalid Cloudflare Access resource") as error:
+        check(ORIGIN, DEVICE, opener, auth_mode="cloudflare-access")
+    assert failure_reason(error.value) == "access_metadata_invalid"

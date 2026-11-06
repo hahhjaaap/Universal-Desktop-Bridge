@@ -42,7 +42,9 @@ def _origin(value: str, *, staging: bool = False) -> str:
         if staging and "staging" not in host.split(".")[0].split("-"):
             raise ValueError("invalid_staging_relay")
     except ValueError:
-        raise ValueError("invalid_staging_relay" if staging else "invalid_relay") from None
+        raise ValueError(
+            "invalid_staging_relay" if staging else "invalid_relay"
+        ) from None
     return f"https://{host}"
 
 

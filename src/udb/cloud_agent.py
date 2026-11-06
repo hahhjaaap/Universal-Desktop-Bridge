@@ -31,16 +31,21 @@ _MAX_FRAME = 1024 * 1024
 _MIN_RETRY_SECONDS = 5
 _MAX_RETRY_SECONDS = 120
 _MAX_PARALLEL_CALLS = 10
-_REMOTE_READ_TOOLS = frozenset({
-    "bridge_status", "list_projects", "list_files", "read_file",
-    "search_files", "check_python_syntax",
-})
+_REMOTE_READ_TOOLS = frozenset(
+    {
+        "bridge_status",
+        "list_projects",
+        "list_files",
+        "read_file",
+        "search_files",
+        "check_python_syntax",
+    }
+)
 
 
 def is_parallel_read_rpc(rpc: dict) -> bool:
     return rpc["method"] in {"initialize", "ping", "tools/list"} or (
-        rpc["method"] == "tools/call"
-        and rpc["params"]["name"] in _REMOTE_READ_TOOLS
+        rpc["method"] == "tools/call" and rpc["params"]["name"] in _REMOTE_READ_TOOLS
     )
 
 
@@ -232,7 +237,6 @@ class LocalProxy:
                 reader.join(timeout=1)
 
 
-
 class ParallelLocalProxies:
     """Ten lazy, independent stdio workers, one outstanding RPC per worker.
 
@@ -336,9 +340,11 @@ def run(settings) -> int:
                     # websocket-client serializes sends, but keep the result
                     # framing and close decision ordered across callbacks.
                     with lock:
-                        socket.send(json.dumps({
-                            "kind": "rpc_result", "id": relay_id, "rpc": reply
-                        }))
+                        socket.send(
+                            json.dumps(
+                                {"kind": "rpc_result", "id": relay_id, "rpc": reply}
+                            )
+                        )
 
                 def rejected(rpc, error):
                     return {
@@ -348,14 +354,26 @@ def run(settings) -> int:
                     }
 
                 def finished(
-                    future, relay_id, rpc, read_only, *,
-                    session=state, local_pool=pool, socket=ws,
-                    lock=admission_lock, reply_sender=send_reply,
+                    future,
+                    relay_id,
+                    rpc,
+                    read_only,
+                    *,
+                    session=state,
+                    local_pool=pool,
+                    socket=ws,
+                    lock=admission_lock,
+                    reply_sender=send_reply,
                 ):
                     try:
                         try:
                             reply = future.result()
-                        except (OSError, RuntimeError, TimeoutError, ValueError) as error:
+                        except (
+                            OSError,
+                            RuntimeError,
+                            TimeoutError,
+                            ValueError,
+                        ) as error:
                             # Never include local filenames, arguments or secrets.
                             reply = rejected(rpc, type(error).__name__)
                         reply_sender(relay_id, reply)
@@ -402,10 +420,9 @@ def run(settings) -> int:
                             continue
                         read_only = is_parallel_read_rpc(rpc)
                         with admission_lock:
-                            busy = (
-                                state["inflight"] >= _MAX_PARALLEL_CALLS
-                                or (state["inflight"] > 0 and
-                                    (not read_only or state["mutation_active"]))
+                            busy = state["inflight"] >= _MAX_PARALLEL_CALLS or (
+                                state["inflight"] > 0
+                                and (not read_only or state["mutation_active"])
                             )
                             if not busy:
                                 state["inflight"] += 1
@@ -424,9 +441,9 @@ def run(settings) -> int:
                             send_reply(relay_id, rejected(rpc, "RuntimeError"))
                             break
                         future.add_done_callback(
-                            lambda f, rid=relay_id, request_rpc=rpc,
-                            ro=read_only, finish_call=finished:
+                            lambda f, rid=relay_id, request_rpc=rpc, ro=read_only, finish_call=finished: (
                                 finish_call(f, rid, request_rpc, ro)
+                            )
                         )
                 finally:
                     ws.close()

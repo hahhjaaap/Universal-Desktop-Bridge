@@ -368,7 +368,9 @@ def test_large_stdio_reply_is_redacted_before_cloudflare_frame_limit():
     }
     assert "sensitive" not in wire
     small = {"jsonrpc": "2.0", "id": 18, "result": {"ok": True}}
-    assert json.loads(cloud_agent.encode_relay_result("relay-18", small))["rpc"] == small
+    assert (
+        json.loads(cloud_agent.encode_relay_result("relay-18", small))["rpc"] == small
+    )
 
 
 def test_queued_worker_does_not_start_after_pool_failure(monkeypatch):

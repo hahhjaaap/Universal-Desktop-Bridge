@@ -7,7 +7,14 @@ import json
 
 import pytest
 
-from tools.check_p0b_staging_acceptance import DENIALS, FLAGS, NETWORKS, evaluate, main, run
+from tools.check_p0b_staging_acceptance import (
+    DENIALS,
+    FLAGS,
+    NETWORKS,
+    evaluate,
+    main,
+    run,
+)
 
 
 def complete():
@@ -45,19 +52,26 @@ def test_missing_checks_and_bad_networks_are_fails_closed():
     ]
 
 
-@pytest.mark.parametrize("change", [
-    lambda d: d.update({"oauth_token": "SECRET"}),
-    lambda d: d.update({"environment": "production"}),
-    lambda d: d.update({"source_commit": "0" * 40}),
-    lambda d: d.update({"worker_revision": "bad/ID"}),
-    lambda d: d.update({"schema_version": True}),
-    lambda d: d["checks"].update({"unexpected": True}),
-    lambda d: d["checks"].update({"owner_attended": 1}),
-    lambda d: d["denials"].update({"wrong_identity": "true"}),
-    lambda d: d["networks"].update({"network_a": {"attempted": True, "matched": 1}}),
-    lambda d: d["networks"].update({"network_a": {"attempted": 29, "matched": 30}}),
-    lambda d: d["networks"].update({"network_a": {"attempted": 30, "matched": 30, "secret": "x"}}),
-])
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda d: d.update({"oauth_token": "SECRET"}),
+        lambda d: d.update({"environment": "production"}),
+        lambda d: d.update({"source_commit": "0" * 40}),
+        lambda d: d.update({"worker_revision": "bad/ID"}),
+        lambda d: d.update({"schema_version": True}),
+        lambda d: d["checks"].update({"unexpected": True}),
+        lambda d: d["checks"].update({"owner_attended": 1}),
+        lambda d: d["denials"].update({"wrong_identity": "true"}),
+        lambda d: d["networks"].update(
+            {"network_a": {"attempted": True, "matched": 1}}
+        ),
+        lambda d: d["networks"].update({"network_a": {"attempted": 29, "matched": 30}}),
+        lambda d: d["networks"].update(
+            {"network_a": {"attempted": 30, "matched": 30, "secret": "x"}}
+        ),
+    ],
+)
 def test_invalid_report_fields_cannot_pass_or_leak(change):
     data = complete()
     change(data)

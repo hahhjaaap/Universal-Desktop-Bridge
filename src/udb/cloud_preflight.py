@@ -164,7 +164,14 @@ def check(
             if (
                 parsed.scheme != "https"
                 or parsed.netloc != urlsplit(origin).netloc
-                or parsed.path != "/.well-known/cloudflare-access-protected-resource/"
+                or parsed.path
+                not in {
+                    "/.well-known/cloudflare-access-protected-resource/",
+                    "/.well-known/cloudflare-access-protected-resource/"
+                    + "v1/devices/"
+                    + device_id
+                    + "/mcp",
+                }
                 or parsed.query
                 or parsed.fragment
             ):
@@ -187,10 +194,18 @@ def check(
             ):
                 raise ValueError("Invalid Cloudflare authorization servers") from None
             resource_id = access_metadata.get("resource")
+            # A path-scoped challenge must identify *this* device's MCP resource.
+            # Never accept a different device or a broad origin as proof that
+            # a device-specific Access policy was applied at the edge.
+            scoped_metadata = parsed.path.endswith("/v1/devices/" + device_id + "/mcp")
+            valid_resource = isinstance(resource_id, str) and (
+                resource_id == resource
+                if scoped_metadata
+                else resource_id in {origin, resource}
+            )
             if (
                 access_metadata.get("protected") is not True
-                or not isinstance(resource_id, str)
-                or resource_id not in {origin, resource}
+                or not valid_resource
                 or "https://" + team_host not in servers
             ):
                 raise ValueError(

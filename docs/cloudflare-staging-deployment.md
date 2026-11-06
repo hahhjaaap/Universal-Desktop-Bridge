@@ -54,6 +54,21 @@ device token. The local test project should be generated with
 no real owner directory or full-computer grant should be exposed. Keep
 `UDB_ENABLE_DEV_ADMIN_RPC` disabled.
 
+## Access metadata compatibility
+
+A path-specific Cloudflare Access application may challenge an unauthenticated
+MCP request with a **path-scoped** resource metadata URL, not only the generic
+origin-level `/.well-known/cloudflare-access-protected-resource/` document.
+The public preflight accepts either shape **only on the paired HTTPS Worker
+origin**. For the path-scoped form, it requires the exact paired device MCP
+path and checks that the returned resource equals that MCP URL; another
+device, URL query, external origin or broadened resource is rejected.
+
+This confirms an edge challenge and public metadata only. It cannot establish
+that the approved owner authenticated, that the Worker has a valid application
+AUD/grant, or that ChatGPT can read a file. Keep the authenticated-read and
+denial/revocation steps below separate.
+
 ## Evidence gates (do not collapse them)
 
 1. **Source/CI:** full Linux/Windows/Node tests pass for the exact reviewed

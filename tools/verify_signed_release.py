@@ -7,6 +7,7 @@ A SHA256SUMS file produced alongside a release is not a trusted signature.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -16,7 +17,11 @@ import zipfile
 from pathlib import Path
 
 MEMBER = "UDB/udb.exe"
+MANIFEST = "UDB/STANDALONE-SHA256SUMS"
 MAX_EXE_BYTES = 512 * 1024 * 1024
+MAX_MANIFEST_BYTES = 4 * 1024 * 1024
+MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
+MAX_ARCHIVE_FILES = 10000
 
 
 def normalized_thumbprint(value: str) -> str:
@@ -86,11 +91,84 @@ $signature = Get-AuthenticodeSignature -LiteralPath $Target
         raise RuntimeError("Invalid Windows signature verification response") from exc
 
 
+def verify_archive_manifest(package: zipfile.ZipFile) -> dict:
+    """Check every ZIP member against its self-consistency manifest.
+
+    This guards packaging errors and unintentional tampering; an attacker who
+    can replace both files and this unsigned manifest can still forge it.
+    Publisher trust therefore requires separately authenticated provenance
+    for every installer/script in a public release.
+    """
+    members = package.infolist()
+    if not 2 <= len(members) <= MAX_ARCHIVE_FILES:
+        raise ValueError("Invalid standalone archive member count")
+    listed = {}
+    seen_casefold = set()
+    total_size = 0
+    for item in members:
+        name = item.filename
+        if (
+            item.is_dir()
+            or not name.startswith("UDB/")
+            or len(name) > 512
+            or "\\\\" in name
+            or "\\x00" in name
+            or any(part in ("", ".", "..") for part in name.split("/"))
+            or name.casefold() in seen_casefold
+            or ((item.external_attr >> 16) & 0o170000) == 0o120000
+            or item.file_size < 0
+            or item.file_size > MAX_EXE_BYTES
+        ):
+            raise ValueError("Unsafe standalone archive entry")
+        seen_casefold.add(name.casefold())
+        listed[name] = item
+        total_size += item.file_size
+        if total_size > MAX_TOTAL_BYTES:
+            raise ValueError("Standalone archive exceeds size limit")
+    if MEMBER not in listed or MANIFEST not in listed:
+        raise ValueError("Standalone executable or manifest missing")
+    if listed[MEMBER].file_size <= 0:
+        raise ValueError("Invalid standalone executable size")
+    manifest_info = listed[MANIFEST]
+    if manifest_info.file_size <= 0 or manifest_info.file_size > MAX_MANIFEST_BYTES:
+        raise ValueError("Standalone manifest size invalid")
+    manifest_bytes = package.read(manifest_info)
+    if len(manifest_bytes) != manifest_info.file_size:
+        raise ValueError("Standalone manifest size changed")
+    try:
+        manifest = manifest_bytes.decode("ascii")
+    except UnicodeDecodeError:
+        raise ValueError("Standalone manifest must be ASCII") from None
+    if not manifest.endswith("\\n"):
+        raise ValueError("Standalone manifest missing final newline")
+    expected = {}
+    for line in manifest.splitlines():
+        match = re.fullmatch(r"([0-9a-f]{64})  ([^\\r\\n]+)", line)
+        if not match:
+            raise ValueError("Invalid standalone checksum line")
+        digest, relative = match.groups()
+        member_name = "UDB/" + relative
+        if member_name in expected:
+            raise ValueError("Duplicate standalone manifest entry")
+        expected[member_name] = digest
+    if set(expected) != (set(listed) - {MANIFEST}):
+        raise ValueError("Standalone manifest does not cover exact archive")
+    for name, digest in expected.items():
+        sha = hashlib.sha256()
+        with package.open(listed[name]) as handle:
+            while block := handle.read(1024 * 1024):
+                sha.update(block)
+        if sha.hexdigest() != digest:
+            raise ValueError("Standalone manifest checksum mismatch")
+    return {"members_verified": len(expected), "manifest_consistent": True}
+
+
 def verify_archive(archive: Path, expected_thumbprint: str) -> dict:
     expected_thumbprint = normalized_thumbprint(expected_thumbprint)
     if os.name != "nt":
         raise RuntimeError("Run signer verification on Windows")
     with zipfile.ZipFile(archive) as zip_file:
+        manifest_report = verify_archive_manifest(zip_file)
         members = [item for item in zip_file.infolist() if item.filename == MEMBER]
         if len(members) != 1:
             raise ValueError("Expected exactly one UDB/udb.exe in standalone archive")
@@ -110,7 +188,11 @@ def verify_archive(archive: Path, expected_thumbprint: str) -> dict:
     if not signature_is_trusted(signature, expected_thumbprint):
         raise ValueError("Authenticode signature invalid or signer does not match")
     signer = signature["SignerCertificate"]
-    return {"verified": True, "signer_thumbprint": signer["Thumbprint"].upper()}
+    return {
+        "verified": True,
+        "signer_thumbprint": signer["Thumbprint"].upper(),
+        **manifest_report,
+    }
 
 
 def main() -> None:

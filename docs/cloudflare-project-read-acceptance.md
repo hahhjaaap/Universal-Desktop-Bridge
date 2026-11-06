@@ -28,6 +28,35 @@ replays that call. `initialize` reports the actual negotiated device protocol.
 The dedicated staging Worker configuration and owner-controlled deployment
 steps are documented in [the staging deployment guide](cloudflare-staging-deployment.md).
 
+## Pairing versus staging: safe public-readiness comparison
+
+When a staging Worker has the project-read capability but \`udb doctor --cloud\`
+still reports \`project_read_not_advertised\`, first verify that the **local
+existing pairing and staging refer to the same Worker**. A successful public
+staging probe cannot fix a different paired Worker.
+
+From an isolated source checkout on the Windows owner's machine:
+
+\`\`\`sh
+python tools/compare_cloudflare_worker_readiness.py --staging-relay https://udb-private-relay-staging.example.workers.dev
+\`\`\`
+
+Replace the example hostname with the owner's separately reviewed staging
+Worker (not production). The helper uses the default owner home unless
+\`--home\` explicitly targets a disposable test home. It validates local
+pairing with the same Cloud Agent URL checks and reads **only** the non-secret
+\`cloud-pairing.json\` file. The only outgoing requests are unauthenticated
+\`GET /health\` for staging and the currently paired Worker. It never sends
+a device ID, device token, OAuth credential, project path, grant or mutation.
+It refuses unsafe/non-staging URLs and follows no HTTP redirects.
+
+The JSON response contains only fixed status labels, public capability flags
+and a boolean \`pairing_matches_staging\`, never either hostname or a device
+identifier. If the Workers differ, do **not** overwrite the working pairing:
+make an independently paired disposable staging device first. If they match,
+continue with a real authenticated test; public health does not prove user
+authorization, ChatGPT connection or Windows file access.
+
 ## Automated staging-only preflight (manual)
 
 The workflow [Cloudflare staging read-only preflight](../.github/workflows/cloudflare-staging-read-preflight.yml)

@@ -147,6 +147,16 @@ an apparently one-click general consumer cloud product.
 
 ### P1-D — Setup UX and safe controls
 
+- Treat **independent local use** and **ChatGPT remote access** as separate
+  deliverables. Start a ready local manager with one command and no
+  Desktop Commander, Cloudflare account or remote pairing. An explicit user
+  option may enable current-user logon startup; an existing remote profile
+  must not be silently switched to offline.
+- For remote ChatGPT parity, provide a guided **one-time** UDB connector
+  enrollment on the owner's own machine. Subsequent reconnects are automatic
+  only within approved identity/device grants, never by replaying uncertain
+  mutations. No normal user should manually maintain Cloudflare secrets.
+  Track [the independent UDB UX gate](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/130).
 - First-run flow: install → sign in / choose local-only → pair one device →
   select a project → review each permission → enable Cloud Agent →
   run read-only connection test → open ChatGPT connection.

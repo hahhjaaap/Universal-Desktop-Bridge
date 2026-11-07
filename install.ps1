@@ -8,10 +8,18 @@ param(
     [switch]$NoPath,
     [switch]$NoStartMenu,
     [switch]$Rollback,
-    [switch]$AllowLocalFeed
+    [switch]$AllowLocalFeed,
+    [string]$RequireSignerThumbprint = ''
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+# Opt-in signer verification for approved release channels. An explicitly
+# provided but malformed pin fails before any download or owner state change.
+if ($PSBoundParameters.ContainsKey('RequireSignerThumbprint') -and
+    ($RequireSignerThumbprint -cnotmatch '^[a-fA-F0-9]{40}$' -or
+     $RequireSignerThumbprint -match '^0{40}$')) {
+    throw 'Require a valid 40-character signer certificate thumbprint.'
+}
 if ($env:OS -ne 'Windows_NT') { throw 'This installer requires Windows.' }
 $architecture = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
 if ($architecture -ne 'AMD64') { throw 'This release requires Windows x64.' }
@@ -79,6 +87,16 @@ function Assert-Release($Record) {
     }
     if (!$seen.Contains('udb.exe')) { throw 'Retained release has no application.' }
 }
+function Assert-PinnedSigner([string]$Image) {
+    if (!$RequireSignerThumbprint) { return }
+    [void](Assert-LocalPath $Image)
+    $signature = Get-AuthenticodeSignature -LiteralPath $Image
+    if (!$signature -or [string]$signature.Status -cne 'Valid' -or
+        !$signature.SignerCertificate -or
+        $signature.SignerCertificate.Thumbprint.ToUpperInvariant() -cne $RequireSignerThumbprint.ToUpperInvariant()) {
+        throw 'Pinned publisher signature verification failed; no release switch was performed.'
+    }
+}
 function Get-AgentState([string]$Image) {
     $text = @(& $Image --home $DataHome status --json)
     $state = ($text -join "`n") | ConvertFrom-Json
@@ -95,6 +113,8 @@ function Start-Agent([string]$Image,[string]$Mode) {
 }
 function Set-ActiveRelease($Record,$Old) {
     Assert-Release $Record
+    # Applies to both fresh installations and rollback of a retained image.
+    Assert-PinnedSigner ([string]$Record.exe)
     $mcpPath = Assert-LocalPath (Join-Path $InstallRoot 'mcp.json')
     if ((Test-Path -LiteralPath $mcpPath) -and (Get-Item -LiteralPath $mcpPath).Length -gt 65536) { throw 'Existing MCP configuration exceeds limits.' }
     $oldMcp = if (Test-Path -LiteralPath $mcpPath) { [IO.File]::ReadAllText($mcpPath) } else { $null }
@@ -276,6 +296,9 @@ try {
     if ($names.Count -ne $inventory.Count) { throw 'Unexpected package files.' }
     foreach ($name in $inventory) { if (!$names.Contains('UDB/' + $name)) { throw 'Missing package file.' } }
     $candidate = Join-Path $stage 'udb.exe'
+    # Verify before moving or executing the candidate; self-consistent ZIP
+    # hashes alone do not establish the publisher identity.
+    Assert-PinnedSigner $candidate
     $releases = Join-Path $InstallRoot 'releases'
     [IO.Directory]::CreateDirectory($releases) | Out-Null
     $release = Join-Path $releases $expected.Substring(0,24)

@@ -103,27 +103,30 @@ def main():
                 p50_ms=round(statistics.median(durations), 3),
             )
 
-        def run_install(target=install, expect_success=True):
+        def run_install(target=install, expect_success=True, signer_thumbprint=None):
+            command = [
+                str(powershell),
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(installer),
+                "-FeedUrl",
+                url,
+                "-InstallRoot",
+                str(target),
+                "-DataHome",
+                str(home),
+                "-AllowLocalFeed",
+                "-NoPath",
+                "-NoStart",
+            ]
+            if signer_thumbprint is not None:
+                command.extend(["-RequireSignerThumbprint", signer_thumbprint])
             result = subprocess.run(
-                [
-                    str(powershell),
-                    "-NoLogo",
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    str(installer),
-                    "-FeedUrl",
-                    url,
-                    "-InstallRoot",
-                    str(target),
-                    "-DataHome",
-                    str(home),
-                    "-AllowLocalFeed",
-                    "-NoPath",
-                    "-NoStart",
-                ],
+                command,
                 env=env,
                 capture_output=True,
                 text=True,
@@ -171,6 +174,29 @@ def main():
             )
 
         try:
+            # Explicit signer mode must reject an invalid pin before any
+            # download, and an unsigned but valid-checksum package before
+            # activating a managed installation.
+            malformed_pin_target = root / "invalid signer pin"
+            invalid_pin = run_install(
+                target=malformed_pin_target,
+                expect_success=False,
+                signer_thumbprint="malformed-pin",
+            )
+            assert "valid 40-character" in (invalid_pin.stdout + invalid_pin.stderr)
+            assert not malformed_pin_target.exists()
+            unsigned_target = root / "unsigned must not activate"
+            refused_unsigned = run_install(
+                target=unsigned_target,
+                expect_success=False,
+                signer_thumbprint="ab" * 20,
+            )
+            assert "Pinned publisher signature verification failed" in (
+                refused_unsigned.stdout + refused_unsigned.stderr
+            )
+            assert not (unsigned_target / "install.json").exists()
+            assert not (unsigned_target / "bin/udb.cmd").exists()
+            assert sentinel.read_text() == "existing owner data"
             run_install()
             assert transient_downloads == ["/SHA256SUMS"]
             record_path = install / "install.json"
@@ -457,6 +483,8 @@ public class FailedStart {
                 reinstall_idempotent=True,
                 preserves_owner_data=True,
                 checksum_rejection=True,
+                pinned_signer_rejects_unsigned=True,
+                pinned_signer_invalid_pin_refused=True,
                 traversal_rejection=True,
                 unrelated_folder_preserved=True,
                 redirected_setup_refused=True,

@@ -31,7 +31,8 @@ def _emit(payload: dict, *, as_json: bool) -> None:
         print("ChatGPT remote connection: NOT VERIFIED; local mode is independent.")
     else:
         print(
-            "UDB local quickstart: " + payload["reason"]
+            "UDB local quickstart: "
+            + payload["reason"]
             + ". Run udb doctor --json for local diagnostics.",
             file=sys.stderr,
         )

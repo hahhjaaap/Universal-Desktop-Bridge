@@ -103,9 +103,7 @@ def main():
                 p50_ms=round(statistics.median(durations), 3),
             )
 
-        def run_install(
-            target=install, expect_success=True, signer_thumbprint=None
-        ):
+        def run_install(target=install, expect_success=True, signer_thumbprint=None):
             command = [
                 str(powershell),
                 "-NoLogo",

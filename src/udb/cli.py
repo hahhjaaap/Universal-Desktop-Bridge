@@ -91,6 +91,7 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
     subcommands = parser.add_subparsers(dest="action")
     command_names = (
         "start",
+        "quickstart",
         "setup",
         "gui",
         "runtime",
@@ -140,6 +141,7 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
             )
         if name in (
             "start",
+            "quickstart",
             "status",
             "reconnect",
             "stop",
@@ -162,6 +164,12 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
             )
             command.add_argument(
                 "--cloud-auth-mode", choices=("cloudflare-access", "jwt")
+            )
+        if name == "quickstart":
+            command.add_argument(
+                "--autostart",
+                action="store_true",
+                help="Opt in to local-only startup at Windows sign-in",
             )
         if name == "start":
             view = command.add_mutually_exclusive_group()
@@ -481,6 +489,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         if action == "setup":
             return _run_setup(args, settings)
+        if action == "quickstart":
+            if args.access or args.offline or args.online:
+                raise ValueError(
+                    "Quickstart is local-only and cannot activate owner or remote access"
+                )
+            from .quickstart import run as run_quickstart
+
+            with _settings_scope(settings):
+                return run_quickstart(
+                    settings,
+                    wait=args.wait,
+                    as_json=args.json,
+                    enable_autostart=args.autostart,
+                )
         if action in ("autostart", "update", "rollback"):
             return _run_maintenance(action, args, settings)
         if action == "start":

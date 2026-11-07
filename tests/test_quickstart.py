@@ -35,9 +35,10 @@ def test_quickstart_returns_fixed_local_only_status_without_writing_grants(
         return ready()
 
     monkeypatch.setattr(owner_command, "start", start)
-    assert cli.main(
-        ["quickstart", "--home", str(home), "--root", str(root), "--json"]
-    ) == 0
+    assert (
+        cli.main(["quickstart", "--home", str(home), "--root", str(root), "--json"])
+        == 0
+    )
     result = json.loads(capsys.readouterr().out)
     assert result == {
         "autostart": "unchanged",
@@ -75,7 +76,11 @@ def test_quickstart_is_idempotent_and_does_not_stop_an_existing_manager(
 @pytest.mark.parametrize(
     "report",
     [
-        {"manager_running": False, "manager_mode": "stopped", "connection_mode": "unknown"},
+        {
+            "manager_running": False,
+            "manager_mode": "stopped",
+            "connection_mode": "unknown",
+        },
         ready(connection_mode="online"),
         ready(manager_mode="legacy_or_unknown"),
     ],

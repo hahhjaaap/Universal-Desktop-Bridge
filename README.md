@@ -78,6 +78,27 @@ extracted UDB folder and run `.\tools\create_start_shortcut.ps1 -Exe .\udb.exe`
 from the bundled portable helper (or use it from a trusted source checkout). The shortcut opens the UDB GUI; it never grants access or
 starts an online session by itself. Windows Search indexing may take time.
 
+## Fast standalone startup (no Desktop Commander required)
+
+**For a local Windows session**, `udb quickstart` starts or reuses the
+existing UDB manager in offline mode **without** prompting for credentials,
+creating a Cloudflare pairing or silently changing a remote session:
+
+```powershell
+udb quickstart
+udb gui
+```
+
+To explicitly enable startup at Windows sign-in for a fresh/local profile,
+run `udb quickstart --autostart` once. Disable later with
+`udb autostart disable`. For any local MCP client supporting stdio,
+`udb mcp-config` prints the appropriate launch command.
+
+**Do not confuse local readiness with ChatGPT access.** A web ChatGPT client
+still needs a functioning UDB remote MCP connector with authenticated
+pairing and device/tool grants; `udb quickstart` does not set it up or claim
+it works. Details: [UDB độc lập / hướng dẫn nhanh](docs/standalone-quickstart-vi.md).
+
 ## Windows x64: install and start
 
 Review the installer and [published release](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases/latest) before executing downloaded code. In your own PowerShell terminal:

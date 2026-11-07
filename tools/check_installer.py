@@ -107,24 +107,24 @@ def main():
             target=install, expect_success=True, signer_thumbprint=None
         ):
             command = [
-                    str(powershell),
-                    "-NoLogo",
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    str(installer),
-                    "-FeedUrl",
-                    url,
-                    "-InstallRoot",
-                    str(target),
-                    "-DataHome",
-                    str(home),
-                    "-AllowLocalFeed",
-                    "-NoPath",
-                    "-NoStart",
-                ]
+                str(powershell),
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(installer),
+                "-FeedUrl",
+                url,
+                "-InstallRoot",
+                str(target),
+                "-DataHome",
+                str(home),
+                "-AllowLocalFeed",
+                "-NoPath",
+                "-NoStart",
+            ]
             if signer_thumbprint is not None:
                 command.extend(["-RequireSignerThumbprint", signer_thumbprint])
             result = subprocess.run(

@@ -48,6 +48,37 @@ A nonzero exit means there is no trusted matching signature; never treat this
 as success. The fingerprint is an identifier for the pinned certificate; it
 is **not** the cryptographic digest of a file.
 
+## Opt-in pinned-signer installer mode
+
+The Windows installer now accepts an **optional** `-RequireSignerThumbprint`
+switch containing one owner-approved 40-character Authenticode signer
+certificate thumbprint. When supplied, the installer checks Windows
+`Get-AuthenticodeSignature` for **Valid** status and the exact pinned
+certificate on the extracted `udb.exe`, **before** it is moved into the
+managed releases folder or executed. It also checks any retained executable
+chosen for rollback before switching. Missing, invalid or explicitly empty
+pins are rejected when the parameter is provided.
+
+Example for a **future, independently approved signed channel**:
+
+```powershell
+.\install.ps1 -FeedUrl https://example.org/approved-signed-udb-feed -RequireSignerThumbprint YOUR_APPROVED_40_HEX_CERTIFICATE_PIN
+```
+
+The certificate pin must be communicated through a separate authenticated
+operator channel, **not** fetched from the same unsigned ZIP or webpage being
+verified. The example is illustrative and does not designate an approved feed
+or a real signer. Any failed signature check aborts activation without
+switching the active release. A successful signature still does **not**
+authenticate `install.ps1` itself or all companion files.
+
+**Compatibility:** The option is disabled unless explicitly supplied. Existing
+unsigned developer installs still run as before, and must not be advertised
+as signed or public-beta-ready. Do not enable this for a real deployment until
+signing infrastructure and a signed artifact are provisioned. An operator
+using the pinned mode to roll back to an earlier **unsigned** release will
+receive an intentional denial. Do not silently disable the pin to bypass it.
+
 ## Required work before shipping a signed edition
 
 1. Obtain an organization-appropriate code signing identity, secure its

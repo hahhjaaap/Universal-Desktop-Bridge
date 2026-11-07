@@ -4,6 +4,7 @@ import { readJson, validRpc } from "./auth.js";
 import { AuthError, authorize, oauthConfig } from "./oauth.js";
 import { accessConfig, authorizeAccess } from "./access.js";
 import { isReadTool } from "./read-tools.js";
+import { edgeCatalog, edgeCatalogSupported } from "./edge-discovery.js";
 export { authorizeAccess } from "./access.js";
 
 const supported = new Set(["2025-03-26", "2025-06-18", "2025-11-25"]);
@@ -64,6 +65,14 @@ async function relay(stub, rpc) {
       body: JSON.stringify(rpc),
     }));
   } catch { return error(503, "relay_unavailable_outcome_unknown"); }
+}
+
+async function isExplicitDeviceOffline(response) {
+  if (response.status !== 503) return false;
+  try {
+    const body = await readJson(response.clone());
+    return body?.error === "device_offline";
+  } catch { return false; }
 }
 
 async function unavailable(response, code) {
@@ -164,6 +173,26 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   if (!((typeof rpc.id === "string" && rpc.id !== "") || Number.isSafeInteger(rpc.id)))
     return error(400, "invalid_rpc_id");
   if (!validRpc(rpc)) return error(400, "invalid_json_rpc");
+  // Opt-in only: the verified owner/device READ grant is sufficient for
+  // discovery, not for declaring that Windows is online or executing tools.
+  // LocalProxy initializes each worker before the first forwarded tools/call.
+  const useEdgeCatalog = mode === "cloudflare-access" &&
+    edgeCatalogSupported(env, user);
+  if (useEdgeCatalog && rpc.method === "initialize") {
+    const requested = rpc.params?.protocolVersion;
+    return json({ jsonrpc: "2.0", id: rpc.id, result: {
+      protocolVersion: supported.has(requested) ? requested : "2025-11-25",
+      capabilities: { tools: { listChanged: false } },
+      serverInfo: { name: "udb-cloud-edge-discovery", version: "0.1.0" },
+    } });
+  }
+  if (useEdgeCatalog && rpc.method === "tools/list") {
+    const result = { tools: edgeCatalog(user.allowTools) };
+    return json({ jsonrpc: "2.0", id: rpc.id, result:
+      modern ? modernResult({ ...result, ttlMs: 0, cacheScope: "private" }, user)
+        : result,
+    });
+  }
   if (rpc.method === "initialize") {
     // The Windows stdio proxy must receive initialize before tools/list.
     // Otherwise this edge handshake succeeds while the first discovery call
@@ -192,8 +221,24 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   if (rpc.method === "tools/call" && !user.allowTools.includes(rpc.params.name))
     return error(403, "device_tool_not_authorized");
   const response = await relay(stub, rpc);
-  if (!response.ok)
+  if (!response.ok) {
+    // Only an explicit DO "no device socket" response may yield an offline
+    // diagnostic. Never relabel 429/timeout/uncertain dispatched outcomes.
+    // A real bridge_status is still forwarded when the device is available.
+    if (useEdgeCatalog && rpc.method === "tools/call" &&
+        rpc.params.name === "bridge_status" &&
+        await isExplicitDeviceOffline(response)) {
+      const offline = { content: [{ type: "text",
+        text: "Windows UDB is offline; start the Cloud Agent and reconnect." }],
+        structuredContent: { windows_device_verified: false,
+          connection: "offline", reason: "device_offline" },
+        isError: true,
+      };
+      return json({ jsonrpc: "2.0", id: rpc.id,
+        result: modern ? modernResult(offline, user) : offline });
+    }
     return unavailable(response, "device_unavailable_outcome_unknown");
+  }
   let reply;
   try { reply = await response.json(); }
   catch { return error(502, "invalid_device_response"); }

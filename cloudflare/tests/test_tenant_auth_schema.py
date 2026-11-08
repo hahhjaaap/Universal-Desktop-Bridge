@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import sqlite3
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 SQL = Path(__file__).resolve().parents[1] / "migrations" / "0001_tenant_auth.sql"
 NOW = 1_800_000_000

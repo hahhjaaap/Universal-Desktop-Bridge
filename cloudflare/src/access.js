@@ -121,6 +121,30 @@ async function verifiedAccessIdentity(request, env, fetchImpl = fetch) {
   return { email: payload.email, sub: payload.sub };
 }
 
+// D1-backed MCP authorization can only use issuer-qualified identities
+// cryptographically verified against the pinned Cloudflare Access signing key.
+// It must never accept an arbitrary email, client-supplied subject or unsigned
+// Access runtime field as a substitute for a valid assertion.
+export async function verifiedAccessPrincipal(access, env, request, fetchImpl = fetch) {
+  const cfg = accessConfig(env);
+  if (!cfg?.team || env?.UDB_ACCESS_PRINCIPAL_MODE !== "issuer-sub" ||
+      (access && access.aud !== cfg.aud)) throw new AuthError();
+  const identity = await verifiedAccessIdentity(request, env, fetchImpl);
+  if (typeof identity.sub !== "string" || !ACCESS_SUB.test(identity.sub))
+    throw new AuthError();
+  if (typeof access?.getIdentity === "function") {
+    let observed = null;
+    try { observed = await access.getIdentity(); }
+    catch { /* A signed JWT remains mandatory and sufficient when runtime identity is absent. */ }
+    if (observed && ((emailSubject(observed.email) &&
+        observed.email !== identity.email) ||
+        (typeof observed.user_uuid === "string" &&
+         observed.user_uuid.toLowerCase() !== identity.sub.toLowerCase())))
+      throw new AuthError();
+  }
+  return { issuer: cfg.team, subject: identity.sub.toLowerCase() };
+}
+
 // Preserve the legacy public API for integrations using email grants.
 export async function verifyAccessAssertion(request, env, fetchImpl = fetch) {
   const identity = await verifiedAccessIdentity(request, env, fetchImpl);
@@ -140,28 +164,8 @@ export async function authorizeAccess(access, env, deviceId, request = null,
 
   let subject = null;
   if (mode === "issuer-sub") {
-    // Opt-in staging pilot: require the signed assertion even when ctx.access
-    // supplies a valid email. The authenticated issuer + account-scoped sub
-    // must match an explicit grant; email and legacy grants never substitute.
-    if (!cfg.team) throw new AuthError();
-    const identity = await verifiedAccessIdentity(request, env, fetchImpl);
-    if (typeof identity.sub !== "string" || !ACCESS_SUB.test(identity.sub))
-      throw new AuthError();
-    // If the Access runtime separately exposes an identity, it must not
-    // disagree with the signed assertion. WARP may expose only aud; in that
-    // case the signature remains the sole source of user identity.
-    if (typeof access?.getIdentity === "function") {
-      let observed = null;
-      try { observed = await access.getIdentity(); }
-      catch { /* Optional runtime identity unavailable; signed JWT required. */ }
-      if (observed) {
-        if ((emailSubject(observed.email) && observed.email !== identity.email) ||
-            (typeof observed.user_uuid === "string" &&
-              observed.user_uuid.toLowerCase() !== identity.sub.toLowerCase()))
-          throw new AuthError();
-      }
-    }
-    subject = cfg.team + "#" + identity.sub.toLowerCase();
+    const identity = await verifiedAccessPrincipal(access, env, request, fetchImpl);
+    subject = identity.issuer + "#" + identity.subject;
   } else {
     if (access) {
       try {

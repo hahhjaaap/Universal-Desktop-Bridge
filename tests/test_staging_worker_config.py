@@ -29,6 +29,9 @@ def test_repo_staging_config_is_isolated_and_offline():
         {"migrations": []},
         {"main": "src/other-worker.js"},
         {"compatibility_date": "2025-01-01"},
+        {"d1_databases": []},
+        {"d1_databases": [{"binding": "UDB_TENANT_DB", "database_name": "udb-auth-staging", "database_id": "wrong", "migrations_dir": "migrations"}]},
+        {"d1_databases": [{"binding": "PRODUCTION_DB", "database_name": "udb-auth-staging", "database_id": "fd474b23-56be-44c7-8387-615a071de824", "migrations_dir": "migrations"}]},
     ],
 )
 def test_unsafe_staging_changes_are_rejected(tmp_path, edit):

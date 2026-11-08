@@ -42,13 +42,23 @@ function mirroredName(value) {
 export const metadataPath = (id) => "/.well-known/oauth-protected-resource/v1/devices/" + id + "/mcp";
 
 export function protectedResource(request, env, id) {
-  // Cloudflare publishes its own metadata in Managed OAuth mode.
-  if ((env?.UDB_AUTH_MODE || "jwt") !== "jwt")
-    return error(404, "oauth_metadata_owned_by_access");
+  // RFC 9728 standard discovery improves compatibility with MCP clients that
+  // do not understand Cloudflare's vendor-prefixed resource metadata URL.
+  // This endpoint only advertises an issuer. It never grants access or
+  // replaces Cloudflare Access authentication for the protected MCP route.
+  const resource = new URL(request.url).origin + "/v1/devices/" + id + "/mcp";
+  const mode = env?.UDB_AUTH_MODE || "jwt";
+  if (mode === "cloudflare-access") {
+    const cfg = accessConfig(env);
+    if (!cfg?.team) return error(503, "access_not_configured");
+    return json({ resource, authorization_servers: [cfg.team],
+      scopes_supported: ["udb:read"] });
+  }
+  if (mode !== "jwt") return error(503, "invalid_auth_mode");
   const cfg = oauthConfig(env);
   if (!cfg) return error(503, "oauth_not_configured");
-  return json({ resource: new URL(request.url).origin + "/v1/devices/" + id + "/mcp",
-    authorization_servers: [cfg.issuer], scopes_supported: ["udb:read"] });
+  return json({ resource, authorization_servers: [cfg.issuer],
+    scopes_supported: ["udb:read"] });
 }
 
 function challenge(request, id) {

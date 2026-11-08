@@ -21,6 +21,7 @@ ALLOWED_STAGING_KEYS = {
     "workers_dev",
     "durable_objects",
     "migrations",
+    "d1_databases",
 }
 
 
@@ -54,6 +55,17 @@ def check_config(staging_path: Path, production_path: Path) -> dict:
         {"tag": "v1", "new_sqlite_classes": ["DeviceRelay"]}
     ]:
         raise ValueError("Unexpected staging Durable Object binding")
+    # A single approved staging-only D1 database binding is permitted. The
+    # production Worker config is never modified by this check or migration.
+    if staging.get("d1_databases") != [
+        {
+            "binding": "UDB_TENANT_DB",
+            "database_name": "udb-auth-staging",
+            "database_id": "fd474b23-56be-44c7-8387-615a071de824",
+            "migrations_dir": "migrations",
+        }
+    ]:
+        raise ValueError("Unexpected staging D1 binding")
     return {
         "result": "staging_configuration_safe",
         "worker": EXPECTED_STAGING_NAME,

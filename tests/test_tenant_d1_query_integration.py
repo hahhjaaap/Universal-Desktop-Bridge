@@ -19,13 +19,17 @@ ISSUER = "https://p0d-security.cloudflareaccess.com"
 ALICE = "7335d417-61da-459d-899c-0a01c76a2f94"
 BOB = "7335d417-61da-459d-899c-0a01c76a2f95"
 
+
 def sql_query() -> str:
     source = SOURCE.read_text(encoding="utf-8")
-    section = source.split("export async function authorizedDeviceReadToolsByPrincipal", 1)
+    section = source.split(
+        "export async function authorizedDeviceReadToolsByPrincipal", 1
+    )
     assert len(section) == 2
     match = re.search(r"db\.prepare\(`(.*?)`\)\.bind", section[1], re.DOTALL)
     assert match, "D1 query not found: update this acceptance test on schema refactor"
     return match.group(1)
+
 
 @pytest.fixture
 def db():
@@ -41,7 +45,12 @@ def db():
         [
             ("alice", ISSUER, ALICE, "shared@example.test"),
             ("bob", ISSUER, BOB, "shared@example.test"),
-            ("owner_b", "https://other.cloudflareaccess.com", ALICE, "third@example.test"),
+            (
+                "owner_b",
+                "https://other.cloudflareaccess.com",
+                ALICE,
+                "third@example.test",
+            ),
         ],
     )
     connection.executemany(
@@ -64,7 +73,15 @@ def db():
         [
             ("tenant_a", A, "alice", "bridge_status", "alice", NOW - 100, NOW + 1000),
             ("tenant_a", A, "alice", "read_file", "alice", NOW - 100, NOW + 1000),
-            ("tenant_b", B, "owner_b", "list_projects", "owner_b", NOW - 100, NOW + 1000),
+            (
+                "tenant_b",
+                B,
+                "owner_b",
+                "list_projects",
+                "owner_b",
+                NOW - 100,
+                NOW + 1000,
+            ),
         ],
     )
     try:
@@ -72,14 +89,19 @@ def db():
     finally:
         connection.close()
 
+
 def allowed(db, device=A, issuer=ISSUER, subject=ALICE, now=NOW):
     return [row[0] for row in db.execute(sql_query(), (device, issuer, subject, now))]
 
+
 def test_sql_is_valid_and_uses_indexed_device_lookup(db):
-    explain = list(db.execute("EXPLAIN QUERY PLAN " + sql_query(), (A, ISSUER, ALICE, NOW)))
+    explain = list(
+        db.execute("EXPLAIN QUERY PLAN " + sql_query(), (A, ISSUER, ALICE, NOW))
+    )
     assert explain
     assert any("devices" in str(row) for row in explain)
     assert allowed(db) == ["bridge_status", "read_file"]
+
 
 def test_different_subject_with_same_email_does_not_inherit_grant(db):
     assert allowed(db, subject=BOB) == []
@@ -88,6 +110,7 @@ def test_different_subject_with_same_email_does_not_inherit_grant(db):
     assert allowed(db, device=B, issuer="https://other.cloudflareaccess.com") == [
         "list_projects"
     ]
+
 
 def test_revoked_expired_and_missing_grants_are_denied(db):
     assert allowed(db, now=NOW + 1000) == []
@@ -99,6 +122,7 @@ def test_revoked_expired_and_missing_grants_are_denied(db):
     db.execute("DELETE FROM tool_grants WHERE tenant_id = ?", ("tenant_a",))
     assert allowed(db) == []
 
+
 @pytest.mark.parametrize(
     ("table", "set_clause", "where_clause"),
     [
@@ -109,13 +133,17 @@ def test_revoked_expired_and_missing_grants_are_denied(db):
         ("tenant_memberships", "state = 'revoked'", "user_id = 'alice'"),
     ],
 )
-def test_any_suspended_issuer_owner_or_device_denies_all(db, table, set_clause, where_clause):
+def test_any_suspended_issuer_owner_or_device_denies_all(
+    db, table, set_clause, where_clause
+):
     db.execute(f"UPDATE {table} SET {set_clause} WHERE {where_clause}")
     assert allowed(db) == []
+
 
 def test_sql_parameters_prevent_subject_or_device_injection(db):
     assert allowed(db, subject="' OR 1=1 --") == []
     assert allowed(db, device=A + "' OR 1=1 --") == []
+
 
 def test_untouched_database_has_no_implicit_permissions():
     connection = sqlite3.connect(":memory:")

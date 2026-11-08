@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { handleMcp } from "../src/mcp.js";
-import { edgeCatalog } from "../src/edge-discovery.js";
+import { edgeCatalog, edgeCatalogSupported } from "../src/edge-discovery.js";
+import { OWNER_TOOLS } from "../src/owner-tools.js";
+import { READ_TOOLS } from "../src/read-tools.js";
 
+const manifest = JSON.parse(readFileSync(
+  new URL("../tool-catalog.json", import.meta.url), "utf8",
+));
 const id = "b".repeat(32);
 const url = "https://udb-staging.workers.dev/v1/devices/" + id + "/mcp";
 const aud = "test-cloudflare-access-audience";
@@ -16,13 +22,11 @@ function env(tools = ["bridge_status", "read_file"]) {
     UDB_DEVICE_GRANTS: JSON.stringify({ [id]: { "owner@example.test": tools } }),
   };
 }
-
 function request(method, params = {}, rpcId = 1, headers = {}) {
   return new Request(url, { method: "POST", headers: {
     "content-type": "application/json", ...headers,
   }, body: JSON.stringify({ jsonrpc: "2.0", id: rpcId, method, params }) });
 }
-
 function offlineStub() {
   let calls = 0;
   return {
@@ -36,7 +40,7 @@ function offlineStub() {
 
 test("owner-authorized edge can initialize and discover scoped READ catalog offline", async () => {
   const stub = offlineStub();
-  const e = env(["bridge_status", "read_file", "computer_execute"]);
+  const e = env(["bridge_status", "read_file", "computer_process"]);
   const init = await handleMcp(request("initialize", {
     protocolVersion: "2025-11-25", capabilities: {},
   }), e, id, stub, fetch, access);
@@ -50,13 +54,38 @@ test("owner-authorized edge can initialize and discover scoped READ catalog offl
   assert.equal(listing.status, 200);
   const catalog = (await listing.json()).result.tools;
   assert.deepEqual(catalog.map(tool => tool.name), ["bridge_status", "read_file"]);
-  assert.deepEqual(catalog[0].inputSchema, {
-    type: "object", properties: {}, additionalProperties: false,
-  });
-  assert.deepEqual(catalog[1].inputSchema.required, ["project", "path"]);
+  assert.equal(catalog[0].inputSchema.type, "object");
+  assert.deepEqual(catalog[0].inputSchema.properties, {});
+  assert.deepEqual(catalog[1].inputSchema.required, ["project"]);
+  assert.ok(catalog[1].inputSchema.oneOf.some((branch) =>
+    branch.required?.includes("path")));
+  assert.ok(catalog[1].inputSchema.oneOf.some((branch) =>
+    branch.required?.includes("paths")));
   assert.ok(catalog.every(tool => tool.annotations.readOnlyHint &&
     tool.securitySchemes[0].scopes[0] === "udb:read"));
   assert.equal(stub.calls, 0, "discovery must not depend on an offline socket");
+});
+
+test("a fully granted owner can discover all 59 generated tools while Windows is offline", async () => {
+  const stub = offlineStub();
+  const e = {
+    ...env(READ_TOOLS),
+    UDB_ENABLE_OWNER_TOOLS: "true",
+    UDB_EDGE_TOOL_CATALOG: "true",
+    UDB_OWNER_TOOL_GRANTS: JSON.stringify({
+      [id]: { "owner@example.test": OWNER_TOOLS },
+    }),
+  };
+  const listing = await handleMcp(request("tools/list"), e, id, stub, fetch, access);
+  assert.equal(listing.status, 200);
+  const tools = (await listing.json()).result.tools;
+  assert.equal(tools.length, 59);
+  assert.deepEqual(tools.map((tool) => tool.name).sort(),
+    manifest.tools.map((tool) => tool.name).sort());
+  assert.ok(tools.some((tool) => tool.name === "computer_desktop"));
+  assert.ok(tools.some((tool) => tool.name === "file_transfer"));
+  assert.ok(tools.some((tool) => tool.name === "spreadsheet"));
+  assert.equal(stub.calls, 0);
 });
 
 test("offline bridge_status uses an honest MCP tool error, not a fake device", async () => {
@@ -129,13 +158,24 @@ test("no authentication, no grants, or no explicit flag means no offline discove
   assert.equal(stub.calls, 1);
 });
 
-test("catalog never reflects unknown or privileged grant tool names", () => {
-  const all = edgeCatalog(["computer_execute", "admin_rpc",
-    "bridge_status", "read_file", "search_files"]);
-  assert.deepEqual(all.map(t => t.name),
-    ["bridge_status", "read_file", "search_files"]);
+test("catalog never reflects unknown names and returns privileged tools only for exact grants", () => {
+  const selected = edgeCatalog([
+    "computer_process", "admin_rpc", "bridge_status", "read_file", "search_files",
+  ]);
+  assert.deepEqual(selected.map(t => t.name),
+    ["bridge_status", "read_file", "search_files", "computer_process"]);
   assert.deepEqual(edgeCatalog(null), []);
-  assert.deepEqual(edgeCatalog(["propose_file_write"]), []);
+  assert.deepEqual(edgeCatalog(["admin_rpc"]), []);
+  assert.deepEqual(edgeCatalog(["propose_file_write"]).map(t => t.name),
+    ["propose_file_write"]);
+});
+
+test("full edge catalog requires explicit opt-in and a nonempty exact grant", () => {
+  assert.equal(edgeCatalogSupported({ UDB_EDGE_TOOL_CATALOG: "true" },
+    { allowTools: ["bridge_status"], ownerTools: ["computer_process"] }), true);
+  assert.equal(edgeCatalogSupported({ UDB_EDGE_TOOL_CATALOG: "true" },
+    { allowTools: [] }), false);
+  assert.equal(edgeCatalogSupported({}, { allowTools: OWNER_TOOLS }), false);
 });
 
 test("modern read discovery carries exact per-request metadata, not device claims", async () => {

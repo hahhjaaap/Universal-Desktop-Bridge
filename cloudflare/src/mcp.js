@@ -3,7 +3,7 @@
 import { readJson, validRpc } from "./auth.js";
 import { AuthError, authorize, oauthConfig } from "./oauth.js";
 import { accessConfig, authorizeAccess } from "./access.js";
-import { isReadTool } from "./read-tools.js";
+import { TOOL_BY_NAME } from "./generated/tool-catalog.js";
 import { edgeCatalog, edgeCatalogSupported } from "./edge-discovery.js";
 export { authorizeAccess } from "./access.js";
 
@@ -254,7 +254,8 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
         // application; non-read privileges are checked by separate owner
         // grants and local approvals, not falsely labeled udb:read.
         securitySchemes: [{
-          type: "oauth2", scopes: isReadTool(tool.name) ? ["udb:read"] : [],
+          type: "oauth2",
+          scopes: TOOL_BY_NAME.get(tool.name)?.securitySchemes?.[0]?.scopes || [],
         }],
       })) };
   }

@@ -135,6 +135,13 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   try { rpc = await readJson(request); }
   catch { return error(400, "invalid_json_rpc"); }
   if (rpc.jsonrpc !== "2.0" || typeof rpc.method !== "string") return error(400, "invalid_json_rpc");
+  // Validate the JSON-RPC ID before constructing any detailed protocol
+  // error. Otherwise malformed IDs can be reflected in mismatch responses
+  // even though neither the legacy proxy nor the modern protocol accepts
+  // them. The same upper bound is enforced by validRpc before forwarding.
+  if (!((typeof rpc.id === "string" && rpc.id.length > 0 &&
+          rpc.id.length <= 256) || Number.isSafeInteger(rpc.id)))
+    return error(400, "invalid_rpc_id");
   const modern = version === MODERN_VERSION;
   const claimedVersion = rpc.params?._meta?.[META + "protocolVersion"];
   if (claimedVersion !== undefined && claimedVersion !== version)

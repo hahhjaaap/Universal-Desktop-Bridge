@@ -32,8 +32,13 @@ export async function digest(value) {
 }
 
 export async function readJson(request) {
-  const declared = Number(request.headers.get("Content-Length") || "0");
-  if (!Number.isFinite(declared) || declared < 0) throw new Error("invalid_content_length");
+  // RFC 9110 Content-Length is 1*DIGIT. Do not accept fractional,
+  // exponent, signed or precision-losing values via Number() coercion.
+  const rawLength = request.headers.get("Content-Length");
+  if (rawLength !== null && !/^[0-9]+$/.test(rawLength))
+    throw new Error("invalid_content_length");
+  const declared = rawLength === null ? 0 : Number(rawLength);
+  if (!Number.isSafeInteger(declared)) throw new Error("invalid_content_length");
   if (declared > MAX_BODY) throw new Error("body_too_large");
   if (!request.body) throw new Error("invalid_json");
   // Consume streams with a hard cap. request.text() would allocate the entire

@@ -150,3 +150,46 @@ export async function revokeOwnedDevice(db, {
     return response?.success === true && response.meta?.changes === 1;
   } catch { return false; }
 }
+
+// Device identity is bound to a globally unique D1 device ID, not a client-
+// supplied tenant or email. The principal must first be verified by the Access
+// JWT signature/audience/issuer checks in access.js. No role implicitly grants
+// a tool: the user must have an unrevoked, unexpired device-specific grant.
+const DEVICE_ID = /^[a-f0-9]{32}$/;
+
+export async function authorizedDeviceReadToolsByPrincipal(db, {
+  deviceId, identity, catalogNames, now = Math.floor(Date.now() / 1000),
+} = {}) {
+  if (!db?.prepare || !DEVICE_ID.test(deviceId ?? '') ||
+      !validIdentity(identity) || !Number.isSafeInteger(now) || now <= 0 ||
+      !(catalogNames instanceof Set) || catalogNames.size === 0 ||
+      catalogNames.size > 59) return [];
+  try {
+    const result = await db.prepare(`
+      SELECT g.tool_name
+      FROM devices AS d
+      INNER JOIN tenants AS t ON t.tenant_id = d.tenant_id
+      INNER JOIN tenant_memberships AS owner_m
+        ON owner_m.tenant_id = d.tenant_id AND owner_m.user_id = d.owner_user_id
+      INNER JOIN users AS owner_u ON owner_u.user_id = d.owner_user_id
+      INNER JOIN users AS u ON u.issuer = ?2 AND u.subject = ?3
+      INNER JOIN tenant_memberships AS m
+        ON m.tenant_id = d.tenant_id AND m.user_id = u.user_id
+      INNER JOIN tool_grants AS g
+        ON g.tenant_id = d.tenant_id AND g.device_id = d.device_id
+        AND g.user_id = u.user_id
+      WHERE d.device_id = ?1
+        AND d.state = 'active' AND d.revoked_at IS NULL
+        AND t.state = 'active'
+        AND owner_m.state = 'active' AND owner_u.state = 'active'
+        AND m.state = 'active' AND u.state = 'active'
+        AND g.revoked_at IS NULL
+        AND (g.expires_at IS NULL OR g.expires_at > ?4)
+      ORDER BY g.tool_name
+      LIMIT 100
+    `).bind(deviceId, identity.issuer, identity.subject, now).all();
+    if (result?.success !== true || !Array.isArray(result.results)) return [];
+    return result.results.map(row => row?.tool_name).filter(name =>
+      typeof name === 'string' && TOOL.test(name) && catalogNames.has(name));
+  } catch { return []; }
+}

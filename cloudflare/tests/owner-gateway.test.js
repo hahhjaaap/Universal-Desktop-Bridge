@@ -17,7 +17,7 @@ const base = () => ({
 const opts = () => ({
   UDB_ENABLE_OWNER_TOOLS: "true",
   UDB_OWNER_TOOL_GRANTS: JSON.stringify({ [DEVICE]: {
-    [OWNER]: ["computer_execute", "propose_file_write", "host_browser"],
+    [OWNER]: ["computer_process", "propose_file_write", "host_browser"],
   } }),
 });
 const access = (email = OWNER, aud = AUD) => ({
@@ -37,7 +37,7 @@ const makeStub = () => {
     let result;
     if (rpc.method === "initialize") result = { protocolVersion: "2025-11-25" };
     else if (rpc.method === "tools/list") result = { tools: [
-      "bridge_status", "read_file", "computer_execute", "propose_file_write",
+      "bridge_status", "read_file", "computer_process", "propose_file_write",
       "host_browser", "computer_desktop",
     ].map((name) => ({
       name,
@@ -59,7 +59,7 @@ test("Access mode defaults to read-only even if an owner grants exist", async ()
   assert.equal(catalog.status, 200);
   assert.deepEqual((await catalog.json()).result.tools.map((t) => t.name),
     ["bridge_status", "read_file"]);
-  const denied = await handleMcp(makeRequest(2, "tools/call", "computer_execute"),
+  const denied = await handleMcp(makeRequest(2, "tools/call", "computer_process"),
     env, DEVICE, stub, fetch, access());
   assert.equal(denied.status, 403);
   assert.deepEqual(forwarded.map((x) => x.id), [1]);
@@ -75,12 +75,12 @@ test("explicit Access owner and device grant show operations with local approval
   assert.equal(catalog.status, 200);
   const tools = (await catalog.json()).result.tools;
   assert.deepEqual(tools.map((t) => t.name), [
-    "bridge_status", "read_file", "computer_execute", "propose_file_write", "host_browser",
+    "bridge_status", "read_file", "computer_process", "propose_file_write", "host_browser",
   ]);
   assert.deepEqual(tools[0].securitySchemes[0].scopes, ["udb:read"]);
-  assert.deepEqual(tools[2].securitySchemes[0].scopes, []);
+  assert.deepEqual(tools[2].securitySchemes[0].scopes, ["udb:computer"]);
   assert.equal(tools[2].annotations.readOnlyHint, false);
-  const operation = await handleMcp(makeRequest(3, "tools/call", "computer_execute"),
+  const operation = await handleMcp(makeRequest(3, "tools/call", "computer_process"),
     env, DEVICE, stub, fetch, access());
   assert.equal(operation.status, 200);
   assert.deepEqual((await operation.json()).result,
@@ -102,7 +102,7 @@ test("revocation, wrong owner, wrong device and tenant mode reject operations", 
     { env: { ...env, UDB_TENANT_POLICY: "{}" }, device: DEVICE, identity: access() },
     { env: { ...env, UDB_DEVICE_GRANTS: "{}" }, device: DEVICE, identity: access() },
   ]) {
-    const reply = await handleMcp(makeRequest(5, "tools/call", "computer_execute"),
+    const reply = await handleMcp(makeRequest(5, "tools/call", "computer_process"),
       changed.env, changed.device, stub, fetch, changed.identity);
     assert.equal(reply.status, 403);
   }
@@ -112,15 +112,15 @@ test("revocation, wrong owner, wrong device and tenant mode reject operations", 
 test("legacy JWT resource cannot inherit Access-only owner tool scope", async () => {
   const env = { ...base(), ...opts(), UDB_AUTH_MODE: "jwt" };
   const { stub, forwarded } = makeStub();
-  const reply = await handleMcp(makeRequest(6, "tools/call", "computer_execute"),
+  const reply = await handleMcp(makeRequest(6, "tools/call", "computer_process"),
     env, DEVICE, stub, fetch, access());
   assert.equal(reply.status, 503);
   assert.equal(forwarded.length, 0);
 });
 
-test("explicit full owner grant discovers all 36 local tools without auto-running them", async () => {
+test("explicit full owner grant discovers all 59 public tools without auto-running them", async () => {
   const all = [...READ_TOOLS, ...OWNER_TOOLS];
-  assert.equal(all.length, 36);
+  assert.equal(all.length, 59);
   const env = {
     ...base(),
     UDB_DEVICE_GRANTS: JSON.stringify({ [DEVICE]: { [OWNER]: READ_TOOLS } }),
@@ -142,7 +142,7 @@ test("explicit full owner grant discovers all 36 local tools without auto-runnin
     env, DEVICE, stub, fetch, access());
   assert.equal(list.status, 200);
   const tools = (await list.json()).result.tools;
-  assert.equal(tools.length, 36);
+  assert.equal(tools.length, 59);
   assert.deepEqual(tools.map((tool) => tool.name), all);
   assert.ok(tools.every((tool) => tool.inputSchema.properties.fixture.type === "string"));
   assert.equal(forwarded.length, 1);

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .catalog import public_catalog
+from .tool_policy import validate_tool_policy
 
 
 def catalog() -> dict[str, Any]:
@@ -32,6 +33,8 @@ def catalog() -> dict[str, Any]:
     routes.update({tool["name"]: companion_route for tool in TOOLS})
 
     public_tools = public_catalog([*native_tools, *TOOLS], routes)
+    # Fail the build if any public tool is missing a reviewed access policy.
+    validate_tool_policy(public_tools)
     return {
         "tools": public_tools,
         "tool_count": len(public_tools),

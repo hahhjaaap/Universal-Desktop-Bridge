@@ -1,0 +1,57 @@
+name: staging-oauth-contract
+on:
+  push:
+    branches: [udb/staging-oauth-rfc9728]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-oauth-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-rfc9728:
+    name: Staging OAuth resource contract (read-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned UDB dependency set
+        run: python -m pip install '.[dev]'
+      - name: Check code and test formatting
+        run: |
+          python -m ruff check src/udb/cloud_preflight.py tests/test_cloudflare_access_preflight.py
+          python -m ruff format --check src/udb/cloud_preflight.py tests/test_cloudflare_access_preflight.py
+      - name: Run offline OAuth contract tests
+        run: |
+          python -m pytest -q \
+            tests/test_cloudflare_access_preflight.py \
+            tests/test_cloudflare_deployment.py \
+            tests/test_cloudflare_jwt_preflight.py \
+            tests/test_cloud_doctor.py \
+            tests/test_cloud_first_doctor.py
+      - name: Verify live staging resource and authorization challenge
+        run: |
+          python tools/check_cloudflare_deployment.py \
+            --relay 'https://udb-private-relay-staging.hkhoinguyen72.workers.dev' \
+            --device-id '54841a965bb6405c9408137a1e2eb650' \
+            --auth-mode cloudflare-access \
+            --require-project-read \
+            --require-standard-metadata
+      - name: Reject nonexistent staging device
+        run: |
+          if python tools/check_cloudflare_deployment.py \
+            --relay 'https://udb-private-relay-staging.hkhoinguyen72.workers.dev' \
+            --device-id 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+            --auth-mode cloudflare-access \
+            --require-project-read \
+            --require-standard-metadata; then
+            echo '::error::Unregistered device was incorrectly accepted'
+            exit 1
+          fi
+          echo 'Unregistered device correctly rejected'

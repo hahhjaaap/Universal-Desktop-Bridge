@@ -31,3 +31,7 @@ The migration is intended for the **dedicated** staging D1 `udb-auth-staging` on
 6. Test real clients and Windows agents across two tenants before staging traffic is enabled.
 
 **Important:** This implementation is preparation for steps 21–30, not evidence that those steps or the 100-step launch plan are complete.
+
+## Staging D1 migration record (2026-11-08)
+
+The 16 idempotent schema statements were applied **directly via the Cloudflare D1 API** to the dedicated `udb-auth-staging` database; nine UDB tables exist and no users, tenants, devices, or grants were created. This operation did **not** use Wrangler's migrations ledger. Before running `wrangler d1 migrations apply` in a later change, reconcile the ledger with the existing schema to prevent misleading migration status. No production D1 database was modified.

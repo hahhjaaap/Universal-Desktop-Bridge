@@ -4,10 +4,6 @@
   "main": "src/index.js",
   "compatibility_date": "2026-10-30",
   "workers_dev": true,
-  // Staging-only binding. MCP authorization remains on legacy grants until
-  // UDB_TENANT_D1_AUTH is set to the exact string "true" after acceptance tests.
-  // D1's schema was initially applied through Cloudflare API; reconcile the
-  // Wrangler migration ledger before running wrangler d1 migrations apply.
   "d1_databases": [
     {
       "binding": "UDB_TENANT_DB",

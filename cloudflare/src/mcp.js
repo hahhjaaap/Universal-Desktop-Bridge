@@ -4,6 +4,7 @@ import { readJson, validRpc } from "./auth.js";
 import { AuthError, authorize, oauthConfig } from "./oauth.js";
 import { accessConfig, authorizeAccess } from "./access.js";
 import { TOOL_BY_NAME } from "./generated/tool-catalog.js";
+import { authorizeD1Read } from "./d1-access.js";
 import { edgeCatalog, edgeCatalogSupported } from "./edge-discovery.js";
 export { authorizeAccess } from "./access.js";
 
@@ -101,8 +102,15 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   // Choose exactly one auth scheme; an unknown mode must fail closed.
   // Even version negotiation must not bypass owner identity/device grants.
   const mode = env?.UDB_AUTH_MODE || "jwt";
+  const d1Mode = env?.UDB_TENANT_D1_AUTH;
+  // Explicit migration mode only; never fall back to legacy grants on D1
+  // outage, malformed flag, or a different authentication method.
+  if (d1Mode !== undefined && d1Mode !== "true" && d1Mode !== "false")
+    return error(503, "invalid_tenant_d1_mode");
   if (mode !== "jwt" && mode !== "cloudflare-access")
     return error(503, "invalid_auth_mode");
+  if (d1Mode === "true" && mode !== "cloudflare-access")
+    return error(503, "tenant_d1_requires_cloudflare_access");
   if (mode === "jwt" && !oauthConfig(env))
     return error(503, "oauth_not_configured");
   if (mode === "cloudflare-access" &&
@@ -112,8 +120,11 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   let user;
   if (mode === "cloudflare-access") {
     // Cloudflare runtime identity or a verified Access-signed JWT only.
-    try { user = await authorizeAccess(access, env, id, request, fetchImpl); }
-    catch { return error(403, "cloudflare_access_identity_or_grant_required"); }
+    try {
+      user = d1Mode === "true"
+        ? await authorizeD1Read(access, env, id, request, fetchImpl)
+        : await authorizeAccess(access, env, id, request, fetchImpl);
+    } catch { return error(403, "cloudflare_access_identity_or_grant_required"); }
   } else {
     try { user = await authorize(request, env, id, fetchImpl); }
     catch (e) {

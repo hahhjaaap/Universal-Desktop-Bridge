@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { handleMcp } from "../src/mcp.js";
+import worker from "../src/index.js";
 import { verifiedAccessPrincipal } from "../src/access.js";
 
 const DEVICE = "a".repeat(32);
@@ -86,7 +87,7 @@ async function fixture() {
   const call = (jwt, method = "tools/list", params = {}, opts = {}) =>
     handleMcp(request(jwt, method, params), opts.env || env,
       opts.deviceId || DEVICE, stub, fetchImpl, opts.access || null);
-  return { token, env, state, fetchImpl, request, call };
+  return { token, env, state, fetchImpl, request, call, stub };
 }
 
 test("verified Access issuer-sub never trusts a supplied email alone", async () => {
@@ -221,4 +222,36 @@ test("an explicit false D1 flag preserves the preexisting single-owner Access pa
   const response = await f.call(await f.token(), "tools/list", {}, { env });
   assert.equal(response.status, 200);
   assert.equal(f.state.calls.length, 0);
+});
+
+test("real Worker route enforces signed D1 identity before forwarding to its Durable Object", async () => {
+  const f = await fixture();
+  const ids = [];
+  f.env.DEVICES = {
+    idFromName: (id) => { ids.push(id); return id; },
+    get: () => f.stub,
+  };
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = f.fetchImpl;
+  try {
+    const jwt = await f.token();
+    const ok = await worker.fetch(f.request(jwt), f.env, {
+      access: { aud: AUD, getIdentity: async () => ({
+        email: EMAIL, user_uuid: SUBJECT,
+      }) },
+    });
+    assert.equal(ok.status, 200);
+    assert.deepEqual((await ok.json()).result.tools.map(t => t.name),
+      ["bridge_status", "read_file"]);
+    assert.deepEqual(ids, [DEVICE]);
+    assert.equal(f.state.forward.length, 0, "edge catalog requires no live execution");
+
+    const denied = await worker.fetch(f.request(await f.token({
+      sub: OTHER_SUBJECT,
+    })), f.env);
+    assert.equal(denied.status, 403);
+    assert.equal(f.state.forward.length, 0);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
 });

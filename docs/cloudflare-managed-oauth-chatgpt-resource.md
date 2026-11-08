@@ -37,3 +37,21 @@ Validation: 115/115 Node regression tests, Wrangler 4.158.0 staging dry-run, the
 ## Remaining acceptance step
 
 The user must complete a ChatGPT OAuth linking flow using the live staging MCP resource. A standards-compliant client sends the full `resource` URL on authorization and token requests. If ChatGPT still omits it, the fix belongs in ChatGPT connector OAuth handling or a separately reviewed, security-preserving OAuth compatibility adapter; do not disable Cloudflare Access, share admin tokens or add unauthenticated direct-RPC bypasses. No successful ChatGPT `bridge_status` has been observed at the time of this patch.
+
+
+## Continuous public OAuth regression check
+
+Run this read-only diagnostic from a machine with Python and network access:
+
+```powershell
+python tools/check_cloudflare_deployment.py --relay https://udb-private-relay-staging.hkhoinguyen72.workers.dev --device-id 54841a965bb6405c9408137a1e2eb650 --auth-mode cloudflare-access --require-project-read --require-standard-metadata
+```
+
+The optional `--require-standard-metadata` check verifies that the RFC 9728
+document identifies the exact device-scoped MCP URL, the same pinned Access team
+issuer as the Cloudflare-managed OAuth challenge, and only the declared
+`udb:read` scope. It fails closed on absent, wrong-device, or unrelated issuer
+metadata. It intentionally never reads browser cookies, bearer tokens, local
+credentials, or device pairing secrets. `chatgpt_oauth: not_tested` in this
+report is deliberate; successful consent and tool execution require an
+authenticated client acceptance test.

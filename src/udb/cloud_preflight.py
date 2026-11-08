@@ -41,6 +41,10 @@ _FIXES = {
         "access",
         "The Cloudflare Access metadata is incomplete or invalid. Review the exact MCP path, Managed OAuth and organization configuration.",
     ),
+    "standard_oauth_metadata_invalid": (
+        "access",
+        "The standard RFC 9728 OAuth metadata does not match this device, the Cloudflare Access issuer, or the approved read scope.",
+    ),
     "preflight_failed": (
         "network",
         "Check the public Worker health and network connection.",
@@ -96,7 +100,10 @@ def check(
     *,
     auth_mode="jwt",
     require_project_read=False,
+    require_standard_metadata=False,
 ) -> dict:
+    if require_standard_metadata and auth_mode != "cloudflare-access":
+        raise ValueError("RFC 9728 validation requires Cloudflare Access mode")
     if auth_mode not in {"jwt", "cloudflare-access"}:
         raise ValueError("Unknown authentication mode")
     # Reject unexpected origins before making any unauthenticated network call.
@@ -255,6 +262,23 @@ def check(
     else:
         raise ValueError("Unauthenticated MCP request unexpectedly succeeded")
     report["unauthorized_access"] = "blocked"
+
+    if require_standard_metadata:
+        # The Access-managed WWW-Authenticate challenge is authoritative.
+        # Do not trust an unrelated public metadata document as proof of
+        # authorization. Match the exact MCP URL and the verified team issuer.
+        try:
+            standard_value, _ = read_json(metadata)
+        except (HTTPError, URLError, OSError, ValueError, TypeError):
+            raise ValueError("standard_oauth_metadata_invalid") from None
+        if (
+            not isinstance(standard_value, dict)
+            or standard_value.get("resource") != resource
+            or standard_value.get("authorization_servers") != ["https://" + team_host]
+            or standard_value.get("scopes_supported") != ["udb:read"]
+        ):
+            raise ValueError("standard_oauth_metadata_invalid")
+        report["standard_oauth_metadata"] = "ok"
     return report
 
 
@@ -311,6 +335,7 @@ def failure_reason(exc) -> str:
     }:
         return "access_metadata_invalid"
     known = {
+        "standard_oauth_metadata_invalid",
         "project_read_not_advertised",
         "oauth_challenge_missing_or_wrong_status",
         "Access-aware Worker code has not been deployed",
@@ -334,6 +359,11 @@ def main(checker=None) -> int:
         action="store_true",
         help="Fail unless deployed Worker advertises project-read support",
     )
+    parser.add_argument(
+        "--require-standard-metadata",
+        action="store_true",
+        help="Check exact RFC 9728 MCP resource, pinned Access issuer and read scope",
+    )
     args = parser.parse_args()
     try:
         print(
@@ -343,6 +373,7 @@ def main(checker=None) -> int:
                     args.device_id,
                     auth_mode=args.auth_mode,
                     require_project_read=args.require_project_read,
+                    require_standard_metadata=args.require_standard_metadata,
                 ),
                 indent=2,
             )

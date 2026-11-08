@@ -15,6 +15,9 @@ DEVICE = "a" * 32
 RESOURCE = ORIGIN + "/v1/devices/" + DEVICE + "/mcp"
 GENERIC_META = ORIGIN + "/.well-known/cloudflare-access-protected-resource/"
 SCOPED_META = GENERIC_META + "v1/devices/" + DEVICE + "/mcp"
+STANDARD_META = (
+    ORIGIN + "/.well-known/oauth-protected-resource/v1/devices/" + DEVICE + "/mcp"
+)
 
 
 class Response(io.BytesIO):
@@ -39,12 +42,20 @@ class Opener:
         edge="managed",
         metadata_valid=True,
         scoped_resource=None,
+        standard_available=True,
+        standard_resource=None,
+        standard_issuer=None,
+        standard_scopes=None,
     ):
         self.urls = []
         self.worker_capable = worker_capable
         self.edge = edge
         self.metadata_valid = metadata_valid
         self.scoped_resource = scoped_resource
+        self.standard_available = standard_available
+        self.standard_resource = standard_resource
+        self.standard_issuer = standard_issuer
+        self.standard_scopes = standard_scopes
 
     def open(self, request, timeout):
         assert timeout == 8
@@ -57,6 +68,27 @@ class Opener:
             return Response(
                 b'{"status":"ok","kind":"private-relay-prototype"}', headers
             )
+        if request.full_url == STANDARD_META:
+            if not self.standard_available:
+                raise HTTPError(request.full_url, 404, "missing", {}, None)
+            standard_value = {
+                "resource": (
+                    self.standard_resource
+                    if self.standard_resource is not None
+                    else RESOURCE
+                ),
+                "authorization_servers": [
+                    self.standard_issuer
+                    if self.standard_issuer is not None
+                    else "https://owner-check.cloudflareaccess.com"
+                ],
+                "scopes_supported": (
+                    self.standard_scopes
+                    if self.standard_scopes is not None
+                    else ["udb:read"]
+                ),
+            }
+            return Response(json.dumps(standard_value).encode())
         if request.full_url in {GENERIC_META, SCOPED_META}:
             scoped = request.full_url == SCOPED_META
             value = {
@@ -175,3 +207,56 @@ def test_access_preflight_normalizes_non_string_resource(edge, invalid_resource)
     with pytest.raises(ValueError, match="Invalid Cloudflare Access resource") as error:
         check(ORIGIN, DEVICE, opener, auth_mode="cloudflare-access")
     assert failure_reason(error.value) == "access_metadata_invalid"
+
+
+def test_access_preflight_verifies_live_standard_rfc9728_metadata():
+    opener = Opener(edge="managed-scoped")
+    report = check(
+        ORIGIN,
+        DEVICE,
+        opener,
+        auth_mode="cloudflare-access",
+        require_standard_metadata=True,
+    )
+    assert report["standard_oauth_metadata"] == "ok"
+    assert report["unauthorized_access"] == "blocked"
+    assert opener.urls[-1] == STANDARD_META
+    assert len(opener.urls) == 4
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"standard_available": False},
+        {"standard_resource": ORIGIN},
+        {"standard_resource": ORIGIN + "/v1/devices/" + "b" * 32 + "/mcp"},
+        {"standard_issuer": "https://evil.example"},
+        {"standard_scopes": []},
+        {"standard_scopes": ["udb:read", "admin:write"]},
+    ],
+)
+def test_standard_discovery_fails_closed_if_missing_or_mismatched(kwargs):
+    opener = Opener(edge="managed-scoped", **kwargs)
+    with pytest.raises(ValueError, match="standard_oauth_metadata_invalid") as error:
+        check(
+            ORIGIN,
+            DEVICE,
+            opener,
+            auth_mode="cloudflare-access",
+            require_standard_metadata=True,
+        )
+    assert failure_reason(error.value) == "standard_oauth_metadata_invalid"
+    assert opener.urls[-1] == STANDARD_META
+
+
+def test_rfc9728_deep_check_requires_access_auth_mode_before_network():
+    opener = Opener()
+    with pytest.raises(ValueError, match="requires Cloudflare Access"):
+        check(
+            ORIGIN,
+            DEVICE,
+            opener,
+            auth_mode="jwt",
+            require_standard_metadata=True,
+        )
+    assert not opener.urls

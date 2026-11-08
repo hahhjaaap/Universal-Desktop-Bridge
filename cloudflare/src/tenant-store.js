@@ -76,3 +76,77 @@ export async function authorizedDevices(db, { tenantId, identity, now = Math.flo
     return response.results.map(row => ({ deviceId: row.device_id, label: row.label }));
   } catch { return []; }
 }
+
+
+// These operations are intentionally NOT mounted on HTTP routes. An upstream
+// cryptographic verifier must construct the two identities. Revoking a device
+// in D1 denies MCP authorization immediately once the D1 gate is enabled,
+// but its Durable Object socket/token must ALSO be revoked by the pairing
+// service. Do not expose these helpers before that integration is complete.
+
+export async function revokeOwnedToolGrant(db, {
+  tenantId, deviceId, ownerIdentity, targetIdentity, toolName,
+  catalogNames, now = Math.floor(Date.now() / 1000),
+} = {}) {
+  if (!db?.prepare || !ID.test(tenantId ?? '') || !ID.test(deviceId ?? '') ||
+      !validIdentity(ownerIdentity) || !validIdentity(targetIdentity) ||
+      !TOOL.test(toolName ?? '') || !(catalogNames instanceof Set) ||
+      !catalogNames.has(toolName) || !Number.isSafeInteger(now) || now <= 0) return false;
+  try {
+    const response = await db.prepare(`
+      UPDATE tool_grants
+      SET revoked_at = ?1
+      WHERE tenant_id = ?2 AND device_id = ?3
+        AND tool_name = ?4 AND revoked_at IS NULL
+        AND user_id IN (
+          SELECT u.user_id FROM users AS u
+          INNER JOIN tenant_memberships AS m ON m.user_id = u.user_id
+          WHERE u.issuer = ?5 AND u.subject = ?6 AND u.state = 'active'
+            AND m.tenant_id = ?2 AND m.state = 'active'
+        )
+        AND EXISTS (
+          SELECT 1 FROM devices AS d
+          INNER JOIN tenants AS t ON t.tenant_id = d.tenant_id
+          INNER JOIN users AS o ON o.user_id = d.owner_user_id
+          INNER JOIN tenant_memberships AS om ON
+            om.user_id = o.user_id AND om.tenant_id = d.tenant_id
+          WHERE d.device_id = ?3 AND d.tenant_id = ?2
+            AND d.state = 'active' AND t.state = 'active'
+            AND om.state = 'active' AND o.state = 'active'
+            AND o.issuer = ?7 AND o.subject = ?8
+        )
+    `).bind(
+      now, tenantId, deviceId, toolName,
+      targetIdentity.issuer, targetIdentity.subject,
+      ownerIdentity.issuer, ownerIdentity.subject,
+    ).run();
+    return response?.success === true && response.meta?.changes === 1;
+  } catch { return false; }
+}
+
+export async function revokeOwnedDevice(db, {
+  tenantId, deviceId, ownerIdentity,
+  now = Math.floor(Date.now() / 1000),
+} = {}) {
+  if (!db?.prepare || !ID.test(tenantId ?? '') || !ID.test(deviceId ?? '') ||
+      !validIdentity(ownerIdentity) || !Number.isSafeInteger(now) ||
+      now <= 0) return false;
+  try {
+    const response = await db.prepare(`
+      UPDATE devices
+      SET state = 'revoked', revoked_at = ?1
+      WHERE tenant_id = ?2 AND device_id = ?3 AND state = 'active'
+        AND EXISTS (
+          SELECT 1 FROM tenants AS t
+          INNER JOIN tenant_memberships AS m ON m.tenant_id = t.tenant_id
+          INNER JOIN users AS u ON u.user_id = m.user_id
+          WHERE t.tenant_id = ?2 AND t.state = 'active'
+            AND m.user_id = devices.owner_user_id
+            AND m.state = 'active' AND u.state = 'active'
+            AND u.issuer = ?4 AND u.subject = ?5
+        )
+    `).bind(now, tenantId, deviceId, ownerIdentity.issuer, ownerIdentity.subject)
+      .run();
+    return response?.success === true && response.meta?.changes === 1;
+  } catch { return false; }
+}

@@ -44,7 +44,10 @@ test("OAuth discovery is informational; it never permits unauthenticated MCP too
     method: "POST",
     body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
   }), env);
-  assert.equal(response.status, 403);
+  // A missing authenticated identity must challenge with 401 so ChatGPT can
+  // start/refresh OAuth, without permitting tool discovery.
+  assert.equal(response.status, 401);
+  assert.match(response.headers.get("www-authenticate"), /resource_metadata=/);
   assert.equal(env.forwarded(), 0);
 });
 

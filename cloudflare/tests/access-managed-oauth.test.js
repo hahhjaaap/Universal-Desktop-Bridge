@@ -57,12 +57,12 @@ test("Access mode fails closed without configured audience or runtime identity",
 
 test("Access verifies application audience and exact owner/device grant", async () => {
   const env = settings();
-  for (const bad of [
-    ctx("owner@example.test", "not-our-access-app"),
-    ctx("another@example.test"),
-    { access: { aud: VERIFIED_AUD, getIdentity: async () => null } },
+  for (const [bad, expected] of [
+    [ctx("owner@example.test", "not-our-access-app"), 403],
+    [ctx("another@example.test"), 403],
+    [{ access: { aud: VERIFIED_AUD, getIdentity: async () => null } }, 401],
   ]) {
-    assert.equal((await worker.fetch(req("tools/list"), env, bad)).status, 403);
+    assert.equal((await worker.fetch(req("tools/list"), env, bad)).status, expected);
   }
   assert.equal(env.forwarded.length, 0);
   assert.deepEqual(await authorizeAccess(ctx().access, env, ID),

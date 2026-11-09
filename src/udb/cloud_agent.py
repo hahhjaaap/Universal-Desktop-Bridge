@@ -31,6 +31,10 @@ _MAX_FRAME = 1024 * 1024
 _MIN_RETRY_SECONDS = 5
 _MAX_RETRY_SECONDS = 120
 _MAX_PARALLEL_CALLS = 10
+# Detect half-open TCP / idle WebSocket connections without replaying RPCs.
+_HEARTBEAT_IDLE_SECONDS = 30
+_HEARTBEAT_PONG_SECONDS = 15
+_HEARTBEAT_PAYLOAD = b"udb-live"
 _REMOTE_READ_TOOLS = frozenset(
     {
         "bridge_status",
@@ -350,6 +354,55 @@ def load_pairing(home: Path) -> tuple[str, str, Path]:
     return relay, device_id, token_file
 
 
+
+def receive_relay_text(ws, websocket) -> str | None:
+    """Read one text RPC frame; require a matching pong after idle ping.
+
+    This only checks transport liveness. It never retries an RPC, restarts a
+    mutation, or accepts unsolicited pong frames as proof of connectivity.
+    A failed heartbeat causes the caller to close this entire WebSocket and
+    all local proxy workers before beginning a new transport session.
+    """
+    awaiting_pong = False
+    ws.settimeout(_HEARTBEAT_IDLE_SECONDS)
+    while True:
+        try:
+            opcode, frame = ws.recv_data_frame(control_frame=True)
+        except websocket.WebSocketTimeoutException:
+            if awaiting_pong:
+                raise
+            ws.ping(_HEARTBEAT_PAYLOAD)
+            awaiting_pong = True
+            ws.settimeout(_HEARTBEAT_PONG_SECONDS)
+            continue
+
+        if opcode == websocket.ABNF.OPCODE_PONG:
+            if awaiting_pong and frame.data == _HEARTBEAT_PAYLOAD:
+                awaiting_pong = False
+                ws.settimeout(_HEARTBEAT_IDLE_SECONDS)
+            continue
+        if opcode == websocket.ABNF.OPCODE_PING:
+            # websocket-client already replies to PING in recv_data_frame.
+            continue
+        if opcode == websocket.ABNF.OPCODE_CLOSE:
+            return None
+        if opcode != websocket.ABNF.OPCODE_TEXT:
+            raise websocket.WebSocketProtocolException(
+                "Expected text frame from Cloudflare relay"
+            )
+        payload = frame.data
+        if isinstance(payload, bytes):
+            try:
+                return payload.decode("utf-8")
+            except UnicodeDecodeError:
+                raise websocket.WebSocketProtocolException(
+                    "Invalid WebSocket text encoding"
+                ) from None
+        if isinstance(payload, str):
+            return payload
+        raise websocket.WebSocketProtocolException("Invalid WebSocket text frame")
+
+
 def run(settings) -> int:
     """Connect only after local owner provisioned a paired device secret."""
     import websocket
@@ -375,8 +428,8 @@ def run(settings) -> int:
                     redirect_limit=0,  # Never forward bearer tokens to redirects.
                 )
                 connected_at = time.monotonic()
-                # Keep idle WebSockets open for Cloudflare hibernation.
-                ws.settimeout(None)
+                # A bounded idle heartbeat detects half-open transports.
+                # Never retry unknown outcomes across a reconnect.
                 print("UDB cloud agent: connected.")
                 pool = ParallelLocalProxies(settings)
                 send_lock = threading.Lock()
@@ -445,7 +498,7 @@ def run(settings) -> int:
 
                 try:
                     while True:
-                        frame = ws.recv()
+                        frame = receive_relay_text(ws, websocket)
                         if not frame:
                             break
                         if (

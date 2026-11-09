@@ -55,3 +55,69 @@ metadata. It intentionally never reads browser cookies, bearer tokens, local
 credentials, or device pairing secrets. `chatgpt_oauth: not_tested` in this
 report is deliberate; successful consent and tool execution require an
 authenticated client acceptance test.
+
+
+## 2026-11-09: ChatGPT callback compatibility and replayable preflight
+
+An additional **independent** OAuth connectivity blocker was reproduced on the
+**staging-only** Cloudflare Access application. DCR registration using
+\`https://chatgpt.com/connector_platform_oauth_redirect\` failed with HTTP 400,
+\`invalid_client_metadata\`, and \`redirect_uri is not allowed by the account
+configuration\`. Previously only the callback-ID wildcard was allowed.
+Per [OpenAI OAuth callback documentation](https://developers.openai.com/plugins/build/auth),
+different existing ChatGPT connector instances may use either callback format.
+
+In Access > Applications > **UDB Staging MCP** > Managed OAuth > Dynamic
+Client Registration, allow precisely these two ChatGPT callback patterns:
+
+- \`https://chatgpt.com/connector/oauth/*\`
+- \`https://chatgpt.com/connector_platform_oauth_redirect\`
+
+The Cloudflare staging Access app was updated using the same existing policy,
+device-scoped paths, token TTL, and DCR settings. **Do not** allow arbitrary
+redirect hosts, remove RFC 8707 \`resource\` enforcement, or permit unauthenticated
+MCP requests. The production Worker/Access app was not changed.
+
+Verified against live staging Access on 2026-11-09:
+
+| Test | Observed |
+| --- | --- |
+| RFC 9728 metadata bound to exact staging device | HTTP 200, correct resource/issuer |
+| Unauthenticated MCP GET and initialize POST | HTTP 401 and WWW-Authenticate |
+| DCR: exact ChatGPT callback-ID URI | HTTP 201 |
+| DCR: stable ChatGPT callback URI after allowlist change | HTTP 201 (previously 400) |
+| Authorization with registered client and correct RFC 8707 resource | HTTP 302 to Access login |
+| Authorization with wrong resource | HTTP 400 |
+| Cloudflare authorization server advertises PKCE | S256 |
+| Cloudflare authorization server advertises refresh-token grant | Yes |
+| Authenticated ChatGPT tool discovery / Windows fixture read | **NOT TESTED** |
+
+The DCR probes create disposable public OAuth client registrations, not access
+tokens. Cloudflare Access's registration endpoint did not expose a cleanup
+endpoint in these probes; run registration tests only when needed.
+
+### Safe repeatable preflight
+
+Run read-only discovery and denied-unauthenticated checks (no client registration):
+
+\`\`\`powershell
+python tools/check_chatgpt_oauth.py --relay https://udb-private-relay-staging.hkhoinguyen72.workers.dev --device-id 54841a965bb6405c9408137a1e2eb650
+\`\`\`
+
+If the administrator needs to test the real ChatGPT redirect allowlist, add
+\`--register-client --callback https://chatgpt.com/connector_platform_oauth_redirect\`.
+Use the *exact* redirect shown in the ChatGPT MCP connection management page
+when checking a specific app. This optional flag creates one disposable
+OAuth client, then verifies login initiation and wrong-resource rejection.
+It never authenticates a user, requests an access token, or executes a Windows
+tool. The script rejects non-staging relay hosts and non-ChatGPT callback URIs.
+
+Remaining integration acceptance requires the owner to enable the **UDB
+Staging** ChatGPT connector and personally complete the Cloudflare Access OAuth
+consent. Use the exact scoped MCP resource and verify (1) \`tools/list\`,
+(2) \`bridge_status\` or a permitted equivalent, (3) a synthetic fixture file
+read whose hash is known, and (4) wrong identity, device, revoke and mutation
+denials. A successful public preflight or DCR registration **must not** be
+presented as authenticated end-to-end success. The existing \`udb_cloudflare\`
+connector errors target another production endpoint and do not prove a staging
+OAuth failure.

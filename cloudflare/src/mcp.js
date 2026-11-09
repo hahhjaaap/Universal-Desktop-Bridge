@@ -105,7 +105,10 @@ async function unavailable(response, code) {
 
 export async function handleMcp(request, env, id, stub, fetchImpl = fetch, access = null) {
   const origin = request.headers.get("Origin");
-  if (origin && origin !== new URL(request.url).origin) return error(403, "invalid_origin");
+  if (origin && origin !== new URL(request.url).origin) {
+    console.warn(JSON.stringify({ event: "udb_mcp_scan_denied", category: "origin_mismatch" }));
+    return error(403, "invalid_origin");
+  }
   if (request.method !== "POST") return error(405, "method_not_allowed");
   const version = request.headers.get("MCP-Protocol-Version") || "2025-03-26";
   // Choose exactly one auth scheme; an unknown mode must fail closed.
@@ -123,7 +126,16 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   if (mode === "cloudflare-access") {
     // Cloudflare runtime identity or a verified Access-signed JWT only.
     try { user = await authorizeAccess(access, env, id, request, fetchImpl); }
-    catch { return error(403, "cloudflare_access_identity_or_grant_required"); }
+    catch (failure) {
+      // Do not log caller identity, bearer material, JWTs, device IDs, or
+      // request bodies. Only static reason classes are permitted in logs.
+      const safe = new Set(["access_audience_mismatch",
+        "verified_identity_missing", "device_grant_missing"]);
+      const category = failure instanceof AuthError && safe.has(failure.message)
+        ? failure.message : "identity_unverified";
+      console.warn(JSON.stringify({ event: "udb_mcp_scan_denied", category }));
+      return error(403, "cloudflare_access_identity_or_grant_required");
+    }
   } else {
     try { user = await authorize(request, env, id, fetchImpl); }
     catch (e) {
@@ -218,6 +230,8 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   }
   if (useEdgeCatalog && rpc.method === "tools/list") {
     const result = { tools: edgeCatalog(user.allowTools) };
+    console.info(JSON.stringify({ event: "udb_mcp_tools_discovered",
+      source: "edge", count: result.tools.length }));
     return json({ jsonrpc: "2.0", id: rpc.id, result:
       modern ? modernResult({ ...result, ttlMs: 0, cacheScope: "private" }, user)
         : result,

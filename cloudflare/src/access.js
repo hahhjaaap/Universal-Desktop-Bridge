@@ -136,7 +136,7 @@ export async function authorizeAccess(access, env, deviceId, request = null,
   // An unknown identity mode must never silently fall back to email grants.
   if (mode !== "email" && mode !== "issuer-sub") throw new AuthError();
   // A conflicting runtime app audience cannot be bypassed by a signed JWT.
-  if (access && access.aud !== cfg.aud) throw new AuthError();
+  if (access && access.aud !== cfg.aud) throw new AuthError("access_audience_mismatch");
 
   let subject = null;
   if (mode === "issuer-sub") {
@@ -171,11 +171,17 @@ export async function authorizeAccess(access, env, deviceId, request = null,
         }
       } catch { /* WARP/runtime identity may be unavailable: verify signed header */ }
     }
-    if (!subject) subject = await verifyAccessAssertion(request, env, fetchImpl);
+    if (!subject) {
+      // A bearer token is not a trusted user identity at the Worker. Only
+      // Cloudflare Access runtime identity or a verified signed assertion is.
+      if (!request?.headers?.get("Cf-Access-Jwt-Assertion"))
+        throw new AuthError("verified_identity_missing");
+      subject = await verifyAccessAssertion(request, env, fetchImpl);
+    }
   }
   const readTools = deviceGrant(env, deviceId, subject);
   // Owner tools never replace the independently granted read identity.
-  if (readTools.length === 0) throw new AuthError();
+  if (readTools.length === 0) throw new AuthError("device_grant_missing");
   const ownerTools = ownerToolGrant(env, deviceId, subject);
   // Preserve the legacy read-only authorization response exactly when the
   // opt-in profile is absent; existing Access integrations remain unchanged.

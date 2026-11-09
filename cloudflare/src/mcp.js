@@ -68,6 +68,17 @@ function challenge(request, id) {
   });
 }
 
+// Managed OAuth must use an HTTP 401 challenge for a missing or invalid
+// authenticated Access identity. A generic 403 without WWW-Authenticate
+// prevents clients from recovering during MCP tool discovery/token refresh.
+// A VERIFIED identity without a device grant still receives HTTP 403 below.
+function accessChallenge(request, id) {
+  return json({ error: "cloudflare_access_authentication_required" }, 401, {
+    "www-authenticate": 'Bearer error="invalid_token", resource_metadata="' +
+      new URL(request.url).origin + metadataPath(id) + '", scope="udb:read"',
+  });
+}
+
 async function relay(stub, rpc) {
   try {
     return await stub.fetch(new Request("https://internal/rpc", {
@@ -134,7 +145,12 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
       const category = failure instanceof AuthError && safe.has(failure.message)
         ? failure.message : "identity_unverified";
       console.warn(JSON.stringify({ event: "udb_mcp_scan_denied", category }));
-      return error(403, "cloudflare_access_identity_or_grant_required");
+      // An authenticated subject without a grant and an audience mismatch
+      // are authorization/configuration failures, not requests to re-login.
+      if (category === "device_grant_missing" ||
+          category === "access_audience_mismatch")
+        return error(403, "cloudflare_access_identity_or_grant_required");
+      return accessChallenge(request, id);
     }
   } else {
     try { user = await authorize(request, env, id, fetchImpl); }

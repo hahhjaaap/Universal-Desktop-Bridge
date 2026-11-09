@@ -46,7 +46,7 @@ test("Access mode fails closed without configured audience or runtime identity",
     headers: { "Cf-Access-Jwt-Assertion": "forged-header" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
   });
-  assert.equal((await worker.fetch(spoof, env)).status, 403);
+  assert.equal((await worker.fetch(spoof, env)).status, 401);
   assert.equal(env.forwarded.length, 0);
   delete env.UDB_ACCESS_AUD;
   assert.equal((await worker.fetch(req("tools/list"), env, ctx())).status, 503);
@@ -86,7 +86,9 @@ test("Access authentication never accepts identity from arbitrary request header
   const attempt = req("tools/list");
   attempt.headers.set("Cf-Access-Jwt-Assertion", "fake");
   attempt.headers.set("X-User-Email", "owner@example.test");
-  assert.equal((await worker.fetch(attempt, env)).status, 403);
+  const denied = await worker.fetch(attempt, env);
+  assert.equal(denied.status, 401);
+  assert.match(denied.headers.get("www-authenticate"), /resource_metadata=/);
   assert.equal(env.forwarded.length, 0);
 });
 

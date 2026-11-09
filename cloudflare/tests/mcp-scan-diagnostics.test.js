@@ -83,7 +83,11 @@ test("missing signed Access identity stays denied despite bearer token", async (
   const e = env();
   const { response, messages } = await recorded(() =>
     worker.fetch(request(), e));
-  assert.equal(response.status, 403);
+  assert.equal(response.status, 401);
+  assert.equal((await response.json()).error,
+    "cloudflare_access_authentication_required");
+  assert.match(response.headers.get("www-authenticate"),
+    /Bearer error="invalid_token", resource_metadata="https:\/\/stage\.example\.workers\.dev\/\.well-known\/oauth-protected-resource\/v1\/devices\/a{32}\/mcp"/);
   assert.equal(messages[0].category, "verified_identity_missing");
   assert.equal(e.forwards(), 0);
 });

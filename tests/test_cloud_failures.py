@@ -57,10 +57,11 @@ def test_agent_backs_off_immediately_closed_websockets(monkeypatch, tmp_path):
 
     class ClosedSocket:
         def settimeout(self, timeout):
-            assert timeout is None
+            assert timeout == cloud_agent._HEARTBEAT_IDLE_SECONDS
 
-        def recv(self):
-            return ""
+        def recv_data_frame(self, control_frame=False):
+            assert control_frame is True
+            return websocket.ABNF.OPCODE_CLOSE, SimpleNamespace(data=b"")
 
         def close(self):
             pass

@@ -354,7 +354,6 @@ def load_pairing(home: Path) -> tuple[str, str, Path]:
     return relay, device_id, token_file
 
 
-
 def receive_relay_text(ws, websocket) -> str | None:
     """Read one text RPC frame; require a matching pong after idle ping.
 

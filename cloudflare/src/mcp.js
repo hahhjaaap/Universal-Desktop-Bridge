@@ -135,6 +135,21 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   try { rpc = await readJson(request); }
   catch { return error(400, "invalid_json_rpc"); }
   if (rpc.jsonrpc !== "2.0" || typeof rpc.method !== "string") return error(400, "invalid_json_rpc");
+  // MCP initialized is a JSON-RPC notification: it intentionally has no ID.
+  // Admit it only after owner/device authorization, for a supported legacy
+  // protocol version, with a well-formed optional params object. Do not
+  // reflect notification fields in any error or forward it to Windows.
+  if (rpc.method === "notifications/initialized" &&
+      !Object.hasOwn(rpc, "id") && supported.has(version)) {
+    if (rpc.params !== undefined &&
+        (!rpc.params || typeof rpc.params !== "object" ||
+         Array.isArray(rpc.params))) return error(400, "invalid_json_rpc");
+    const announced = rpc.params?._meta?.[META + "protocolVersion"];
+    if (announced !== undefined && announced !== version)
+      return error(400, "protocol_version_mismatch");
+    return new Response(null, { status: 202,
+      headers: { "cache-control": "no-store" } });
+  }
   // Validate the JSON-RPC ID before constructing any detailed protocol
   // error. Otherwise malformed IDs can be reflected in mismatch responses
   // even though neither the legacy proxy nor the modern protocol accepts
@@ -185,8 +200,6 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
     rpc = { ...rpc, params: { ...rpc.params } };
     delete rpc.params._meta;
   }
-  if (rpc.method === "notifications/initialized" && rpc.id === undefined)
-    return new Response(null, { status: 202, headers: { "cache-control": "no-store" } });
   if (!((typeof rpc.id === "string" && rpc.id !== "") || Number.isSafeInteger(rpc.id)))
     return error(400, "invalid_rpc_id");
   if (!validRpc(rpc)) return error(400, "invalid_json_rpc");

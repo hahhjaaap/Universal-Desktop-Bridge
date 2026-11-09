@@ -141,13 +141,19 @@ def test_cloud_agent_sends_ten_parallel_results_with_distinct_ids(
             if self.index < 10:
                 self.index += 1
                 ident = self.index
-                return websocket.ABNF.OPCODE_TEXT, SimpleNamespace(data=json.dumps(
-                    {
-                        "kind": "rpc",
-                        "id": f"relay-{ident}",
-                        "rpc": {"jsonrpc": "2.0", "id": ident, "method": "tools/list"},
-                    }
-                ).encode("utf-8"))
+                return websocket.ABNF.OPCODE_TEXT, SimpleNamespace(
+                    data=json.dumps(
+                        {
+                            "kind": "rpc",
+                            "id": f"relay-{ident}",
+                            "rpc": {
+                                "jsonrpc": "2.0",
+                                "id": ident,
+                                "method": "tools/list",
+                            },
+                        }
+                    ).encode("utf-8")
+                )
             assert replies_ready.wait(timeout=15)
             return websocket.ABNF.OPCODE_CLOSE, SimpleNamespace(data=b"")
 
@@ -243,13 +249,15 @@ def test_unexpected_worker_exception_fails_closed_without_leaking(
             assert control_frame is True
             if self.index == 0:
                 self.index += 1
-                return websocket.ABNF.OPCODE_TEXT, SimpleNamespace(data=json.dumps(
-                    {
-                        "kind": "rpc",
-                        "id": "relay-1",
-                        "rpc": {"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
-                    }
-                ).encode("utf-8"))
+                return websocket.ABNF.OPCODE_TEXT, SimpleNamespace(
+                    data=json.dumps(
+                        {
+                            "kind": "rpc",
+                            "id": "relay-1",
+                            "rpc": {"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+                        }
+                    ).encode("utf-8")
+                )
             assert response_ready.wait(timeout=10)
             return websocket.ABNF.OPCODE_CLOSE, SimpleNamespace(data=b"")
 

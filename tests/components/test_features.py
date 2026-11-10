@@ -2,7 +2,6 @@
 
 import base64
 import hashlib
-import json
 import os
 import subprocess
 import sys
@@ -13,9 +12,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from udb_background import Background
-from udb_companion import Runtime, ScopedFiles
-from udb_system_processes import ProcessCatalog
+from udb_companion import Runtime
 
 
 def wait_for(fn, seconds=8):

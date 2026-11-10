@@ -86,7 +86,7 @@ def main():
         x, y, width, height = elements["Calculate"]["bounds"]
         x = int(x + width / 2)
         y = int(y + height / 2)
-        before = pointer(action="status")["system_cursor"]
+        pointer(action="status")["system_cursor"]
         row = pointer(action="click", window_id=pid, x=x, y=y)
         assert row["physical_input_injected"] is False, row
         assert (

@@ -1,11 +1,10 @@
 """End-to-end three document tools through an installed MCP; own files only."""
 
-import json
 import tempfile
 import time
 from pathlib import Path
 
-from test_uia_provider import ROOT, Client, object_data
+from test_uia_provider import Client, object_data
 
 
 def main():

@@ -1,10 +1,8 @@
 """Failure-path and policy regressions found during the full project audit."""
 
 import json
-import os
 import sys
 import time
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -12,7 +10,7 @@ import pytest
 from udb import cli, host_client, owner_command
 from udb.companion.background import Background
 from udb.companion.runtime import Runtime, ScopedFiles, digest
-from udb.config import activate, checked, effective, load
+from udb.config import activate, effective, load
 from udb.core import Agent, PolicyError
 
 

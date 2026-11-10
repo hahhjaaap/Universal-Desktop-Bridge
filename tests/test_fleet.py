@@ -1,7 +1,6 @@
 """Multi-PC regression tests: targeting, config validation, and authorization."""
 
 import json
-from pathlib import Path
 
 import pytest
 

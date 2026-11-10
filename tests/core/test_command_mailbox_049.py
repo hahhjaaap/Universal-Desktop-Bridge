@@ -1,7 +1,6 @@
 """Fixed guest mailbox correctness and backwards compatibility."""
 
 import hashlib
-import json
 import time
 
 import pytest

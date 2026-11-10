@@ -1,11 +1,10 @@
-import json
 import os
 import time
 from pathlib import Path
 
 import pytest
 
-from udb.core import Agent, PolicyError, digest
+from udb.core import Agent, PolicyError
 from udb.sandbox import build_wsb
 
 

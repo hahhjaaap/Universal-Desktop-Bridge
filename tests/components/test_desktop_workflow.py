@@ -1,13 +1,11 @@
 """Real MCP advanced GUI acceptance, exclusively on an owned native test form."""
 
-import ctypes
 import json
 import os
 import queue
 import subprocess
 import threading
 import time
-from ctypes import wintypes as w
 from pathlib import Path
 
 from test_uia_provider import ROOT, Client, object_data, receive

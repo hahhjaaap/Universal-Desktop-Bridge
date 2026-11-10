@@ -1,5 +1,4 @@
 import json
-import os
 import struct
 import time
 import zlib

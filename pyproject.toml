@@ -54,5 +54,5 @@ line-ending = "lf"
 select = ["E4", "E7", "E9", "F", "I", "B", "ASYNC", "S607"]
 
 [tool.ruff.lint.per-file-ignores]
-"test_*.py" = ["F401", "F811", "F841"]
-"tests/**/*.py" = ["F401", "F811", "F841"]
+# Pytest resolves this imported fixture by argument name.
+"tests/core/test_tasks_050.py" = ["F401", "F811"]

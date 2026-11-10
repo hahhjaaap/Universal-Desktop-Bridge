@@ -1,7 +1,6 @@
 """Crash fixtures and reload durable records without replaying unknown writes."""
 
 import json
-import os
 import subprocess
 import sys
 import tempfile

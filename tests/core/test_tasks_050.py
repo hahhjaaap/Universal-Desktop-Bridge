@@ -4,8 +4,6 @@ import io
 import json
 import sys
 import time
-from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -14,6 +12,7 @@ from udb import desktop_vm as vm
 from udb.core import Agent, PolicyError, canonical
 from udb.fileops import propose_text_edit, read_files, search_files
 
+# Pytest requires this fixture import for tests using the desktop argument.
 from .test_command_mailbox_049 import desktop
 
 

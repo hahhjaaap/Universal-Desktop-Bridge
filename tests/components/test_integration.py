@@ -1,6 +1,5 @@
 import json
 import time
-from types import SimpleNamespace
 
 from udb_unified import UnifiedProxy
 

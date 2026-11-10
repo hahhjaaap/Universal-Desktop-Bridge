@@ -3,7 +3,6 @@
 import json
 import threading
 import time
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -18,7 +17,7 @@ from udb.host_browser import (
 )
 from udb.host_client import atomic_json, status
 from udb.host_service import HostService
-from udb.resources import LIMITS, Governor, require_capacity
+from udb.resources import Governor, require_capacity
 
 
 def sample(**kwargs):

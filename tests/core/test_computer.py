@@ -15,7 +15,7 @@ import pytest
 
 from udb import computer_access as access
 from udb.computer import Computer
-from udb.computer_files import MAX_FILE, Files
+from udb.computer_files import Files
 from udb.computer_jobs import Jobs
 from udb.core import Agent, PolicyError
 

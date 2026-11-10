@@ -1,0 +1,20 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "udb-desktop-bridge",
+  "version": "0.1.0",
+  "description": "Connect ChatGPT to the UDB Windows desktop through its existing Cloudflare Access-protected MCP server.",
+  "author": { "name": "UDB Project" },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "UDB Desktop Bridge",
+        "shortDescription": "Secure desktop bridge",
+        "longDescription": "Connect ChatGPT to the UDB staging desktop through a device-scoped MCP endpoint protected by Cloudflare Access. The user must complete OAuth consent. Available tools and permissions are determined by the connected UDB server and Windows owner policy.",
+        "developerName": "UDB Project",
+        "category": "Developer Tools",
+        "capabilities": [],
+        "defaultPrompt": "Check my UDB connection status and show the desktop tools available to this session."
+      }
+    }
+  }
+}

@@ -32,8 +32,13 @@ export async function digest(value) {
 }
 
 export async function readJson(request) {
-  const declared = Number(request.headers.get("Content-Length") || "0");
-  if (!Number.isFinite(declared) || declared < 0) throw new Error("invalid_content_length");
+  // RFC 9110 Content-Length is 1*DIGIT. Do not accept fractional,
+  // exponent, signed or precision-losing values via Number() coercion.
+  const rawLength = request.headers.get("Content-Length");
+  if (rawLength !== null && !/^[0-9]+$/.test(rawLength))
+    throw new Error("invalid_content_length");
+  const declared = rawLength === null ? 0 : Number(rawLength);
+  if (!Number.isSafeInteger(declared)) throw new Error("invalid_content_length");
   if (declared > MAX_BODY) throw new Error("body_too_large");
   if (!request.body) throw new Error("invalid_json");
   // Consume streams with a hard cap. request.text() would allocate the entire
@@ -67,7 +72,8 @@ export function validRpc(rpc) {
   if (!rpc || typeof rpc !== "object" || Array.isArray(rpc)) return false;
   if (rpc.jsonrpc !== "2.0" || !["initialize", "ping", "tools/list", "tools/call"].includes(rpc.method))
     return false;
-  if (!(typeof rpc.id === "string" || Number.isSafeInteger(rpc.id)) || rpc.id === "") return false;
+  if (!((typeof rpc.id === "string" && rpc.id.length > 0 &&
+          rpc.id.length <= 256) || Number.isSafeInteger(rpc.id))) return false;
   if (rpc.params !== undefined && (rpc.params === null || typeof rpc.params !== "object" ||
       Array.isArray(rpc.params))) return false;
   if (rpc.method === "tools/call" && (!rpc.params || typeof rpc.params.name !== "string" ||

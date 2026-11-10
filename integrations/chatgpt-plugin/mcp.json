@@ -1,0 +1,16 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "udb-staging": {
+      "type": "streamable-http",
+      "url": "https://udb-private-relay-staging.hkhoinguyen72.workers.dev/v1/devices/54841a965bb6405c9408137a1e2eb650/mcp",
+      "extensions": {
+        "com.openai": {
+          "auth": { "type": "oauth", "client": { "mode": "dcr" } },
+          "baseScopes": ["udb:read"],
+          "defaultScopes": ["udb:read"]
+        }
+      }
+    }
+  }
+}

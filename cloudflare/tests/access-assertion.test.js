@@ -121,7 +121,7 @@ test("invalid, expired, wrong-application and wrong-team assertions fail closed"
     const jwt = await f.token(changes);
     const response = await (await import("../src/mcp.js")).handleMcp(
       f.request(jwt), f.env, DEVICE, f.env.DEVICES.get(), f.fetchImpl);
-    assert.equal(response.status, 403);
+    assert.equal(response.status, Object.hasOwn(changes, "email") ? 403 : 401);
   }
   const swapped = await f.token({}, { alg: "none" });
   await assert.rejects(
@@ -143,7 +143,7 @@ test("a fake Access header, cookie, or opaque token without signed JWT cannot lo
   raw.headers.set("Cookie", "CF_Authorization=untrusted");
   const response = await (await import("../src/mcp.js")).handleMcp(
     raw, f.env, DEVICE, f.env.DEVICES.get(), f.fetchImpl);
-  assert.equal(response.status, 403);
+  assert.equal(response.status, 401);
   assert.equal(f.forwards.length, 0);
 });
 
@@ -199,7 +199,7 @@ test("opt-in issuer-sub mode requires signed JWT and exact tenant grant", async 
   const runtime = { aud: AUD, getIdentity: async () => ({ email: EMAIL }) };
   const withoutJwt = await handleMcp(
     f.request(null), f.env, DEVICE, f.env.DEVICES.get(), f.fetchImpl, runtime);
-  assert.equal(withoutJwt.status, 403);
+  assert.equal(withoutJwt.status, 401);
   assert.equal(f.forwards.length, 0);
 
   const response = await handleMcp(

@@ -46,7 +46,7 @@ test("Access mode fails closed without configured audience or runtime identity",
     headers: { "Cf-Access-Jwt-Assertion": "forged-header" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
   });
-  assert.equal((await worker.fetch(spoof, env)).status, 403);
+  assert.equal((await worker.fetch(spoof, env)).status, 401);
   assert.equal(env.forwarded.length, 0);
   delete env.UDB_ACCESS_AUD;
   assert.equal((await worker.fetch(req("tools/list"), env, ctx())).status, 503);
@@ -57,12 +57,12 @@ test("Access mode fails closed without configured audience or runtime identity",
 
 test("Access verifies application audience and exact owner/device grant", async () => {
   const env = settings();
-  for (const bad of [
-    ctx("owner@example.test", "not-our-access-app"),
-    ctx("another@example.test"),
-    { access: { aud: VERIFIED_AUD, getIdentity: async () => null } },
+  for (const [bad, expected] of [
+    [ctx("owner@example.test", "not-our-access-app"), 403],
+    [ctx("another@example.test"), 403],
+    [{ access: { aud: VERIFIED_AUD, getIdentity: async () => null } }, 401],
   ]) {
-    assert.equal((await worker.fetch(req("tools/list"), env, bad)).status, 403);
+    assert.equal((await worker.fetch(req("tools/list"), env, bad)).status, expected);
   }
   assert.equal(env.forwarded.length, 0);
   assert.deepEqual(await authorizeAccess(ctx().access, env, ID),
@@ -86,7 +86,9 @@ test("Access authentication never accepts identity from arbitrary request header
   const attempt = req("tools/list");
   attempt.headers.set("Cf-Access-Jwt-Assertion", "fake");
   attempt.headers.set("X-User-Email", "owner@example.test");
-  assert.equal((await worker.fetch(attempt, env)).status, 403);
+  const denied = await worker.fetch(attempt, env);
+  assert.equal(denied.status, 401);
+  assert.match(denied.headers.get("www-authenticate"), /resource_metadata=/);
   assert.equal(env.forwarded.length, 0);
 });
 

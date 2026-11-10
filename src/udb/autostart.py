@@ -54,7 +54,9 @@ def script_text(settings, *, cloud_agent=False):
     argv += [
         "--root",
         str(settings.project_root),
-        "--disable-terminal" if cloud_agent else (
+        "--disable-terminal"
+        if cloud_agent
+        else (
             "--enable-terminal" if settings.enable_terminal else "--disable-terminal"
         ),
     ]
@@ -63,7 +65,9 @@ def script_text(settings, *, cloud_agent=False):
 
     def quoted(args):
         # Literal PowerShell arguments prevent path interpolation and injection.
-        return "& " + " ".join("'" + part.replace("'", "''") + "'" for part in args) + "\n"
+        return (
+            "& " + " ".join("'" + part.replace("'", "''") + "'" for part in args) + "\n"
+        )
 
     script = SCRIPT_HEADER
     if cloud_agent:
@@ -143,6 +147,7 @@ def status(settings, backend=None):
         cloud_match = content == script_text(settings, cloud_agent=True)
         if cloud_match:
             from .onboarding import paired_cloud
+
             try:
                 cloud_match = paired_cloud(settings.home) is not None
             except (OSError, ValueError, KeyError, TypeError):

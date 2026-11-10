@@ -133,6 +133,11 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
                 default="status",
                 nargs="?",
             )
+            command.add_argument(
+                "--cloud-agent",
+                action="store_true",
+                help="Opt in to Cloudflare Cloud Agent at Windows logon (local console only)",
+            )
         if name == "update":
             command.add_argument(
                 "--check",
@@ -383,7 +388,12 @@ def _run_maintenance(action: str, args: argparse.Namespace, settings: Settings) 
         if action == "autostart":
             from .autostart import run
 
-            return run(settings, args.operation, as_json=args.json)
+            return run(
+                settings,
+                args.operation,
+                as_json=args.json,
+                cloud_agent=args.cloud_agent,
+            )
         from .maintenance import run
 
         return run(

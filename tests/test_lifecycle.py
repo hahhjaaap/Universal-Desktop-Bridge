@@ -128,6 +128,88 @@ def test_autostart_is_optional_idempotent_and_never_grants(tmp_path, monkeypatch
     assert registry.values == {"Unrelated": ("leave alone", registry.REG_SZ)}
 
 
+def test_cloudflare_autostart_requires_pairing_and_attended_console(
+    tmp_path, monkeypatch
+):
+    settings = Settings(tmp_path / "home", tmp_path / "work")
+    registry = Registry()
+    monkeypatch.setattr(autostart, "startup_command", lambda _: "safe-test-command")
+    with pytest.raises(CommandError, match="Pair"):
+        autostart.run(settings, "enable", backend=registry, cloud_agent=True)
+    assert not registry.values
+    settings.home.mkdir()
+    (settings.home / "cloud-pairing.json").write_text(
+        json.dumps(
+            {
+                "relay": "https://staging.example.workers.dev",
+                "device_id": "a" * 32,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(onboarding, "attended_console", lambda: False)
+    with pytest.raises(CommandError, match="attended"):
+        autostart.run(settings, "enable", backend=registry, cloud_agent=True)
+    assert not registry.values
+    monkeypatch.setattr(onboarding, "attended_console", lambda: True)
+    assert autostart.run(settings, "enable", backend=registry, cloud_agent=True) == 0
+    report = autostart.status(settings, registry)
+    assert report["matches_current"] and report["cloud_agent_enabled"]
+    script = autostart.script_path(settings).read_text(encoding="utf-8-sig")
+    assert "'--offline'" in script and "'cloud-agent'" in script
+    assert "'--disable-terminal'" in script and "'--access'" not in script
+    assert script.count("cloud-agent") >= 1
+    autostart.run(settings, "disable", backend=registry)
+    assert not autostart.status(settings, registry)["enabled"]
+
+
+def test_cloudflare_pairing_without_cloud_agent_flag_only_starts_local_manager(
+    tmp_path, monkeypatch
+):
+    settings = Settings(tmp_path / "home", tmp_path / "work")
+    settings.home.mkdir()
+    (settings.home / "cloud-pairing.json").write_text(
+        json.dumps(
+            {
+                "relay": "https://staging.example.workers.dev",
+                "device_id": "b" * 32,
+            }
+        ),
+        encoding="utf-8",
+    )
+    registry = Registry()
+    monkeypatch.setattr(autostart, "startup_command", lambda _: "safe-test-command")
+    assert autostart.run(settings, "enable", backend=registry) == 0
+    report = autostart.status(settings, registry)
+    assert report["matches_current"] and not report["cloud_agent_enabled"]
+    assert "'cloud-agent'" not in autostart.script_path(settings).read_text(
+        encoding="utf-8-sig"
+    )
+
+
+def test_reject_cloud_agent_with_terminal_enabled_and_disable_flag(
+    tmp_path, monkeypatch
+):
+    settings = Settings(tmp_path / "home", tmp_path / "work", enable_terminal=True)
+    settings.home.mkdir()
+    (settings.home / "cloud-pairing.json").write_text(
+        json.dumps(
+            {
+                "relay": "https://staging.example.workers.dev",
+                "device_id": "c" * 32,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(onboarding, "attended_console", lambda: True)
+    registry = Registry()
+    with pytest.raises(CommandError, match="terminal"):
+        autostart.run(settings, "enable", backend=registry, cloud_agent=True)
+    with pytest.raises(CommandError, match="only applies"):
+        autostart.run(settings, "disable", backend=registry, cloud_agent=True)
+    assert registry.values == {}
+
+
 def test_startup_arguments_are_literals_and_background_only(tmp_path, monkeypatch):
     settings = Settings(tmp_path / "owner's $home; echo injected", tmp_path / "work")
     monkeypatch.setattr(autostart, "installation", lambda: None)

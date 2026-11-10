@@ -4,6 +4,7 @@
 // Never use an unverified header, opaque OAuth token, cookie or email as identity.
 import { AuthError, deviceGrant } from "./oauth.js";
 import { ownerToolGrant } from "./owner-tools.js";
+import { companionToolGrant } from "./companion-tools.js";
 
 const MAX_ASSERTION = 8192;
 const MAX_JWKS = 16384;
@@ -182,7 +183,10 @@ export async function authorizeAccess(access, env, deviceId, request = null,
   const readTools = deviceGrant(env, deviceId, subject);
   // Owner tools never replace the independently granted read identity.
   if (readTools.length === 0) throw new AuthError("device_grant_missing");
-  const ownerTools = ownerToolGrant(env, deviceId, subject);
+  const ownerTools = [
+    ...ownerToolGrant(env, deviceId, subject),
+    ...companionToolGrant(env, deviceId, subject),
+  ];
   // Preserve the legacy read-only authorization response exactly when the
   // opt-in profile is absent; existing Access integrations remain unchanged.
   return ownerTools.length

@@ -181,6 +181,10 @@ discovery: verify a read-only invocation in ChatGPT.
 | `udb update --check` | Check the latest published stable release |
 | `udb update` / `udb rollback` | Managed installation update / previous-release rollback |
 | `udb autostart enable` / `udb autostart disable` | Opt in/out of startup at Windows sign-in |
+
+Cloudflare-paired users can additionally opt in to automatically start the outbound Cloud Agent **after Windows sign-in** with `udb autostart enable --cloud-agent --home PATH`. This must be run once from an attended local Windows terminal, with terminal access disabled; it does not grant new device permissions. `udb autostart status --json --home PATH` reports `cloud_agent_enabled`, and `udb autostart disable --home PATH` removes this user's logon entry. Auto-start is at user sign-in, not before login or under SYSTEM.
+
+
 | `udb mcp-config --home PATH --root PATH` | Print a local stdio MCP configuration |
 | `udb --access computer` | Attended local owner opt-in to broader computer access |
 

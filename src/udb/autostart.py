@@ -30,13 +30,13 @@ def script_path(settings):
     )
 
 
-def script_text(settings):
+def script_text(settings, *, cloud_agent=False):
     found = installation()
     if found:
         root, record = found
         if record["home"] != str(settings.home):
             raise CommandError("Use the managed launcher's saved home for autostart.")
-        argv = [
+        launcher = [
             system_executable("powershell.exe"),
             "-NoLogo",
             "-NoProfile",
@@ -44,28 +44,51 @@ def script_text(settings):
             "Bypass",
             "-File",
             str(root / "bin/udb.ps1"),
-            "start",
-            "--detach",
         ]
+        argv = [*launcher, "start", "--detach"]
     else:
+        launcher = None
         argv = command(["--home", str(settings.home), "start", "--detach"])
+    if cloud_agent:
+        argv.append("--offline")
     argv += [
         "--root",
         str(settings.project_root),
-        "--enable-terminal" if settings.enable_terminal else "--disable-terminal",
+        "--disable-terminal"
+        if cloud_agent
+        else (
+            "--enable-terminal" if settings.enable_terminal else "--disable-terminal"
+        ),
     ]
     if settings.core_exe:
         argv += ["--core-exe", str(settings.core_exe)]
-    # Literal PowerShell arguments cannot interpolate paths into commands.
-    return (
-        SCRIPT_HEADER
-        + "$ErrorActionPreference = 'Stop'\n"
-        + (
-            "& "
-            + " ".join("'" + arg.replace("'", "''") + "'" for arg in argv)
-            + "\nexit $LASTEXITCODE\n"
+
+    def quoted(args):
+        # Literal PowerShell arguments prevent path interpolation and injection.
+        return (
+            "& " + " ".join("'" + part.replace("'", "''") + "'" for part in args) + "\n"
         )
-    )
+
+    script = SCRIPT_HEADER
+    if cloud_agent:
+        script += "# Cloud Agent opt-in: owner-attended local installation\n"
+    script += "$ErrorActionPreference = 'Stop'\n" + quoted(argv)
+    if cloud_agent:
+        # Cloud Agent stays in the hidden logon process; the local Manager is
+        # started first in offline mode, without owner/terminal access.
+        cloud_argv = (
+            [*launcher, "cloud-agent", "--home", str(settings.home)]
+            if launcher is not None
+            else command(["--home", str(settings.home), "cloud-agent"])
+        )
+        cloud_argv += [
+            "--root",
+            str(settings.project_root),
+            "--disable-terminal",
+        ]
+        script += "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n"
+        script += quoted(cloud_argv)
+    return script + "exit $LASTEXITCODE\n"
 
 
 def startup_command(settings):
@@ -91,13 +114,13 @@ def startup_command(settings):
     return value
 
 
-def write_script(settings):
+def write_script(settings, *, cloud_agent=False):
     path = script_path(settings)
     if path.exists() and not read_text(path, 65536).startswith(SCRIPT_HEADER):
         raise CommandError(
             "The startup helper contains unrelated content; preserved it."
         )
-    text = script_text(settings)
+    text = script_text(settings, cloud_agent=cloud_agent)
     path.parent.mkdir(parents=True, exist_ok=True)
     checked(path)
     temporary = path.with_name(".startup-" + uuid.uuid4().hex + ".tmp")
@@ -118,33 +141,69 @@ def status(settings, backend=None):
     try:
         with backend.OpenKey(backend.HKEY_CURRENT_USER, RUN_KEY) as key:
             value, kind = backend.QueryValueEx(key, identity(settings.home))
+        path = script_path(settings)
+        content = read_text(path, 65536) if path.is_file() else ""
+        local_match = content == script_text(settings)
+        cloud_match = content == script_text(settings, cloud_agent=True)
+        if cloud_match:
+            from .onboarding import paired_cloud
+
+            try:
+                cloud_match = paired_cloud(settings.home) is not None
+            except (OSError, ValueError, KeyError, TypeError):
+                cloud_match = False
         return {
             "supported": True,
             "enabled": True,
             "matches_current": kind == backend.REG_SZ
             and value == startup_command(settings)
-            and script_path(settings).is_file()
-            and read_text(script_path(settings), 65536) == script_text(settings),
+            and (local_match or cloud_match),
+            "cloud_agent_enabled": cloud_match,
         }
     except FileNotFoundError:
-        return {"supported": True, "enabled": False, "matches_current": False}
+        return {
+            "supported": True,
+            "enabled": False,
+            "matches_current": False,
+            "cloud_agent_enabled": False,
+        }
 
 
-def run(settings, action, *, as_json=False, backend=None):
+def run(settings, action, *, as_json=False, backend=None, cloud_agent=False):
     if os.name != "nt" and backend is None:
         raise CommandError("Autostart requires Windows.")
     if backend is None:
         import winreg as backend
     if action not in ("enable", "disable", "status"):
         raise CommandError("Choose autostart enable, disable or status.")
+    if cloud_agent and action != "enable":
+        raise CommandError("--cloud-agent only applies to autostart enable.")
     if action == "enable":
-        # Enabling startup must not trigger a first-run wizard in a hidden process.
-        from .onboarding import saved_connection, saved_mode
+        # Never enable an unattended cloud connection from a remote tool call.
+        from .onboarding import (
+            attended_console,
+            paired_cloud,
+            saved_connection,
+            saved_mode,
+        )
 
-        if saved_mode(settings) != "offline" and not saved_connection(settings):
+        pairing = paired_cloud(settings.home)
+        if cloud_agent and not pairing:
+            raise CommandError("Pair this Cloudflare device locally first.")
+        if cloud_agent and not attended_console():
+            raise CommandError(
+                "Cloud Agent autostart requires an attended local Windows terminal."
+            )
+        if (
+            saved_mode(settings) != "offline"
+            and not saved_connection(settings)
+            and not pairing
+        ):
             raise CommandError("Run udb setup before enabling autostart.")
+        if cloud_agent and settings.enable_terminal:
+            raise CommandError("Disable terminal access before Cloud Agent autostart.")
         value = startup_command(settings)
-        write_script(settings)
+        write_script(settings, cloud_agent=cloud_agent)
         with backend.CreateKeyEx(
             backend.HKEY_CURRENT_USER, RUN_KEY, 0, backend.KEY_SET_VALUE
         ) as key:

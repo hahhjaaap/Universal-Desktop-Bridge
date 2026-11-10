@@ -60,8 +60,17 @@ def search_files(agent, project, path=".", pattern="*", text="", limit=100):
                     if scanned > 10000 or time.monotonic() >= deadline:
                         truncated = True
                         break
-                    rel = Path(entry.path).relative_to(root).as_posix()
                     try:
+                        # Filter unrelated names before a costly policy lookup;
+                        # every traversed folder and candidate remains scoped.
+                        if not entry.is_dir(follow_symlinks=False) and (
+                            Path(entry.name).suffix.lower() not in SOURCE_EXT
+                            or not fnmatch.fnmatch(
+                                entry.name.casefold(), folded_pattern
+                            )
+                        ):
+                            continue
+                        rel = Path(entry.path).relative_to(root).as_posix()
                         target = agent.path(project, rel)
                         if target.is_dir():
                             pending.append(target)

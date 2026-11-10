@@ -161,3 +161,34 @@ bottleneck, not a proven root cause. Profiling the shell launcher,
 executable unpacking, imports, antivirus and process startup is required
 before selecting a distribution change. See [issue #89](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/89).
 No onedir migration or sub-2-second startup is claimed yet.
+
+## Owner-scoped source search prefilter (2026-11-10)
+
+The project source-search operation now skips unrelated regular file names
+before invoking the expensive owner/project-scoped path check.
+Every directory considered for traversal and every candidate source file still
+passes through existing policy validation, including symlink/junction,
+protected roots and hard-link checks. Directory scan counts, match limits,
+deadlines and the result shape remain unchanged.
+
+Run the repeatable synthetic fixture benchmark (no owner files or grants):
+
+```sh
+python tools/benchmark_source_search.py --samples 3
+```
+
+On one Windows machine, 290 synthetic entries (250 `.bin`, 20 `.md`,
+20 `.py`) with a `*.py` query and 20 matches produced:
+
+| Metric | Before | After |
+| --- | ---: | ---: |
+| Median search duration | 553.15 ms | 69.18 ms |
+| Per-file scoped-path calls | 292 | 22 |
+| Entries scanned | 290 | 290 |
+| Matching paths | 20 | 20 |
+
+This is approximately an 8x speedup only for this mixed-extension,
+synthetic workload. Source-heavy folders, network drives, warm file-system
+caches and other machines can behave differently; the benchmark is
+informational, not a CI speed threshold. Directory and permission regression
+tests remain the acceptance gate.

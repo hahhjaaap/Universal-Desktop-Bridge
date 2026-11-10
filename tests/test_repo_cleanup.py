@@ -69,6 +69,59 @@ def test_source_search_returns_only_first_ten_hits_with_original_line_numbers(tm
     assert result["scanned"] == 1
 
 
+def test_source_search_prefilters_unmatched_files_before_scope_lookup(tmp_path):
+    for index in range(200):
+        (tmp_path / f"binary-{index:04}.bin").write_bytes(b"unrelated")
+    for index in range(5):
+        (tmp_path / f"match-{index:04}.py").write_text("needle\\n")
+    checked = []
+
+    class SpyAgent:
+        def project(self, project):
+            return project, tmp_path
+
+        def path(self, project, rel):
+            checked.append(str(rel))
+            return tmp_path / Path(rel)
+
+        def read_bytes(self, project, rel):
+            return (tmp_path / rel).read_bytes()
+
+    response = search_files(SpyAgent(), "test", pattern="*.py", limit=50)
+    assert {r["path"] for r in response["items"]} == {
+        f"match-{n:04}.py" for n in range(5)
+    }
+    assert response["scanned"] == 205
+    assert response["truncated"] is False
+    assert len(checked) == 7
+    assert all("binary-" not in path for path in checked)
+
+
+def test_source_search_still_checks_directories_before_traversal(tmp_path):
+    (tmp_path / "allowed").mkdir()
+    (tmp_path / "blocked").mkdir()
+    (tmp_path / "allowed" / "yes.py").write_text("yes")
+    (tmp_path / "blocked" / "no.py").write_text("no")
+    checked = []
+
+    class SpyAgent:
+        def project(self, project):
+            return project, tmp_path
+
+        def path(self, project, rel):
+            checked.append(str(rel))
+            if str(rel) == "blocked":
+                from udb.core import PolicyError
+
+                raise PolicyError("No access")
+            return tmp_path / Path(rel)
+
+    response = search_files(SpyAgent(), "test", pattern="*.py", limit=50)
+    assert {r["path"] for r in response["items"]} == {"allowed/yes.py"}
+    assert "blocked" in checked
+    assert "blocked/no.py" not in checked
+
+
 def test_governor_computes_light_capacity_once(monkeypatch):
     calls = []
     monkeypatch.setattr(

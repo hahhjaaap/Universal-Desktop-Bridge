@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from udb.core import PolicyError
-from udb.desktop import command, mcp_command
+from udb.desktop import mcp_command
 
 
 def test_default_and_existing_stdio_manifest(tmp_path):

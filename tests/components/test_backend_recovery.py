@@ -1,7 +1,6 @@
 """Kill real MCP subprocesses; verify recovery never replays a side effect."""
 
 import concurrent.futures
-import json
 import sys
 import tempfile
 import unittest

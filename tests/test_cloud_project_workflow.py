@@ -5,8 +5,6 @@ import json
 import subprocess
 import sys
 
-import pytest
-
 from udb.cloud_agent import LocalProxy
 from udb.config import Settings, activate
 from udb.core import Agent

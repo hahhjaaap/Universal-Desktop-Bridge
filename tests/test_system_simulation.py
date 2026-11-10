@@ -3,7 +3,6 @@
 import io
 import json
 import subprocess
-import sys
 from datetime import timedelta
 from types import SimpleNamespace
 

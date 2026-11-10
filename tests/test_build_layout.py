@@ -1,7 +1,6 @@
 """Onedir candidate packaging preserves resources and excludes owner state."""
 
 import hashlib
-import json
 import sys
 import types
 import zipfile

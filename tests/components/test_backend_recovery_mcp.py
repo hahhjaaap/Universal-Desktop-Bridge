@@ -10,7 +10,7 @@ import time
 from ctypes import wintypes as w
 from pathlib import Path
 
-from test_uia_provider import Client, object_data
+from test_uia_provider import Client
 
 
 def terminate_backend(proxy_pid, kind):

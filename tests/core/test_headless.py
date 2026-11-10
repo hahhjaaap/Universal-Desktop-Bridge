@@ -1,6 +1,5 @@
 """Headless lifecycle: no permission mutations, replay or GUI dependency."""
 
-import importlib.util
 import json
 import sys
 import threading
@@ -136,7 +135,6 @@ def test_cli_cannot_stop_legacy_or_unidentified_process(tmp_path):
 
 
 def test_headless_does_not_import_qtwidgets_in_fresh_interpreter(tmp_path):
-    import os
     import subprocess
 
     root = Path(__file__).resolve().parents[1]

@@ -1,6 +1,6 @@
 // UDB Cloudflare private relay prototype. NOT a public MCP server.
 // The desktop retains all UDB owner-grant and tool policy enforcement.
-import { DEVICE_ID, HASH, bearer, adminAuthorized, digest, readJson, validRpc, fixedEqual } from "./auth.js";
+import { HASH, bearer, adminAuthorized, digest, readJson, validRpc, fixedEqual } from "./auth.js";
 import { newPairing, PAIRING_TTL_MS } from "./pairing.js";
 import { handleMcp, protectedResource } from "./mcp.js";
 import { isReadTool } from "./read-tools.js";

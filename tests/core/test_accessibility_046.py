@@ -4,7 +4,6 @@ import base64
 import json
 import queue
 import sys
-import threading
 
 import pytest
 

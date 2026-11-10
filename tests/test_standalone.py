@@ -6,20 +6,17 @@ All application homes, helper fixtures and permission checks are isolated.
 from __future__ import annotations
 
 import hashlib
-import io
 import json
 import subprocess
 import sys
 import threading
 import time
 import zipfile
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from udb import build, cli, components, config, desktop, headless, owner_command
-from udb.core import PolicyError
 
 
 @pytest.fixture

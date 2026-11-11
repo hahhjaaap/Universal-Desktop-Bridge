@@ -25,8 +25,8 @@ def route(monkeypatch, *, interactive=True):
     monkeypatch.setattr(owner_command, "main", lambda args: calls.append(args) or 0)
     monkeypatch.setattr(
         onboarding,
-        "run",
-        lambda settings, **options: setups.append((settings, options)) or 0,
+        "setup_cloud",
+        lambda settings: setups.append(settings) or 0,
     )
     return calls, setups
 
@@ -38,7 +38,8 @@ def test_first_interactive_start_opens_setup_without_creating_home(
     home = tmp_path / "first run"
     previous = config._active
     assert cli.main(["start", "--home", str(home)]) == 0
-    assert not calls and len(setups) == 1 and setups[0][0].home == home
+    assert len(calls) == 1 and "--offline" in calls[0]
+    assert len(setups) == 1 and setups[0].home == home
     assert config._active is previous and not home.exists()
 
 
@@ -59,9 +60,7 @@ def test_redirected_start_never_enters_setup(tmp_path, monkeypatch):
     assert len(calls) == 1 and not setups and not home.exists()
 
 
-def test_saved_connection_reuses_normal_start_without_a_setup_prompt(
-    tmp_path, monkeypatch
-):
+def test_old_tunnel_metadata_never_selects_a_connection(tmp_path, monkeypatch):
     calls, setups = route(monkeypatch)
     home = tmp_path / "existing"
     (home / "state").mkdir(parents=True)
@@ -69,7 +68,7 @@ def test_saved_connection_reuses_normal_start_without_a_setup_prompt(
     connection = home / "state/connection.json"
     connection.write_text(data)
     assert cli.main(["start", "--home", str(home)]) == 0
-    assert len(calls) == 1 and not setups and "--offline" not in calls[0]
+    assert len(calls) == 1 and setups and "--offline" in calls[0]
     assert connection.read_text() == data
 
 
@@ -105,25 +104,19 @@ def test_invalid_saved_mode_does_not_start_online_or_echo_its_content(
     data = '{"schema":1,"mode":"SYNTHETIC_PRIVATE_VALUE"}'
     preference = home / "state/startup-preferences.json"
     preference.write_text(data)
-    assert cli.main(["start", "--home", str(home)]) == 2
-    assert not calls and not setups and preference.read_text() == data
-    error = capsys.readouterr().err
-    assert "SYNTHETIC_PRIVATE_VALUE" not in error and "udb setup" in error
+    assert cli.main(["start", "--home", str(home), "--json"]) == 0
+    assert not setups and "--offline" in calls[0]
+    assert preference.read_text() == data
+    assert "SYNTHETIC_PRIVATE_VALUE" not in capsys.readouterr().err
 
 
-@pytest.mark.parametrize(
-    "flag,options",
-    [
-        ("--edit", {"edit": True, "local": False}),
-        ("--local", {"edit": False, "local": True}),
-    ],
-)
-def test_setup_options_route_only_to_the_attended_wizard(
-    tmp_path, monkeypatch, flag, options
-):
+def test_setup_routes_only_to_cloudflare_pairing(tmp_path, monkeypatch):
     calls, setups = route(monkeypatch)
-    assert cli.main(["setup", "--home", str(tmp_path), flag]) == 0
-    assert not calls and setups[0][1] == options
+    assert cli.main(["setup", "--home", str(tmp_path), "--edit"]) == 0
+    assert not calls and setups[0].home == tmp_path
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["setup", "--home", str(tmp_path), "--local"])
+    assert exc.value.code == 2
 
 
 def test_canceling_first_run_restores_settings_and_creates_nothing(
@@ -134,7 +127,7 @@ def test_canceling_first_run_restores_settings_and_creates_nothing(
     def cancel(settings):
         raise KeyboardInterrupt()
 
-    monkeypatch.setattr(onboarding, "run", cancel)
+    monkeypatch.setattr(onboarding, "setup_cloud", cancel)
     home = tmp_path / "cancelled"
     previous = config._active
     assert cli.main(["start", "--home", str(home)]) == 130
@@ -142,22 +135,49 @@ def test_canceling_first_run_restores_settings_and_creates_nothing(
     assert "Setup canceled" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize(
-    "active,preference", [("online", "offline"), ("offline", "online")]
-)
-def test_start_reuses_an_active_agent_without_changing_its_saved_preference(
-    tmp_path, monkeypatch, active, preference
+def test_paired_device_uses_cloudflare_despite_old_offline_preference(
+    tmp_path, monkeypatch
 ):
     calls, setups = route(monkeypatch)
     home = tmp_path / "active"
     settings = Settings(home, home / "workspace")
-    onboarding.save_mode(settings, preference)
-    monkeypatch.setattr(
-        owner_command, "headless_state", lambda _: {"connection_mode": active}
+    onboarding.save_mode(settings, "offline")
+    (home / "cloud-pairing.json").write_text(
+        json.dumps(
+            {
+                "relay": "https://example.workers.dev",
+                "device_id": "a" * 32,
+            }
+        )
     )
     assert cli.main(["start", "--home", str(home)]) == 0
-    assert not setups and ("--offline" in calls[-1]) == (active == "offline")
-    assert onboarding.saved_mode(settings) == preference
+    assert not setups and "--offline" not in calls[-1]
+    assert onboarding.saved_mode(settings) == "offline"
+
+
+def test_live_and_mcp_config_use_one_paired_endpoint(tmp_path, monkeypatch, capsys):
+    (tmp_path / "cloud-pairing.json").write_text(
+        json.dumps(
+            {
+                "relay": "https://example.workers.dev/",
+                "device_id": "a" * 32,
+            }
+        )
+    )
+    endpoint = "https://example.workers.dev/v1/devices/" + "a" * 32 + "/mcp"
+    assert cli.main(["mcp-config", "--home", str(tmp_path)]) == 0
+    config = json.loads(capsys.readouterr().out)
+    assert config["mcpServers"]["universal-desktop-bridge"] == {
+        "type": "streamable-http",
+        "url": endpoint,
+    }
+    calls = []
+    monkeypatch.setattr(
+        "webbrowser.open", lambda url, **options: calls.append(url) or True
+    )
+    assert cli.main(["live", "--home", str(tmp_path)]) == 0
+    assert calls == [endpoint + "?view=live"]
+    assert not (tmp_path / "state").exists()
 
 
 def test_offline_agent_from_an_older_release_needs_no_new_setup(tmp_path, monkeypatch):

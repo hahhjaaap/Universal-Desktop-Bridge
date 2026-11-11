@@ -2,14 +2,6 @@
   "schema": 1,
   "components": [
     {
-      "binary": "bin/tunnel-client.exe",
-      "license": "licenses/tunnel-client.txt",
-      "name": "tunnel-client",
-      "sha256": "9d0a22b7eb64fe7c5e34dfc97273ffcab6a07557855cf9e7f8869068402caf6b",
-      "source_url": "https://github.com/openai/tunnel-client/releases/download/v0.0.18/tunnel-client-v0.0.18-windows-amd64.zip",
-      "version": "v0.0.18"
-    },
-    {
       "binary": "bin/ffmpeg.exe",
       "license": "licenses/ffmpeg.txt",
       "name": "ffmpeg",

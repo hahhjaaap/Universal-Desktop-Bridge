@@ -404,6 +404,19 @@ def receive_relay_text(ws, websocket) -> str | None:
 
 def run(settings) -> int:
     """Connect only after local owner provisioned a paired device secret."""
+    from .owner_command import CommandError, launch_gate
+
+    try:
+        # Older logon scripts can also start Cloud Agent. Prevent two sockets
+        # for the same Windows profile from continually replacing one another.
+        with launch_gate(settings.home / "cloud-agent", timeout=0):
+            return _run_paired(settings)
+    except CommandError:
+        print("UDB cloud agent: a connection process already owns this profile.")
+        return 2
+
+
+def _run_paired(settings) -> int:
     import websocket
 
     relay, device_id, _token_file = load_pairing(settings.home)

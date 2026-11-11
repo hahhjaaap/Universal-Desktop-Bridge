@@ -865,39 +865,29 @@ class AuthenticatedASGI:
         return await self.app(scope, replay_receive, secure_send)
 
 
-def serve(home, stdio=False):
-    agent = Agent(Path(home))
-    mcp = make_server(agent)
-    if stdio:
-        # Own duplicate handles: SDK TextIOWrapper finalizers must not close
-        # PyInstaller's original standard handles during interpreter shutdown.
-        import anyio
-        from mcp.server.stdio import stdio_server
+def serve(home):
+    # The Cloud Agent owns this child stdio. Own duplicate handles because SDK
+    # TextIOWrapper finalizers must not close the frozen process's handles.
+    import anyio
+    from mcp.server.stdio import stdio_server
 
-        async def run_stdio():
-            with (
-                os.fdopen(
-                    os.dup(sys.stdin.fileno()), "r", encoding="utf-8", errors="replace"
-                ) as input_file,
-                os.fdopen(
-                    os.dup(sys.stdout.fileno()), "w", encoding="utf-8", newline="\n"
-                ) as output_file,
-            ):
-                async with stdio_server(
-                    stdin=anyio.wrap_file(input_file),
-                    stdout=anyio.wrap_file(output_file),
-                ) as (r, w):
-                    await mcp._mcp_server.run(
-                        r, w, mcp._mcp_server.create_initialization_options()
-                    )
+    mcp = make_server(Agent(Path(home)))
 
-        anyio.run(run_stdio)
-    else:
-        import uvicorn
+    async def run_stdio():
+        with (
+            os.fdopen(
+                os.dup(sys.stdin.fileno()), "r", encoding="utf-8", errors="replace"
+            ) as input_file,
+            os.fdopen(
+                os.dup(sys.stdout.fileno()), "w", encoding="utf-8", newline="\n"
+            ) as output_file,
+        ):
+            async with stdio_server(
+                stdin=anyio.wrap_file(input_file),
+                stdout=anyio.wrap_file(output_file),
+            ) as (reader, writer):
+                await mcp._mcp_server.run(
+                    reader, writer, mcp._mcp_server.create_initialization_options()
+                )
 
-        uvicorn.run(
-            AuthenticatedASGI(mcp.streamable_http_app(), token_for(agent)),
-            host="127.0.0.1",
-            port=PORT,
-            access_log=False,
-        )
+    anyio.run(run_stdio)

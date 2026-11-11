@@ -47,3 +47,23 @@ if ($verify.TargetPath -ine $target -or $verify.Description -ne 'UDB-managed Sta
     throw 'The created shortcut did not verify.'
 }
 Write-Output ('Start Menu shortcut ready: ' + $link)
+
+$liveLink = Join-Path $ShortcutDir 'UDB Live.lnk'
+$live = $shell.CreateShortcut($liveLink)
+$liveDescription = 'UDB-managed Cloudflare Live shortcut'
+if ((Test-Path -LiteralPath $liveLink) -and $live.Description -ne $liveDescription) {
+    throw 'The existing UDB Live shortcut is not UDB-managed; preserved it.'
+}
+$live.TargetPath = $target
+$live.Arguments = '--home "' + ([IO.Path]::GetFullPath($DataHome)) + '" live'
+$live.WorkingDirectory = [IO.Path]::GetDirectoryName($target)
+$live.IconLocation = $target + ',0'
+$live.Hotkey = 'CTRL+ALT+U'
+$live.Description = $liveDescription
+$live.Save()
+$liveCheck = $shell.CreateShortcut($liveLink)
+$verifiedHotkey = ($liveCheck.Hotkey.ToUpperInvariant().Split('+') | Sort-Object) -join '+'
+if ($liveCheck.TargetPath -ine $target -or $verifiedHotkey -ne 'ALT+CTRL+U') {
+    throw 'UDB Live shortcut verification failed.'
+}
+Write-Output ('UDB Live shortcut ready (Ctrl+Alt+U): ' + $liveLink)

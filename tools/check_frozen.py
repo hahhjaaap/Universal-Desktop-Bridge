@@ -388,7 +388,8 @@ def main():
         process = subprocess.Popen(
             [
                 str(executable),
-                "serve",
+                "_worker",
+                "cloud-proxy",
                 "--home",
                 str(home),
                 "--root",

@@ -64,6 +64,7 @@ def snapshot(home, exe, *, inspect_report=None, reader=None):
         "uptime_seconds": heartbeat.get("uptime_seconds"),
         "reconnect_pending": heartbeat.get("reconnect_pending", False),
         "local_tunnel_ready": report["local_tunnel_ready"],
+        "cloud_agent_running": report.get("cloud_agent_running", False),
         "chatgpt_connection_verified": False,
         "background": report["background"],
         "worker_ready": host.get("worker_ready", False),
@@ -107,7 +108,7 @@ def watch(
             else:
                 active = value["active_operation"] or {}
                 print(
-                    f"UDB {value['manager_mode']} | tunnel={value['local_tunnel_ready']} | worker={value['worker_ready']} | paused={value['paused']} | action={active.get('action', 'idle')}",
+                    f"UDB {value['manager_mode']} | cloud={value['cloud_agent_running']} | worker={value['worker_ready']} | paused={value['paused']} | action={active.get('action', 'idle')}",
                     file=output,
                     flush=True,
                 )

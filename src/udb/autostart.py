@@ -49,8 +49,9 @@ def script_text(settings, *, cloud_agent=False):
     else:
         launcher = None
         argv = command(["--home", str(settings.home), "start", "--detach"])
-    if cloud_agent:
-        argv.append("--offline")
+    # Logon starts the local support process. Only the explicit Cloud Agent
+    # opt-in below adds a remote connection.
+    argv.append("--offline")
     argv += [
         "--root",
         str(settings.project_root),

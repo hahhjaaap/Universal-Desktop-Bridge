@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Script } from "node:vm";
 import worker from "../src/index.js";
 
 const DEVICE = "a".repeat(32);
@@ -8,6 +9,7 @@ const AUD = "udb-live-test-audience";
 const URL = "https://example.workers.dev/v1/devices/" + DEVICE + "/mcp";
 const SESSION = "b".repeat(32);
 const TAB = "c".repeat(32);
+const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aDioAAAAASUVORK5CYII=";
 const IDENTITY = () => ({ access: {
   aud: AUD, getIdentity: async () => ({ email: OWNER }),
 } });
@@ -26,6 +28,11 @@ function setup(ownerTools = []) {
         const rpc = await request.json();
         forwarded.push(rpc);
         const name = rpc.params?.name;
+        if (name === "host_screenshot") {
+          return Response.json({ jsonrpc: "2.0", id: rpc.id, result: {
+            content: [{ type: "image", data: PNG, mimeType: "image/png" }],
+          } });
+        }
         const data = name === "host_status" ? {
           enabled: true, worker_ready: true, sessions: [
             { kind: "browser", presentation: "background", session_id: SESSION },
@@ -70,7 +77,12 @@ test("Live screen requires three explicit owner tools and renders strict CSP", a
   assert.match(response.headers.get("content-security-policy"), /script-src 'nonce-[a-z0-9]+'/);
   assert.equal(response.headers.get("x-frame-options"), "DENY");
   assert.match(response.headers.get("cache-control"), /no-store/);
-  assert.match(await response.text(), /UDB Live/);
+  const html = await response.text();
+  assert.match(html, /UDB Live/);
+  const script = /<script nonce="([^"]+)">([\s\S]*?)<\/script>/.exec(html);
+  assert.ok(script);
+  assert.ok(response.headers.get("content-security-policy").includes("'nonce-" + script[1] + "'"));
+  assert.doesNotThrow(() => new Script(script[2]));
   assert.equal(forwarded.length, 0);
 });
 
@@ -100,4 +112,17 @@ test("Live data forwards only fixed read calls and filters background sessions a
     ["host_status", "host_browser"]);
   assert.deepEqual(forwarded[0].params.arguments, {});
   assert.deepEqual(forwarded[1].params.arguments, { action: "list", session_id: SESSION });
+});
+
+test("Live frame returns a private PNG from exactly one owned browser tab", async () => {
+  const { env, forwarded } = setup(["host_status", "host_browser", "host_screenshot"]);
+  const response = await worker.fetch(request("&data=frame&session=" + SESSION + "&tab=" + TAB,
+    "same-origin"), env, IDENTITY());
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "image/png");
+  assert.match(response.headers.get("cache-control"), /no-store/);
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), Buffer.from(PNG, "base64"));
+  assert.deepEqual(forwarded.map(rpc => rpc.params), [
+    { name: "host_screenshot", arguments: { session_id: SESSION, tab_id: TAB } },
+  ]);
 });

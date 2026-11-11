@@ -257,9 +257,11 @@ def cloudflare_pairing_configured(home: Path) -> bool:
 
 def inspect(home: Path, exe: Path, running=manager_running, ready=tunnel_ready) -> dict:
     active = running(home, exe)
-    connected = active and ready(home)
     cloud_pairing = cloudflare_pairing_configured(home)
     hidden = headless_state(home) if active else None
+    mode = (hidden or {}).get("connection_mode", "unknown")
+    connected = active and mode == "online" and ready(home)
+    cloud_running = mode == "cloudflare" and (hidden or {}).get("cloud_running") is True
     count = (hidden or {}).get("recovery_count", 0)
     count = count if type(count) is int and 0 <= count <= 10**9 else 0
     reason = (hidden or {}).get("last_recovery", "")
@@ -272,6 +274,7 @@ def inspect(home: Path, exe: Path, running=manager_running, ready=tunnel_ready) 
             "headless" if hidden else "legacy_or_unknown" if active else "stopped"
         ),
         local_tunnel_ready=connected,
+        cloud_agent_running=cloud_running,
         cloudflare_pairing_configured=cloud_pairing,
         background=background_state(home),
         connection_mode=hidden.get("connection_mode", "online")
@@ -284,7 +287,11 @@ def inspect(home: Path, exe: Path, running=manager_running, ready=tunnel_ready) 
             "replays_tool_calls": False,
         },
         next_action=(
-            "Call bridge_status in ChatGPT to verify the session."
+            "Cloud Agent process started. Verify bridge_status from ChatGPT."
+            if cloud_running
+            else "Cloud Agent stopped. Run udb reconnect or inspect Cloudflare pairing."
+            if mode == "cloudflare"
+            else "Call bridge_status in ChatGPT to verify the session."
             if connected
             else (
                 "The local Manager is offline; Cloudflare uses a separate "
@@ -603,8 +610,11 @@ def start(
     with launch_gate(home):
         report = snapshot(home, exe)
         if report["manager_running"] and (
-            (connect and report.get("connection_mode") == "offline")
-            or (not connect and report.get("connection_mode") == "online")
+            (connect and report.get("connection_mode") in {"offline", "online"})
+            or (
+                not connect
+                and report.get("connection_mode") in {"online", "cloudflare"}
+            )
         ):
             raise CommandError(
                 "The agent is already running in another connection mode. Run udb stop first."
@@ -641,7 +651,7 @@ def start(
         while True:
             report = snapshot(home, exe)
             if (
-                report["local_tunnel_ready"]
+                (connect and report.get("cloud_agent_running") is True)
                 or (
                     not connect
                     and report["manager_running"]
@@ -693,14 +703,14 @@ def stop(
 def reconnect(
     home, exe, wait=30, *, snapshot=inspect, clock=time.monotonic, pause=time.sleep
 ):
-    """Request a new owned tunnel connection without restarting jobs or grants."""
+    """Restart the owned Cloud Agent without restarting the host worker."""
     from .host_client import atomic_json
 
     with launch_gate(home):
         state = headless_state(home)
-        if not state:
+        if not state or state.get("connection_mode") != "cloudflare":
             raise CommandError(
-                "Run udb start first; reconnect requires a live headless agent."
+                "Reconnect requires a headless Cloudflare agent started by udb start."
             )
         rid = os.urandom(16).hex()
         target = regular(home / "state" / "headless-reconnect.json")
@@ -720,7 +730,7 @@ def reconnect(
             if (
                 acknowledged
                 and not current.get("reconnect_pending", False)
-                and result["local_tunnel_ready"]
+                and result.get("cloud_agent_running") is True
             ) or clock() >= deadline:
                 return dict(
                     result,
@@ -771,7 +781,9 @@ def main(argv=None):
         if args.action == "test":
             if os.name != "nt":
                 raise CommandError("The installed-agent test requires Windows.")
-            report = start(home, exe, args.wait)
+            report = start(
+                home, exe, args.wait, connect=cloudflare_pairing_configured(home)
+            )
             if not report["manager_running"]:
                 raise CommandError("Run udb before testing the installed agent.")
             return subprocess.run(

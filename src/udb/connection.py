@@ -5,6 +5,23 @@ from __future__ import annotations
 import re
 from urllib.parse import urlsplit
 
+
+def cloud_mcp_url(home):
+    """Build the one public UDB endpoint from validated, non-secret pairing."""
+    from .cloud_agent import load_pairing
+
+    relay, device_id, _ = load_pairing(home)
+    return f"{relay.rstrip('/')}/v1/devices/{device_id}/mcp"
+
+
+def open_live(home):
+    """Open the paired device's Cloudflare Live page in the default browser."""
+    import webbrowser
+
+    if not webbrowser.open(cloud_mcp_url(home) + "?view=live", new=2):
+        raise ValueError("Could not open UDB Live in the default browser.")
+
+
 _TUNNEL_ID = re.compile(r"tunnel_(?:[a-z0-9]{4}_)?[a-z0-9]{32}")
 
 

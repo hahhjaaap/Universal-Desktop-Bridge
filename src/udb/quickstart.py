@@ -22,7 +22,7 @@ def _emit(payload: dict, *, as_json: bool) -> None:
         return
     if payload["result"] == "local_ready":
         print("UDB local manager: READY (offline).")
-        print("Local MCP client setup: udb mcp-config")
+        print("Cloudflare connection: udb setup")
         print("Open the desktop GUI: udb gui")
         if payload["autostart"] == "enabled":
             print("Automatic Windows logon startup: enabled.")
@@ -100,7 +100,7 @@ def run(settings, *, wait: int = 30, as_json=False, enable_autostart=False) -> i
                 "connection_mode": "offline",
                 "autostart": startup,
                 "chatgpt_remote_verified": False,
-                "next_step": "udb mcp-config",
+                "next_step": "udb setup",
             },
             as_json=as_json,
         )

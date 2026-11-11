@@ -174,14 +174,18 @@ def main():
         )
         assert launcher.stdout.strip() == version
         mcp = json.loads((install / "mcp.json").read_text("utf-8"))
-        assert mcp["mcpServers"]["universal-desktop-bridge"]["command"] == str(exe)
+        cloud_only = bool(re.search(r"[{,]live(?=[,}])", run([exe, "--help"]).stdout))
+        if cloud_only:
+            assert mcp["mcpServers"] == {}
+        else:
+            assert mcp["mcpServers"]["universal-desktop-bridge"]["command"] == str(exe)
         setup_home = root / "Redirected setup must not create this"
         refused = run([exe, "--home", setup_home, "setup"], success=False)
         assert refused.returncode and not setup_home.exists()
         assert "attended Windows terminal" in refused.stdout + refused.stderr
         saved_local_mode = tuple(map(int, version.split("."))) >= (0, 9, 3)
         mode_flags = ["--offline"]
-        if saved_local_mode:
+        if saved_local_mode and not cloud_only:
             help_text = run([exe, "setup", "--help"]).stdout
             assert "--edit" in help_text and "--local" in help_text
             for flag in ("--edit", "--local"):

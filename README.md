@@ -17,18 +17,28 @@
 | Operations | Activity logs, status/doctor, up to 10 concurrent remote read RPCs (separate lazy stdio workers) and 10 shared background work slots | Remote mutations remain exclusive; hardware and process startup limit throughput |
 | Recovery | Saved job state, safe read/recovery paths and managed installer rollback | Uncertain mutations are **never** automatically replayed |
 
-The local HTTP MCP boundary requires authorization, accepts loopback clients only, rejects ambiguous authentication headers and bounds request bodies. These controls do not protect against a compromised Windows account or malicious authorized client. See [ARCHITECTURE.md](ARCHITECTURE.md) for ownership, dispatch and isolation.
-
 ## Cloudflare MCP (paired devices)
 
-UDB includes an opt-in Cloudflare Worker/Durable Object relay, owner-attended
-device pairing, and a Windows outbound Cloud Agent. A paired Windows profile
-uses Cloudflare as its **primary** connection path in the console setup and GUI;
-the older OpenAI Tunnel remains a compatibility fallback for unpaired profiles.
-The Cloudflare connection is **not** automatically deployed or authorized.
+Cloudflare is UDB's remote connection. The Windows agent opens an outbound
+WebSocket to the existing Worker, and ChatGPT connects to the device's MCP
+URL over HTTPS. Use `udb setup` to pair or display the endpoint, then
+`udb start` to run the paired agent. Windows still hosts device credentials,
+browser sessions, and owner approval controls. See [ARCHITECTURE.md](ARCHITECTURE.md).
 
-For an existing pairing, open UDB Manager → **Kết nối** → **Bật Cloud Agent**.
-Do **not** paste a workers.dev URL into the legacy OpenAI Tunnel ID prompt.
+### UDB Live
+
+Open `udb live` or append `?view=live` to your existing device MCP URL.
+Sign in through Cloudflare Access. Live uses the existing `host_status`,
+`host_browser`, and `host_screenshot` grants to view tabs in the private
+UDB browser while they run in the background. Enable that browser locally
+and open a tab before starting the view. Capture is on demand at about one
+frame per second and pauses when the viewer is hidden.
+
+- Windows Start Menu **UDB Live** or **Ctrl+Alt+U** opens the Cloudflare page.
+- From UDB Manager, use **Ctrl+Shift+L**.
+- In the web viewer use **Space** to start/stop, **R** to refresh tabs,
+  **F** for fullscreen, and **Esc** to stop.
+
 The Cloudflare Worker deployment, OAuth configuration, device grant and ChatGPT
 tool discovery must each be verified independently: see
 [Cloudflare project-read acceptance](docs/cloudflare-project-read-acceptance.md)
@@ -78,26 +88,12 @@ extracted UDB folder and run `.\tools\create_start_shortcut.ps1 -Exe .\udb.exe`
 from the bundled portable helper (or use it from a trusted source checkout). The shortcut opens the UDB GUI; it never grants access or
 starts an online session by itself. Windows Search indexing may take time.
 
-## Fast standalone startup (no Desktop Commander required)
+## Quick start
 
-**For a local Windows session**, `udb quickstart` starts or reuses the
-existing UDB manager in offline mode **without** prompting for credentials,
-creating a Cloudflare pairing or silently changing a remote session:
-
-```powershell
-udb quickstart
-udb gui
-```
-
-To explicitly enable startup at Windows sign-in for a fresh/local profile,
-run `udb quickstart --autostart` once. Disable later with
-`udb autostart disable`. For any local MCP client supporting stdio,
-`udb mcp-config` prints the appropriate launch command.
-
-**Do not confuse local readiness with ChatGPT access.** A web ChatGPT client
-still needs a functioning UDB remote MCP connector with authenticated
-pairing and device/tool grants; `udb quickstart` does not set it up or claim
-it works. Details: [UDB độc lập / hướng dẫn nhanh](docs/standalone-quickstart-vi.md).
+On Windows, run `udb setup` and `udb start` to connect the paired Cloud Agent.
+Use `udb gui` for on-device approvals and browser handoff.
+`udb mcp-config` prints the paired HTTPS endpoint for clients that support
+remote MCP. An unpaired profile prints an empty server list.
 
 ## Windows x64: install and start
 
@@ -116,44 +112,28 @@ Windows-only candidate-release checker is available in
 publisher certificate has been provisioned and no signed installer is
 claimed.
 
-The first attended `udb start` can guide setup. Offline mode works without a ChatGPT connection:
+The first attended start can guide Cloudflare pairing.
 
 ```powershell
-udb setup --local
-udb start --offline
+udb setup
+udb start
 udb status --json
-udb logs
+udb live
 udb stop
 ```
 
-On a **Cloudflare-paired** Windows profile, `udb setup` and `udb setup --edit`
-recognize the pairing and no longer ask for a legacy Tunnel ID. Open the UDB
-Manager and explicitly enable Cloud Agent; connect the matching MCP endpoint
-through ChatGPT Plugins. On **unpaired** profiles, the old OpenAI Tunnel setup
-remains as a compatibility option. A healthy local agent is **not** proof that
-ChatGPT can invoke its MCP tools. Secret entry and owner grants remain local.
-
-For use from a second device, or when a ChatGPT plugin claims Connected
-but a tool returns `Session terminated`, see [remote-device diagnostics](docs/remote-device-troubleshooting.md).
-Diagnose the selected transport (Cloudflare or legacy Tunnel), the Windows
-agent and ChatGPT invocation independently; never blindly replay a
-timed-out mutation.
-
-**Multiple Windows computers:** Signing into the same ChatGPT account does
-not automatically switch an MCP connection to another PC. Cloudflare endpoints
-include an explicit device ID; each device/subject needs its own approved grant.
-Legacy Tunnel compatibility instead uses separate Tunnel IDs. Do not assume
-production one-plugin Multi-PC routing or infer the host from local health.
+For another Windows device, enroll it through Cloudflare and use that device's
+MCP URL and grant. Troubleshoot each layer using
+[remote-device diagnostics](docs/remote-device-troubleshooting.md).
 
 ### When ChatGPT cannot call UDB tools
 
-A green local indicator, a ready Tunnel or a running Cloud Agent do **not**
+A running Windows Cloud Agent alone does **not**
 prove that the current ChatGPT conversation has discovered the MCP catalog. Troubleshoot
 in order, without resetting credentials or loosening permissions:
 
 1. Run `udb status --json` and `udb doctor --json` on the intended computer.
-   Check local agent, selected transport and connection diagnostics separately.
-   Cloudflare-paired devices do not require a legacy Tunnel ID.
+   Check the Windows worker, Cloudflare pairing and ChatGPT discovery separately.
 2. In ChatGPT, confirm that the **intended** UDB connection is enabled and that
    UDB tools are actually available to the conversation. A Connected label alone
    is not an end-to-end tool invocation test.
@@ -162,11 +142,9 @@ in order, without resetting credentials or loosening permissions:
 4. If two computers use UDB, verify which machine the current connection targets.
    Never infer the selected host from a local readiness indicator on either PC.
 5. Collect redacted `udb logs` and diagnostic output for a bug report. Never
-   paste access tokens, tunnel secrets, or private file contents into an issue.
+   paste access tokens or private file contents into an issue.
 
-The manager shows **Cloud Agent process status** on paired profiles or legacy
-**Tunnel** state on unpaired profiles. Neither proves authenticated MCP
-discovery: verify a read-only invocation in ChatGPT.
+Verify the Cloud Agent process and a read-only invocation in ChatGPT.
 
 
 ### Common commands
@@ -177,15 +155,16 @@ discovery: verify a read-only invocation in ChatGPT.
 | `udb start` / `udb stop` | Start or stop the local agent |
 | `udb status` / `udb doctor --json` | Inspect health, runtime and setup |
 | `udb logs --details` | Follow redacted tool activity |
-| `udb setup` / `udb setup --local` | Configure online or offline mode locally |
+| `udb setup` | Pair a Cloudflare device or display its existing endpoints |
+| `udb live` | Open the Cloudflare Live page |
 | `udb update --check` | Check the latest published stable release |
 | `udb update` / `udb rollback` | Managed installation update / previous-release rollback |
 | `udb autostart enable` / `udb autostart disable` | Opt in/out of startup at Windows sign-in |
 
-Cloudflare-paired users can additionally opt in to automatically start the outbound Cloud Agent **after Windows sign-in** with `udb autostart enable --cloud-agent --home PATH`. This must be run once from an attended local Windows terminal, with terminal access disabled; it does not grant new device permissions. `udb autostart status --json --home PATH` reports `cloud_agent_enabled`, and `udb autostart disable --home PATH` removes this user's logon entry. Auto-start is at user sign-in, not before login or under SYSTEM.
+Cloudflare-paired users can opt in to start Cloud Agent **after Windows sign-in** with `udb autostart enable --home PATH`. This must be run once from an attended local Windows terminal, with terminal access disabled; it does not grant new device permissions. `udb autostart status --json --home PATH` reports `cloud_agent_enabled`, and `udb autostart disable --home PATH` removes this user's logon entry. Auto-start is at user sign-in, not before login or under SYSTEM.
 
 
-| `udb mcp-config --home PATH --root PATH` | Print a local stdio MCP configuration |
+| `udb mcp-config --home PATH` | Print the paired remote MCP configuration |
 | `udb --access computer` | Attended local owner opt-in to broader computer access |
 
 Updates and rollback must be started **outside UDB's own running tool job**. They preserve the owner's state, not a snapshot of that state. Keep independent backups. Never assume a timed-out update failed; inspect `udb --version` and `udb status` first.

@@ -201,7 +201,8 @@ def manager_options(home: str | Path) -> list[str]:
 def serve_options(home: str | Path) -> list[str]:
     settings = effective(home)
     args = [
-        "serve",
+        "_worker",
+        "cloud-proxy",
         "--home",
         str(settings.home),
         "--root",

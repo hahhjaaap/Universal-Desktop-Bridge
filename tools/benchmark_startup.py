@@ -95,7 +95,15 @@ def mcp_probe(exe, env, root):
     project.mkdir()
     started = time.perf_counter()
     process = subprocess.Popen(
-        [str(exe), "--home", str(home), "--root", str(project), "serve"],
+        [
+            str(exe),
+            "_worker",
+            "cloud-proxy",
+            "--home",
+            str(home),
+            "--root",
+            str(project),
+        ],
         cwd=root,
         env=env,
         stdin=subprocess.PIPE,

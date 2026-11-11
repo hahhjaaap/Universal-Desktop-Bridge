@@ -367,16 +367,16 @@ def test_dashboard_displays_independent_connection_evidence(manager, monkeypatch
     assert window.chatgpt_health._status[1] == "neutral"
 
     status = window.controller.status()
-    status.update(ready=True, tunnel_running=True, tunnel_wanted=True)
+    status.update(cloud_running=True)
     monkeypatch.setattr(window.controller, "status", lambda: status)
     window._refresh_connection(set())
-    assert window.tunnel_health._status == ("Sẵn sàng", "ready")
+    assert window.cloud_health._status == ("Cloudflare: Đang chạy", "paused")
     assert window.chatgpt_health._status == ("Chưa xác minh", "neutral")
-    assert "ChatGPT chưa được xác minh" in window.connection_hint.text()
+    assert "bridge_status" in window.connection_hint.text()
 
-    status["tunnel_running"] = False
+    status["cloud_running"] = False
     window._refresh_connection(set())
-    assert window.tunnel_health._status == ("Chưa xác định", "neutral")
+    assert window.cloud_health._status == ("Cloudflare: Chưa ghép nối", "neutral")
     assert window._connection_ready is False
 
 
@@ -398,9 +398,9 @@ def test_failed_health_refresh_clears_stale_green_status(manager, monkeypatch):
         lambda: (_ for _ in ()).throw(OSError("Synthetic connection failure")),
     )
     window.refresh()
-    assert window.tunnel_health._status == ("Chưa xác định", "neutral")
+    assert window.cloud_health._status == ("Chưa xác định", "neutral")
     assert window._connection_ready is False
-    assert "Không đọc được tunnel" in window.status_label.text()
+    assert "Không đọc được Cloudflare" in window.status_label.text()
     from udb.ui_theme import current_theme
 
     assert current_theme().muted in window.status_label.styleSheet()
@@ -493,10 +493,10 @@ def test_copy_safe_diagnostics_command_and_keyboard_shortcuts(manager):
         for child in window.stack.currentWidget().findChildren(
             __import__("udb.manager_widgets", fromlist=["MotionButton"]).MotionButton
         )
-        if child.accessibleName() == "Sao chép lệnh udb doctor --json"
+        if child.accessibleName() == "Sao chép lệnh udb doctor --cloud --json"
     )
     button.click()
-    assert QApplication.clipboard().text() == "udb doctor --json"
+    assert QApplication.clipboard().text() == "udb doctor --cloud --json"
     window.navigate(5)
     QTest.keyClick(window, Qt.Key.Key_3, Qt.KeyboardModifier.ControlModifier)
     QApplication.processEvents()
@@ -528,7 +528,7 @@ def test_paired_cloud_ui_copies_cloud_readiness_probe(tmp_path, manager, monkeyp
     window = MainWindow(tmp_path, controller)
     window.timer.stop()
     try:
-        assert window.cloud_preferred is True
+        assert window.live_button.isEnabled()
         window.navigate(4)
         buttons = window.stack.currentWidget().findChildren(MotionButton)
         button = next(
@@ -608,7 +608,7 @@ def test_persistent_app_header_tracks_navigation_not_remote_authorization(manage
         QApplication.processEvents()
         assert window.header_title.isVisible()
         assert window.header_connection.isVisible()
-        assert window.header_connection.text().startswith("●  Tunnel:")
+        assert window.header_connection.text().startswith("●  Cloudflare:")
     assert not (window.agent.state / "computer-access.dpapi").exists()
 
 
@@ -780,23 +780,23 @@ def test_connection_onboarding_only_uses_observed_local_health(manager, monkeypa
     assert window.setup_agent_health._status == ("Sẵn sàng", "ready")
 
     status = dict(window.controller.status())
-    status.update(ready=True, tunnel_running=True, connecting=False, tunnel_wanted=True)
+    status.update(cloud_running=True)
     monkeypatch.setattr(window.controller, "status", lambda: status)
     window._refresh_connection(set())
-    assert window.setup_tunnel_health._status == ("Sẵn sàng", "ready")
+    assert window.setup_cloud_health._status == ("Cloudflare: Đang chạy", "paused")
     assert window.setup_chatgpt_health._status == ("Chưa xác minh", "neutral")
     assert not (window.agent.state / "computer-access.dpapi").exists()
 
 
-def test_onboarding_fail_closed_if_host_or_tunnel_status_unreadable(
+def test_onboarding_fail_closed_if_host_or_cloud_status_unreadable(
     manager, monkeypatch
 ):
     window, _ = manager
     status = dict(window.controller.status())
-    status.update(ready=True, tunnel_running=True, connecting=False, tunnel_wanted=True)
+    status.update(cloud_running=True)
     monkeypatch.setattr(window.controller, "status", lambda: status)
     window._refresh_connection(set())
-    assert window.setup_tunnel_health._status == ("Sẵn sàng", "ready")
+    assert window.setup_cloud_health._status == ("Cloudflare: Đang chạy", "paused")
 
     def unavailable(*_args, **_kwargs):
         raise OSError("untrusted status error secret")
@@ -805,7 +805,7 @@ def test_onboarding_fail_closed_if_host_or_tunnel_status_unreadable(
     monkeypatch.setattr(window.controller, "status", unavailable)
     window.refresh()
     assert window.setup_agent_health._status == ("Chưa xác định", "neutral")
-    assert window.setup_tunnel_health._status == ("Chưa xác định", "neutral")
+    assert window.setup_cloud_health._status == ("Chưa xác định", "neutral")
     assert window.setup_chatgpt_health._status == ("Chưa xác minh", "neutral")
     assert window.desktop_pause_button.isEnabled()
     assert not (window.agent.state / "computer-access.dpapi").exists()

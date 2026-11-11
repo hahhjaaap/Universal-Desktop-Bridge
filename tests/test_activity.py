@@ -23,7 +23,9 @@ def test_real_mcp_logging_keeps_stdio_parseable_and_does_not_store_payloads(tmp_
     project.mkdir()
     child = StdioChild(
         "activity fixture",
-        command(["serve", "--home", str(home), "--root", str(project)]),
+        command(
+            ["_worker", "cloud-proxy", "--home", str(home), "--root", str(project)]
+        ),
         str(tmp_path),
         lambda _: None,
     )

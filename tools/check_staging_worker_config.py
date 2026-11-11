@@ -65,8 +65,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--staging-config", type=Path, default=DEFAULT_STAGING)
     parser.add_argument(
-        "--primary-config", "--production-config",
-        dest="primary_config", type=Path, default=DEFAULT_PRIMARY,
+        "--primary-config",
+        "--production-config",
+        dest="primary_config",
+        type=Path,
+        default=DEFAULT_PRIMARY,
     )
     args = parser.parse_args()
     try:

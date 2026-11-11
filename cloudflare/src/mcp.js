@@ -4,6 +4,7 @@ import { readJson, validRpc } from "./auth.js";
 import { AuthError, authorize, oauthConfig } from "./oauth.js";
 import { accessConfig, authorizeAccess } from "./access.js";
 import { isReadTool } from "./read-tools.js";
+import { companionAnnotations, isCompanionTool } from "./companion-tools.js";
 import { edgeCatalog, edgeCatalogSupported } from "./edge-discovery.js";
 export { authorizeAccess } from "./access.js";
 
@@ -30,6 +31,26 @@ const modernResult = (result, user) => ({
   ...result, resultType: "complete",
   _meta: { ...result._meta, [META + "serverInfo"]: serverInfo(user) },
 });
+function fixtureProjectResult(result, project) {
+  if (result?.isError) return null;
+  let rows = result?.structuredContent?.result;
+  if (!Array.isArray(rows)) {
+    if (!Array.isArray(result?.content)) return null;
+    rows = [];
+    for (const block of result.content) {
+      if (block?.type !== "text") return null;
+      let value;
+      try { value = JSON.parse(block.text); } catch { return null; }
+      if (Array.isArray(value)) rows.push(...value);
+      else if (value && typeof value === "object") rows.push(value);
+      else return null;
+    }
+  }
+  const projects = rows.some((row) => row?.id === project)
+    ? [{ id: project, writable: false }] : [];
+  return { content: [{ type: "text", text: JSON.stringify(projects) }],
+    structuredContent: { result: projects } };
+}
 function mirroredName(value) {
   if (value?.startsWith("=?base64?") && value.endsWith("?=")) {
     try {
@@ -39,6 +60,43 @@ function mirroredName(value) {
   }
   return value;
 }
+const POTENTIALLY_DESTRUCTIVE = new Set([
+  "propose_file_write", "desktop_action", "desktop_element_action", "desktop_stop",
+  "desktop_app", "desktop_batch", "host_browser", "host_workspace", "host_close_session",
+]);
+
+function toolDescriptor(tool) {
+  // Owner capabilities have independent grants and do not use the read scope.
+  const securitySchemes = [{ type: "oauth2",
+    scopes: isReadTool(tool.name) ? ["udb:read"] : [] }];
+  let annotations = tool.annotations ?? companionAnnotations(tool.name);
+  if (POTENTIALLY_DESTRUCTIVE.has(tool.name))
+    annotations = { ...annotations, readOnlyHint: false, destructiveHint: true };
+  return { ...tool, annotations, securitySchemes,
+    _meta: { ...tool._meta, securitySchemes } };
+}
+
+function authorizedToolCatalog(tools, user) {
+  return tools.filter((tool) => tool && user.allowTools.includes(tool.name))
+    .map(toolDescriptor);
+}
+
+function catalogGrantCounts(user) {
+  const aliases = new Set([
+    "read_files", "propose_text_edit", "computer_utilities", "computer_execute",
+  ]);
+  const tools = [...new Set(user.allowTools)].filter((name) => !aliases.has(name));
+  const read = tools.filter(isReadTool).length;
+  const companion = tools.filter(isCompanionTool).length;
+  return {
+    read,
+    owner: tools.length - read - companion,
+    companion,
+    total: tools.length,
+    fixture: Boolean(user.stagingFixtureProject),
+  };
+}
+
 export const metadataPath = (id) => "/.well-known/oauth-protected-resource/v1/devices/" + id + "/mcp";
 
 export function protectedResource(request, env, id) {
@@ -280,6 +338,16 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
     return error(400, "unsupported_rpc");
   if (rpc.method === "tools/call" && !user.allowTools.includes(rpc.params.name))
     return error(403, "device_tool_not_authorized");
+  if (user.stagingFixtureProject && rpc.method === "tools/call" &&
+      isReadTool(rpc.params.name)) {
+    const { name, arguments: args } = rpc.params;
+    if (name !== "bridge_status" && name !== "list_projects" &&
+        args.project !== user.stagingFixtureProject)
+      return error(403, "staging_fixture_read_not_authorized");
+    if (name === "read_file" && (args.path !== "README.md" ||
+        Object.keys(args).length !== 2))
+      return error(403, "staging_fixture_read_not_authorized");
+  }
   const response = await relay(stub, rpc);
   if (!response.ok) {
     // Only an explicit DO "no device socket" response may yield an offline
@@ -305,18 +373,45 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   if (!reply || reply.jsonrpc !== "2.0" || typeof reply.id !== typeof rpc.id ||
       reply.id !== rpc.id || ("result" in reply) === ("error" in reply))
     return error(502, "invalid_device_response");
+  if (user.stagingFixtureProject && rpc.method === "tools/call" &&
+      rpc.params.name === "list_projects") {
+    const filtered = fixtureProjectResult(reply.result, user.stagingFixtureProject);
+    if (!filtered) return error(502, "invalid_device_project_list");
+    reply.result = filtered;
+  }
   if (rpc.method === "tools/list" && !reply.error) {
     if (!Array.isArray(reply.result?.tools)) return error(502, "invalid_device_catalog");
-    reply.result = { tools: reply.result.tools.filter((tool) =>
-      tool && user.allowTools.includes(tool.name)).map((tool) => ({
-        ...tool,
-        // Access Managed OAuth binds the client to the exact protected
-        // application; non-read privileges are checked by separate owner
-        // grants and local approvals, not falsely labeled udb:read.
-        securitySchemes: [{
-          type: "oauth2", scopes: isReadTool(tool.name) ? ["udb:read"] : [],
-        }],
-      })) };
+    reply.result = { tools: authorizedToolCatalog(reply.result.tools, user) };
+    console.info(JSON.stringify({ event: "udb_mcp_tools_discovered",
+      source: "windows", count: reply.result.tools.length }));
+  }
+  if (rpc.method === "tools/call" && rpc.params.name === "bridge_status" &&
+      reply.result && !reply.result.isError && Array.isArray(reply.result.content)) {
+    const counts = catalogGrantCounts(user);
+    let toolsListed = null;
+    if (useEdgeCatalog) {
+      toolsListed = edgeCatalog(user.allowTools).length;
+    } else {
+      const listed = await relay(stub, {
+        jsonrpc: "2.0", id: "udb-catalog-verification", method: "tools/list", params: {},
+      });
+      if (listed.ok) {
+        try {
+          const catalog = await listed.json();
+          if (catalog.jsonrpc === "2.0" && catalog.id === "udb-catalog-verification" &&
+              Array.isArray(catalog.result?.tools)) {
+            toolsListed = authorizedToolCatalog(catalog.result.tools, user).length;
+          }
+        } catch { /* Diagnostic failure does not alter bridge_status. */ }
+      }
+    }
+    console.info(JSON.stringify({ event: "udb_mcp_catalog_grants_checked", ...counts, toolsListed }));
+    reply.result = {
+      ...reply.result,
+      content: [...reply.result.content, {
+        type: "text", text: JSON.stringify({ gateway_catalog_grants: counts, tools_listed: toolsListed }),
+      }],
+    };
   }
   if (modern && reply.result) {
     if (typeof reply.result !== "object" || Array.isArray(reply.result))

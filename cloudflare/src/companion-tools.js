@@ -15,6 +15,24 @@ export const COMPANION_TOOLS = Object.freeze([
 ]);
 export const isCompanionTool = name => COMPANION_TOOLS.includes(name);
 
+const COMPANION_READ_ONLY = new Set([
+  "terminal_read", "terminal_list", "file_list", "file_read", "file_search",
+  "file_stat", "file_read_lines", "file_read_chunk", "search_read", "system_process_list",
+]);
+const COMPANION_ADDITIVE = new Set(["file_mkdir", "search_start", "work_recovery"]);
+const COMPANION_OPEN_WORLD = new Set(["terminal_start", "terminal_interact", "virtual_pointer"]);
+
+export function companionAnnotations(name) {
+  if (!isCompanionTool(name)) return undefined;
+  const readOnly = COMPANION_READ_ONLY.has(name);
+  return {
+    readOnlyHint: readOnly,
+    destructiveHint: !readOnly && !COMPANION_ADDITIVE.has(name),
+    openWorldHint: COMPANION_OPEN_WORLD.has(name),
+    idempotentHint: readOnly,
+  };
+}
+
 export function companionToolGrant(env, deviceId, subject) {
   // Never fall back from a tenant policy or another identity or device.
   if (env?.UDB_ENABLE_COMPANION_TOOLS !== "true" ||

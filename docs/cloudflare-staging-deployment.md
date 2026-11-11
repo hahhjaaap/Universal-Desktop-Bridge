@@ -1,5 +1,13 @@
 # Dedicated Cloudflare staging deployment for TD-02 (#94)
 
+> **Current single-gateway setup (11/11/2026):** The former production
+> `udb-private-relay` Worker and its Access application have been removed.
+> Both `cloudflare/wrangler.jsonc` and `wrangler.staging.jsonc` now target
+> `udb-private-relay-staging`. The staging/production separation described
+> below is historical. Refer to [current deployment operations](../cloudflare/STAGING-OPERATIONS.md)
+> and run the manual `UDB staging gateway deploy (manual)` workflow. Do not
+> follow the older production-worker deployment steps below.
+
 This runbook covers a **separate staging Worker**, not a replacement for the
 current personal/production `udb-private-relay` Worker. It does not grant
 remote access or establish authenticated ChatGPT reads by itself.

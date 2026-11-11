@@ -152,13 +152,16 @@ def test_reconnect_requests_are_process_scoped_and_leave_grants_unchanged(
         request = json.loads(path.read_text()) if path.exists() else {}
         return dict(
             instance=instance,
+            connection_mode="cloudflare",
             reconnect_request=request.get("request_id", ""),
             reconnect_pending=False,
         )
 
     monkeypatch.setattr(owner_command, "headless_state", heartbeat)
     result = owner_command.reconnect(
-        tmp_path, tmp_path / "udb.exe", snapshot=lambda *_: {"local_tunnel_ready": True}
+        tmp_path,
+        tmp_path / "udb.exe",
+        snapshot=lambda *_: {"cloud_agent_running": True},
     )
     request = json.loads((state / headless.RECONNECT_NAME).read_text())
     assert request["instance"] == instance and headless.stop_requested(
@@ -188,7 +191,7 @@ def test_headless_reconnect_is_accepted_once_only_for_current_lifetime(
         def stop_process(self, name):
             calls.append(name)
 
-        def start_tunnel(self):
+        def start_cloud(self):
             calls.append("connect")
             raise PolicyError("synthetic")
 
@@ -218,5 +221,7 @@ def test_headless_reconnect_is_accepted_once_only_for_current_lifetime(
             time.sleep(0.001)
 
     stop.wait = wait
-    headless.run_loop(ctl, instance, stop, connect=False)
-    assert calls == ([] if foreign or expired else ["tunnel", "connect"])
+    headless.run_loop(ctl, instance, stop, connect=True)
+    assert calls == (
+        ["connect"] if foreign or expired else ["connect", "cloud", "connect"]
+    )

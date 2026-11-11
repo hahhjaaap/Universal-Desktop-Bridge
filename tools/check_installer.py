@@ -248,8 +248,10 @@ def main():
             assert not (home / "state/manager.lock").exists()
             mcp = json.loads((install / "mcp.json").read_text(encoding="utf-8"))[
                 "mcpServers"
-            ]["universal-desktop-bridge"]
-            assert mcp["command"] == str(exe)
+            ]
+            assert (
+                mcp == {}
+            )  # No local transport or endpoint before Cloudflare pairing.
             probe = subprocess.run(
                 [str(exe), "runtime", "--probe"],
                 env=env,

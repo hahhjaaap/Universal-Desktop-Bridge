@@ -17,7 +17,8 @@ def configuration():
         return json.loads(legacy.read_text())["mcpServers"]["universal-desktop-bridge"]
     settings = load(config=selected)
     args = [
-        "serve",
+        "_worker",
+        "cloud-proxy",
         "--home",
         str(settings.home),
         "--root",

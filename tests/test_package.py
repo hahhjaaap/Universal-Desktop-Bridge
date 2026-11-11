@@ -81,7 +81,7 @@ def test_frozen_spec_bundles_guest_source_as_a_byte_readable_payload(monkeypatch
     compile(payloads[0][0].read_bytes(), "desktop_guest.py", "exec")
 
 
-def test_mcp_config_generates_current_stdio_command(tmp_path):
+def test_unpaired_mcp_config_exports_no_local_transport(tmp_path):
     home = tmp_path / "home"
     project = tmp_path / "project"
     home.mkdir()
@@ -97,13 +97,7 @@ def test_mcp_config_generates_current_stdio_command(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
-    server = payload["mcpServers"]["universal-desktop-bridge"]
-    assert server["type"] == "stdio"
-    assert Path(server["command"]).resolve() == Path(sys.executable).resolve()
-    assert server["args"][:3] == ["-m", "udb", "serve"]
-    assert str(home.resolve()) in server["args"]
-    assert str(project.resolve()) in server["args"]
-    assert "--enable-terminal" in server["args"]
+    assert payload == {"mcpServers": {}}
     assert not (home / "state").exists()
 
 
@@ -187,18 +181,11 @@ def test_worker_launch_and_environment_never_require_external_scripts(monkeypatc
     assert child_environment()["PYINSTALLER_RESET_ENVIRONMENT"] == "1"
 
 
-def test_owner_activation_not_accepted_by_mcp_serve(tmp_path):
-    result = run(
-        "--access",
-        "computer",
-        "serve",
-        "--home",
-        str(tmp_path),
-        "--root",
-        str(tmp_path),
-    )
-    assert result.returncode != 0 and "Owner activation" in result.stderr
-    assert not (tmp_path / "state").exists()
+def test_legacy_serve_and_worker_cannot_activate_owner_access(tmp_path):
+    for args in (["serve"], ["_worker", "cloud-proxy", "--access", "computer"]):
+        result = run(*args, "--home", str(tmp_path))
+        assert result.returncode != 0
+        assert not (tmp_path / "state").exists()
 
 
 def test_status_metadata_preserves_legacy_payload():
@@ -228,7 +215,7 @@ def test_real_source_mcp_without_installed_core_or_owner_access(tmp_path):
     root.mkdir()
     rows = queue.Queue()
     p = subprocess.Popen(
-        command(["serve", "--home", str(home), "--root", str(root)]),
+        command(["_worker", "cloud-proxy", "--home", str(home), "--root", str(root)]),
         cwd=tmp_path,
         env=child_environment(),
         stdin=subprocess.PIPE,
@@ -429,6 +416,7 @@ def test_owner_options_work_with_default_start_and_either_argument_order(
             "--wait",
             "0",
             "--json",
+            *([] if "status" in args else ["--offline"]),
         ]
     ]
 

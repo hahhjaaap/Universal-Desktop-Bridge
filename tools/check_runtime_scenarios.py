@@ -223,20 +223,6 @@ def main():
     print(json.dumps(dict(scenario="owned_browser", state="RUNNING")), flush=True)
     results.append(browser_fixture())
     print(json.dumps(results[-1]), flush=True)
-    helper = root / "build-assets/bin/tunnel-client.exe"
-    help_result = subprocess.run(
-        [str(helper), "run", "--help"],
-        env=child_environment(),
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    assert help_result.returncode == 0
-    assert (
-        "mcp.stdio-send-initialized-notification"
-        in help_result.stdout + help_result.stderr
-    )
-    results.append(dict(scenario="tunnel_initialized_option", state="PASS"))
     if args.wheel:
         destination = root / "build" / "runtime-wheel"
         run(

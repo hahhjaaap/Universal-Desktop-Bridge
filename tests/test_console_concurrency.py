@@ -208,7 +208,9 @@ def test_start_attaches_logs_only_when_requested_or_interactive(
 
     report = dict(
         manager_running=True,
-        local_tunnel_ready=True,
+        local_tunnel_ready=False,
+        cloud_agent_running=True,
+        connection_mode="cloudflare",
         background="ready",
         manager_mode="headless",
         next_action="fixture",

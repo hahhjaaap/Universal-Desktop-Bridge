@@ -664,4 +664,4 @@ def main(argv=None):
 if __name__ == "__main__":
     from .cli import main
 
-    raise SystemExit(main(["serve", *sys.argv[1:]]))
+    raise SystemExit(main(["_worker", "cloud-proxy", *sys.argv[1:]]))

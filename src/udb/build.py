@@ -202,11 +202,12 @@ def standalone_package(base, destination, asset_root, components, *, layout="one
         "~~~powershell\n"
         ".\\udb.exe runtime --probe\n"
         ".\\udb.exe init\n"
-        ".\\udb.exe start --offline\n"
+        ".\\udb.exe start\n"
         ".\\udb.exe status --json\n"
         ".\\udb.exe logs --details\n"
         ".\\udb.exe stop\n"
         ".\\udb.exe gui\n"
+        ".\\udb.exe live\n"
         "~~~\n\n"
         "Interactive start follows live logs in that same console; use start --detach for background-only startup. "
         "The proxy and shared background-work capacity are limited to 10 each, subject to CPU/RAM availability. "
@@ -217,7 +218,7 @@ def standalone_package(base, destination, asset_root, components, *, layout="one
         "Stop it before changing connection modes or opening the settings GUI. "
         "To use optional computer access, run .\\udb.exe --access computer in your own attended terminal; "
         "no permission is granted by installation or tests.\n\n"
-        "ChatGPT connectivity still needs network access, account configuration and the supported tunnel service. "
+        "ChatGPT connectivity still needs network access, account configuration and the paired Cloudflare Worker. "
         "Bundled helper versions/hashes are listed by runtime and build-info. "
         "Private credentials, grants and journals are stored in the owner's application data, never in this EXE or ZIP. "
         "An existing portable installation retains its selected home and settings. "
@@ -232,7 +233,7 @@ def standalone_package(base, destination, asset_root, components, *, layout="one
         "it is never silently installed.\n\n"
         "Portable Start/Search shortcut (opt-in): run tools/create_start_shortcut.ps1 "
         "-Exe .\\udb.exe from this folder in a trusted, attended PowerShell session. "
-        "The shortcut opens the GUI and does not start an online session or grant access.\n\n"
+        "The shortcuts open the Manager and Live activity window (Ctrl+Alt+U). They do not grant access.\n\n"
         "SHA256 detects accidental corruption, not publisher identity. This build is not code-signed.\n",
         encoding="utf-8",
     )

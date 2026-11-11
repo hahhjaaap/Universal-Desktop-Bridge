@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .activity import event_status
 from .activity_presenter import ActivityFeed, describe, event_state, summary
 from .manager_widgets import (
     ACCENT,
@@ -54,10 +55,12 @@ class QuickControls(QDialog):
             )
         )
         self.connect_button = MotionButton("Kết nối", "power")
-        self.connect_button.clicked.connect(owner.toggle_tunnel)
+        self.connect_button.clicked.connect(owner.toggle_connection)
         self.settings_button = MotionButton("Cài đặt", "settings")
         self.settings_button.clicked.connect(owner.configure)
-        lay.addLayout(row(self.connect_button, self.settings_button))
+        live = MotionButton("UDB Live", "activity")
+        live.clicked.connect(owner.open_live)
+        lay.addLayout(row(self.connect_button, self.settings_button, live))
 
         card = panel()
         box = QVBoxLayout(card)
@@ -274,7 +277,8 @@ class QuickControls(QDialog):
         self.history.clear()
         self.history.setVisible(bool(self.events))
         for event in self.events[:8]:
-            item = QTreeWidgetItem([describe(event), event_state(event)])
+            item = QTreeWidgetItem([describe(event), event_status(event)])
+            item.setToolTip(1, event_state(event))
             item.setToolTip(
                 0,
                 "<qt>"

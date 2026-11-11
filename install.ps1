@@ -103,12 +103,19 @@ function Get-AgentState([string]$Image) {
     if ($state.PSObject.Properties.Name -notcontains 'manager_running') { throw 'Cannot inspect the existing agent.' }
     return $state
 }
+function Test-CloudflareOnlyRelease([string]$Image) {
+    return ((@(& $Image --help) -join ' ') -match '(?:[,{])live(?=[,}])')
+}
 function Start-Agent([string]$Image,[string]$Mode) {
     $options = @('--home',$DataHome,'start','--detach','--json','--wait','60')
-    if ($Mode -eq 'offline') { $options += '--offline' }
+    $cloudOnly = Test-CloudflareOnlyRelease $Image
+    if ($Mode -eq 'offline' -or (!$cloudOnly -and $Mode -eq 'cloudflare')) { $options += '--offline' }
     elseif ((@(& $Image start --help) -join ' ') -match '--online') { $options += '--online' }
     $state = (@(& $Image @options) -join "`n") | ConvertFrom-Json
-    if (!$state.manager_running -or $state.connection_mode -ne $Mode) { throw 'New agent failed to start in the previous connection mode.' }
+    $expectedModes = if ($Mode -eq 'online' -and $cloudOnly) { @('cloudflare','offline') }
+        elseif ($Mode -eq 'cloudflare' -and !$cloudOnly) { @('offline') }
+        else { @($Mode) }
+    if (!$state.manager_running -or $state.connection_mode -notin $expectedModes) { throw 'New agent failed to start in the expected connection mode.' }
     # A temporary network outage is not a broken application. The agent retries.
 }
 function Set-ActiveRelease($Record,$Old) {
@@ -181,6 +188,28 @@ function Register-UdbStartMenu([string]$Image) {
     $verified = $shell.CreateShortcut($link)
     if ($verified.TargetPath -ine $launcher -or $verified.Arguments -ne 'gui' -or $verified.Description -ne 'UDB-managed Start Menu shortcut') {
         throw 'Start Menu shortcut verification failed.'
+    }
+    $liveLink = Assert-LocalPath (Join-Path $folder 'UDB Live.lnk')
+    $live = $shell.CreateShortcut($liveLink)
+    $liveDescription = 'UDB-managed Cloudflare Live shortcut'
+    if ((Test-Path -LiteralPath $liveLink) -and $live.Description -ne $liveDescription) {
+        throw 'Existing UDB Live shortcut belongs to another application; preserved.'
+    }
+    if (!(Test-CloudflareOnlyRelease $Image)) {
+        if (Test-Path -LiteralPath $liveLink) { Remove-Item -LiteralPath $liveLink }
+        return
+    }
+    $live.TargetPath = $launcher
+    $live.Arguments = 'live --gui'
+    $live.WorkingDirectory = [IO.Path]::GetDirectoryName($launcher)
+    $live.IconLocation = $Image + ',0'
+    $live.Hotkey = 'CTRL+ALT+U'
+    $live.Description = $liveDescription
+    $live.Save()
+    $liveCheck = $shell.CreateShortcut($liveLink)
+    $verifiedHotkey = ($liveCheck.Hotkey.ToUpperInvariant().Split('+') | Sort-Object) -join '+'
+    if ($liveCheck.TargetPath -ine $launcher -or $liveCheck.Arguments -ne 'live --gui' -or $verifiedHotkey -ne 'ALT+CTRL+U') {
+        throw 'UDB Live shortcut verification failed.'
     }
 }
 function Get-Download([string]$Url,[string]$Destination,[int]$Timeout) {

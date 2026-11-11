@@ -169,21 +169,33 @@ def main():
             return result.stdout
 
         version = run("--version").strip()
-        remembered_mode = tuple(map(int, version.split("."))) >= (0, 9, 3)
-        if remembered_mode:
-            help_text = run("setup", "--help")
-            assert "--edit" in help_text and "--local" in help_text
-            for flag in ("--edit", "--local"):
-                refused = root / ("redirected-" + flag.removeprefix("--"))
-                run(
-                    "setup",
-                    "--home",
-                    str(refused),
-                    flag,
-                    expect_success=False,
-                    error_contains="attended Windows terminal",
-                )
-                assert not refused.exists()
+        refused = root / "redirected-setup"
+        run(
+            "setup",
+            "--home",
+            str(refused),
+            expect_success=False,
+            error_contains="attended Windows terminal",
+        )
+        assert not refused.exists()
+        run("setup", "--local", expect_success=False, error_contains="--local")
+        assert "--gui" in run("live", "--help")
+        assert json.loads(run("mcp-config", "--home", str(home))) == {"mcpServers": {}}
+        paired = root / "paired-home"
+        paired.mkdir()
+        relay = "https://example.workers.dev"
+        device_id = "a" * 32
+        (paired / "cloud-pairing.json").write_text(
+            json.dumps({"relay": relay, "device_id": device_id}), encoding="utf-8"
+        )
+        assert json.loads(run("mcp-config", "--home", str(paired))) == {
+            "mcpServers": {
+                "universal-desktop-bridge": {
+                    "type": "streamable-http",
+                    "url": f"{relay}/v1/devices/{device_id}/mcp",
+                }
+            }
+        }
         catalog = json.loads(run("tools"))
         manifest = json.loads(run("manifest"))
         info = json.loads(run("build-info"))
@@ -243,19 +255,11 @@ def main():
             {"active": "missing-legacy-release", "sha256": "0" * 64}
         )
         legacy_metadata.write_text(legacy_data, encoding="utf-8")
-        offline_flags = ["--offline"]
-        if remembered_mode:
-            preference = offline_home / "state/startup-preferences.json"
-            preference.parent.mkdir()
-            preference.write_text(
-                json.dumps({"schema": 1, "mode": "offline"}), encoding="utf-8"
-            )
-            offline_flags = []
         try:
             offline = json.loads(
                 run(
                     "start",
-                    *offline_flags,
+                    "--offline",
                     "--detach",
                     "--home",
                     str(offline_home),
@@ -294,7 +298,7 @@ def main():
                 checks = {row["check"]: row for row in doctor["checks"]}
                 assert checks["runtime_integrity"]["ok"] is True
                 assert checks["agent_heartbeat"]["ok"] is True
-                assert checks["local_tunnel"]["ok"] is None
+                assert checks["connection_configuration"]["ok"] is None
                 assert checks["credentials"]["ok"] is None
                 assert all(row["ok"] is not False for row in checks.values())
                 assert run("autostart", "--help") and run("update", "--help")
@@ -388,7 +392,8 @@ def main():
         process = subprocess.Popen(
             [
                 str(executable),
-                "serve",
+                "_worker",
+                "cloud-proxy",
                 "--home",
                 str(home),
                 "--root",
@@ -506,6 +511,8 @@ def main():
             assert (
                 "PRIVATE_LOG_PAYLOAD" not in logged and "PRIVATE_LOG_KEY" not in logged
             )
+            live = run("live", "--home", str(home), "--once")
+            assert all(status in live for status in ("CALLING", "PASS", "ERROR"))
             assert not (project / ".udb-work-state").exists(), (
                 "Denied request created work records"
             )
@@ -529,7 +536,7 @@ def main():
                         ignores_missing_legacy_installation=True,
                         live_activity_logs=True,
                         parallel_capacity=10,
-                        remembered_local_mode=remembered_mode,
+                        cloud_only_mcp_config=True,
                         bundled_components=list(runtime.get("component_probes", {})),
                     )
                 )

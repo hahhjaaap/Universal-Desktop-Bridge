@@ -23,7 +23,6 @@ from pathlib import Path
 from ._version import VERSION
 from .build_identity import runtime_identity
 from .config import manager_options
-from .connection import is_tunnel_id
 from .launcher import worker_command
 from .owner_cli import parse_args, render_report, report_healthy
 
@@ -257,9 +256,11 @@ def cloudflare_pairing_configured(home: Path) -> bool:
 
 def inspect(home: Path, exe: Path, running=manager_running, ready=tunnel_ready) -> dict:
     active = running(home, exe)
-    connected = active and ready(home)
     cloud_pairing = cloudflare_pairing_configured(home)
     hidden = headless_state(home) if active else None
+    mode = (hidden or {}).get("connection_mode", "unknown")
+    connected = active and mode == "online" and ready(home)
+    cloud_running = mode == "cloudflare" and (hidden or {}).get("cloud_running") is True
     count = (hidden or {}).get("recovery_count", 0)
     count = count if type(count) is int and 0 <= count <= 10**9 else 0
     reason = (hidden or {}).get("last_recovery", "")
@@ -272,6 +273,7 @@ def inspect(home: Path, exe: Path, running=manager_running, ready=tunnel_ready) 
             "headless" if hidden else "legacy_or_unknown" if active else "stopped"
         ),
         local_tunnel_ready=connected,
+        cloud_agent_running=cloud_running,
         cloudflare_pairing_configured=cloud_pairing,
         background=background_state(home),
         connection_mode=hidden.get("connection_mode", "online")
@@ -284,8 +286,12 @@ def inspect(home: Path, exe: Path, running=manager_running, ready=tunnel_ready) 
             "replays_tool_calls": False,
         },
         next_action=(
-            "Call bridge_status in ChatGPT to verify the session."
-            if connected
+            "Cloud Agent process started. Verify bridge_status from ChatGPT."
+            if cloud_running
+            else "Cloud Agent stopped. Run udb reconnect or inspect Cloudflare pairing."
+            if mode == "cloudflare"
+            else "Run udb setup on this Windows computer to connect through Cloudflare."
+            if mode == "online"
             else (
                 "The local Manager is offline; Cloudflare uses a separate "
                 "Cloud Agent. Run udb doctor --cloud and call bridge_status "
@@ -303,21 +309,17 @@ def inspect(home: Path, exe: Path, running=manager_running, ready=tunnel_ready) 
     )
 
 
-def remote_session_action(report: dict, *, offline: bool) -> str:
-    """Guide remote troubleshooting without claiming to observe the ChatGPT UI."""
-    if offline:
+def remote_session_action(report: dict, *, paired: bool) -> str:
+    """Guide Cloudflare troubleshooting without claiming to observe ChatGPT."""
+    if not paired:
+        return "Run udb setup on the original Windows computer to pair with Cloudflare."
+    if report.get("cloud_agent_running") is not True:
         return (
-            "Local/offline mode: a ChatGPT remote session is not expected. "
-            "Use udb setup on the original computer to enable online mode."
-        )
-    if not report.get("local_tunnel_ready", False):
-        return (
-            "The local tunnel is not ready. Run udb status --json and "
-            "udb doctor --json on the original computer; resolve local "
-            "connection problems before retrying tools in ChatGPT."
+            "Cloudflare is paired. Run udb start to start the Cloud Agent, "
+            "or use udb doctor --cloud to check the Worker."
         )
     return (
-        "Local tunnel is ready, but ChatGPT tool access is NOT verified. "
+        "The Cloud Agent is running. ChatGPT tool access is unverified. "
         "From the other device call bridge_status. If the plugin shows "
         "Connected yet calls fail with 'Session terminated', reconnect or "
         "refresh the ChatGPT plugin/session and verify bridge_status again. "
@@ -329,7 +331,7 @@ def doctor(
     home: Path, report: dict, *, cloud=False, cloud_auth_mode="cloudflare-access"
 ) -> list[dict]:
     from .config import effective
-    from .onboarding import paired_cloud, saved_mode
+    from .onboarding import paired_cloud
 
     checks = []
     if cloud:
@@ -371,44 +373,15 @@ def doctor(
             # Keep diagnostics read-only. A corrupt or linked pairing must not
             # be treated as a working device or silently fall back to Tunnel.
             pass
-    try:
-        mode = saved_mode(settings)
-        mode_valid = True
-    except (OSError, ValueError, CommandError):
-        mode = None
-        mode_valid = False
-    offline = report.get("connection_mode") == "offline" or (
-        not report["manager_running"] and mode == "offline"
-    )
-    checks.append(
-        dict(
-            check="startup_mode",
-            ok=mode_valid,
-            action="Saved startup choice is valid."
-            if mode_valid
-            else "Run udb setup to select a valid startup mode.",
-        )
-    )
-    valid = cloud_paired
-    if not has_pairing:
-        try:
-            cfg = read_object(home / "state" / "connection.json")
-            valid = is_tunnel_id(cfg.get("tunnel_id"))
-        except (OSError, ValueError, CommandError):
-            valid = False
     checks.append(
         dict(
             check="connection_configuration",
-            ok=valid if has_pairing else None if offline else valid,
+            ok=cloud_paired if has_pairing else None,
             action="Cloudflare pairing metadata valid; OAuth, grants and live MCP not verified."
             if cloud_paired
             else "Cloudflare pairing invalid; inspect it on the original Windows computer."
             if has_pairing
-            else "Already configured."
-            if valid
-            else "Not required in local mode."
-            if offline
-            else "Run udb setup --edit locally. Keep runtime keys out of chat.",
+            else "Run udb setup to pair this Windows computer with Cloudflare.",
         )
     )
     checks.append(
@@ -418,41 +391,13 @@ def doctor(
             action="Running." if report["manager_running"] else "Run udb.",
         )
     )
-    checks.append(
-        dict(
-            check="local_tunnel",
-            ok=None if has_pairing or offline else report["local_tunnel_ready"],
-            action="Not used for Cloudflare; enable Cloud Agent and verify MCP separately."
-            if has_pairing
-            else "Not required in local mode."
-            if offline
-            else report["next_action"],
-        )
-    )
     from .components import runtime_report
 
     try:
         runtime = runtime_report()
-        helpers = {row["name"] for row in runtime["components"]}
-        bundled = "tunnel-client" in helpers
-        if not bundled:
-            from .components import component_path
-
-            bundled = component_path("tunnel-client", home) is not None
         checks.append(
             dict(
                 check="runtime_integrity", ok=True, action="Runtime inventory verified."
-            )
-        )
-        checks.append(
-            dict(
-                check="tunnel_component",
-                ok=None if has_pairing or offline else bundled,
-                action="Legacy Tunnel helper not required for Cloudflare."
-                if has_pairing
-                else "Available."
-                if bundled
-                else "Install the Windows standalone release to include tunnel-client.",
             )
         )
         checks.append(
@@ -524,18 +469,14 @@ def doctor(
         dict(
             check="credentials",
             ok=None,
-            action="Cloudflare device tokens and OAuth credentials are not inspected by doctor."
-            if has_pairing
-            else "Keys are not read by doctor. If authentication fails, use udb setup --edit in your own terminal.",
+            action="Cloudflare device tokens and OAuth credentials are not inspected by doctor.",
         )
     )
     checks.append(
         dict(
             check="chatgpt_session",
             ok=None,
-            action="Cloudflare MCP not verified. Check the paired Cloud Agent, Worker, OAuth and device grant; invoke bridge_status in ChatGPT."
-            if has_pairing
-            else remote_session_action(report, offline=offline),
+            action=remote_session_action(report, paired=cloud_paired),
         )
     )
     return checks
@@ -603,8 +544,11 @@ def start(
     with launch_gate(home):
         report = snapshot(home, exe)
         if report["manager_running"] and (
-            (connect and report.get("connection_mode") == "offline")
-            or (not connect and report.get("connection_mode") == "online")
+            (connect and report.get("connection_mode") in {"offline", "online"})
+            or (
+                not connect
+                and report.get("connection_mode") in {"online", "cloudflare"}
+            )
         ):
             raise CommandError(
                 "The agent is already running in another connection mode. Run udb stop first."
@@ -641,7 +585,7 @@ def start(
         while True:
             report = snapshot(home, exe)
             if (
-                report["local_tunnel_ready"]
+                (connect and report.get("cloud_agent_running") is True)
                 or (
                     not connect
                     and report["manager_running"]
@@ -693,14 +637,14 @@ def stop(
 def reconnect(
     home, exe, wait=30, *, snapshot=inspect, clock=time.monotonic, pause=time.sleep
 ):
-    """Request a new owned tunnel connection without restarting jobs or grants."""
+    """Restart the owned Cloud Agent without restarting the host worker."""
     from .host_client import atomic_json
 
     with launch_gate(home):
         state = headless_state(home)
-        if not state:
+        if not state or state.get("connection_mode") != "cloudflare":
             raise CommandError(
-                "Run udb start first; reconnect requires a live headless agent."
+                "Reconnect requires a headless Cloudflare agent started by udb start."
             )
         rid = os.urandom(16).hex()
         target = regular(home / "state" / "headless-reconnect.json")
@@ -720,7 +664,7 @@ def reconnect(
             if (
                 acknowledged
                 and not current.get("reconnect_pending", False)
-                and result["local_tunnel_ready"]
+                and result.get("cloud_agent_running") is True
             ) or clock() >= deadline:
                 return dict(
                     result,
@@ -771,7 +715,9 @@ def main(argv=None):
         if args.action == "test":
             if os.name != "nt":
                 raise CommandError("The installed-agent test requires Windows.")
-            report = start(home, exe, args.wait)
+            report = start(
+                home, exe, args.wait, connect=cloudflare_pairing_configured(home)
+            )
             if not report["manager_running"]:
                 raise CommandError("Run udb before testing the installed agent.")
             return subprocess.run(

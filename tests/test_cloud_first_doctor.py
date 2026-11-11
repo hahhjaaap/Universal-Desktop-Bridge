@@ -14,7 +14,6 @@ def isolated_doctor(monkeypatch):
         "runtime_report",
         lambda: {"components": [], "office_modules": {"office": True}},
     )
-    monkeypatch.setattr(components, "component_path", lambda *_: None)
     monkeypatch.setattr(
         autostart, "status", lambda *_: {"enabled": False, "matches_current": True}
     )
@@ -43,10 +42,9 @@ def test_valid_cloud_pairing_does_not_require_legacy_tunnel(tmp_path):
     result = checks(tmp_path)
     assert result["connection_configuration"]["ok"] is True
     assert "Cloudflare pairing" in result["connection_configuration"]["action"]
-    assert result["local_tunnel"]["ok"] is None
-    assert result["tunnel_component"]["ok"] is None
-    assert "udb setup --edit" not in result["credentials"]["action"]
-    assert "bridge_status" in result["chatgpt_session"]["action"]
+    assert "local_tunnel" not in result
+    assert "tunnel_component" not in result
+    assert "udb start" in result["chatgpt_session"]["action"]
     assert result["chatgpt_session"]["ok"] is None
 
 
@@ -58,17 +56,16 @@ def test_malformed_cloud_pairing_fails_closed_without_tunnel_fallback(tmp_path):
     result = checks(tmp_path)
     assert result["connection_configuration"]["ok"] is False
     assert "Cloudflare pairing invalid" in result["connection_configuration"]["action"]
-    assert result["local_tunnel"]["ok"] is None
-    assert "udb setup --edit" not in result["credentials"]["action"]
+    assert "udb setup" in result["chatgpt_session"]["action"]
 
 
-def test_unpaired_legacy_tunnel_remains_supported_for_rollback(tmp_path):
+def test_legacy_tunnel_metadata_does_not_substitute_for_cloud_pairing(tmp_path):
     state = tmp_path / "state"
     state.mkdir()
     (state / "connection.json").write_text(
         json.dumps({"tunnel_id": "tunnel_" + "a" * 32}), encoding="utf-8"
     )
     result = checks(tmp_path)
-    assert result["connection_configuration"]["ok"] is True
-    assert result["local_tunnel"]["ok"] is False
-    assert "udb setup --edit" in result["credentials"]["action"]
+    assert result["connection_configuration"]["ok"] is None
+    assert "udb setup" in result["connection_configuration"]["action"]
+    assert "udb setup" in result["chatgpt_session"]["action"]

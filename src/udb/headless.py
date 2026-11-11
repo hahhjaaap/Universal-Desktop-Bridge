@@ -104,6 +104,7 @@ def publish(controller, instance: str, phase="running"):
             ),
             tunnel_ready=connection["ready"],
             tunnel_running=connection["tunnel_running"],
+            cloud_running=connection.get("cloud_running", False),
             connecting=connection["connecting"],
             recovery_count=connection.get("recovery_count", 0),
             last_recovery=connection.get("last_recovery", ""),
@@ -112,7 +113,7 @@ def publish(controller, instance: str, phase="running"):
             reconnect_pending=getattr(controller, "_reconnect_pending", False),
             connection_mode="offline"
             if getattr(controller, "offline_mode", False)
-            else "online",
+            else "cloudflare",
             permissions="existing_owner_grants",
             unrestricted_host_access=False,
         ),
@@ -129,12 +130,11 @@ def run_loop(controller, instance, stop_event, connect=True, interval=0.3):
     def begin(reconnect=False):
         try:
             if reconnect:
-                controller.stop_process("tunnel")
+                controller.stop_process("cloud")
             if not stop_event.is_set():
-                controller.offline_mode = False
-                controller.start_tunnel()
-        except (PolicyError, OSError):
-            pass  # Existing controller schedules bounded retries, not tool replay.
+                controller.start_cloud()
+        except (PolicyError, OSError, ValueError, KeyError):
+            pass  # Cloud Agent retries transport failures without replaying RPCs.
         finally:
             controller._reconnect_pending = False
 
@@ -155,7 +155,11 @@ def run_loop(controller, instance, stop_event, connect=True, interval=0.3):
             if stop_requested(controller.agent.state / STOP_NAME, instance):
                 break
             request = controller.agent.state / RECONNECT_NAME
-            if not controller._reconnect_pending and stop_requested(request, instance):
+            if (
+                connect
+                and not controller._reconnect_pending
+                and stop_requested(request, instance)
+            ):
                 try:
                     data = _read_json(request, 4096)
                     rid = data.get("request_id")

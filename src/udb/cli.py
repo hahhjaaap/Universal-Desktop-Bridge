@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from contextlib import contextmanager
 
 from ._version import VERSION
-from .config import Settings, activate, checked, load, serve_options
+from .config import Settings, activate, checked, load
 
 
 @contextmanager
@@ -61,6 +61,22 @@ def worker(role: str, args: Sequence[str]) -> int:
         from .companion.background import search_worker
 
         return search_worker()
+    if role == "cloud-proxy":
+        from .config import prepare_workspace
+        from .proxy import run
+
+        parser = argparse.ArgumentParser(prog="udb Cloud Agent worker")
+        add_settings(parser)
+        options = parser.parse_args(args)
+        settings = load(
+            home=options.home,
+            config=options.config,
+            root=options.root,
+            enable_terminal=options.enable_terminal,
+            core_exe=options.core_exe,
+        )
+        prepare_workspace(settings)
+        return run(settings)
     if role == "legacy-proxy":
         return _run_legacy_proxy(args)
     raise ValueError("Unknown worker role")
@@ -94,11 +110,10 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         "quickstart",
         "setup",
         "gui",
+        "live",
         "runtime",
-        "serve",
         "cloud-agent",
         "cloud-pair",
-        "fleet-agent",
         "status",
         "reconnect",
         "logs",
@@ -186,10 +201,16 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
             )
             connection_mode = command.add_mutually_exclusive_group()
             connection_mode.add_argument(
-                "--offline", action="store_true", default=argparse.SUPPRESS
+                "--offline",
+                action="store_true",
+                default=argparse.SUPPRESS,
+                help=argparse.SUPPRESS,
             )
             connection_mode.add_argument(
-                "--online", action="store_true", default=argparse.SUPPRESS
+                "--online",
+                action="store_true",
+                default=argparse.SUPPRESS,
+                help=argparse.SUPPRESS,
             )
         if name == "status":
             command.add_argument(
@@ -205,20 +226,14 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
                 help="Number of samples; 0 watches until Ctrl+C",
             )
         if name == "setup":
-            mode = command.add_mutually_exclusive_group()
-            mode.add_argument(
-                "--edit",
-                action="store_true",
-                help="Re-enter connection details in the attended terminal",
-            )
-            mode.add_argument(
-                "--local",
-                action="store_true",
-                help="Remember local mode without a ChatGPT connection",
-            )
+            command.add_argument("--edit", action="store_true", help=argparse.SUPPRESS)
         if name == "runtime":
             command.add_argument("--probe", action="store_true")
-        if name == "logs":
+        if name in ("logs", "live"):
+            if name == "live":
+                command.add_argument(
+                    "--gui", action="store_true", help="Open the activity window"
+                )
             command.add_argument(
                 "--once", action="store_true", help="Print retained activity and exit"
             )
@@ -243,14 +258,6 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
             command.add_argument("--output")
             command.add_argument(
                 "--assets", help="Inventoried public runtime helper directory"
-            )
-        if name == "fleet-agent":
-            command.add_argument("--device-id", required=True)
-            command.add_argument("--port", type=int, default=18743)
-            command.add_argument("--allow-control", action="store_true")
-        if name == "serve":
-            command.add_argument(
-                "--stdio", action="store_true", help="stdio is the default transport"
             )
 
 
@@ -285,13 +292,11 @@ def _run_setup(args: argparse.Namespace, settings: Settings) -> int:
         raise ValueError(
             "Use udb setup directly in your own terminal without --json/--access/--offline"
         )
-    from .onboarding import run
+    from .onboarding import setup_cloud
 
     with _settings_scope(settings):
         try:
-            if args.edit or args.local:
-                return run(settings, edit=args.edit, local=args.local)
-            return run(settings)
+            return setup_cloud(settings)
         except KeyboardInterrupt:
             print("\nSetup canceled.", file=sys.stderr)
             return 130
@@ -299,55 +304,43 @@ def _run_setup(args: argparse.Namespace, settings: Settings) -> int:
 
 def _prepare_startup(args: argparse.Namespace, settings: Settings) -> int | None:
     from . import onboarding
+    from .owner_command import headless_state
 
-    # Keep the local manager available without accidentally booting an obsolete
-    # OpenAI Tunnel when a Cloudflare device is already paired. Cloud Agent
-    # still requires the owner's separate attended opt-in.
-    if not (args.offline or args.online) and onboarding.paired_cloud(settings.home):
+    if args.offline or onboarding.paired_cloud(settings.home):
+        return None
+    if args.online:
+        raise ValueError(
+            "Pair this Windows device with Cloudflare first using udb setup."
+        )
+    if (headless_state(settings.home) or {}).get("connection_mode") == "offline":
         args.offline = True
-    startup_state = {}
-    if not (args.offline or args.online):
-        preferred = onboarding.saved_mode(settings)
-        from . import owner_command
-
-        startup_state = owner_command.headless_state(settings.home) or {}
-        if startup_state.get("connection_mode") == "offline" or (
-            not startup_state and preferred == "offline"
-        ):
-            args.offline = True
-    if (
-        not (args.offline or args.detach or args.json or args.access)
-        and not startup_state
-        and onboarding.attended_console()
-        and not onboarding.saved_connection(settings)
-    ):
+        return None
+    if not (args.detach or args.json or args.access) and onboarding.attended_console():
         with _settings_scope(settings):
             try:
-                return onboarding.run(settings)
+                result = onboarding.setup_cloud(settings)
+                if result:
+                    return result
             except KeyboardInterrupt:
                 print("\nSetup canceled.", file=sys.stderr)
                 return 130
+    if not onboarding.paired_cloud(settings.home):
+        # The local support worker is required for approvals and can start
+        # before enrollment. It does not expose an MCP transport.
+        args.offline = True
 
 
 def _print_mcp_config(args: argparse.Namespace, settings: Settings) -> int:
-    from .launcher import command
+    from .connection import cloud_mcp_url
+    from .onboarding import paired_cloud
 
-    with _settings_scope(settings):
-        argv = command(serve_options(settings.home))
-    print(
-        json.dumps(
-            {
-                "mcpServers": {
-                    "universal-desktop-bridge": {
-                        "type": "stdio",
-                        "command": argv[0],
-                        "args": argv[1:],
-                    }
-                }
-            },
-            indent=2,
-        )
-    )
+    servers = {}
+    if paired_cloud(settings.home):
+        servers["universal-desktop-bridge"] = {
+            "type": "streamable-http",
+            "url": cloud_mcp_url(settings.home),
+        }
+    print(json.dumps({"mcpServers": servers}, indent=2))
     return 0
 
 
@@ -392,7 +385,7 @@ def _run_maintenance(action: str, args: argparse.Namespace, settings: Settings) 
                 settings,
                 args.operation,
                 as_json=args.json,
-                cloud_agent=args.cloud_agent,
+                cloud_agent=args.operation == "enable" or args.cloud_agent,
             )
         from .maintenance import run
 
@@ -434,12 +427,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--wait", type=int, default=30)
     connection_mode = parser.add_mutually_exclusive_group()
     connection_mode.add_argument(
-        "--offline", action="store_true", help="Start local agent without a tunnel"
+        "--offline", action="store_true", help=argparse.SUPPRESS
     )
     connection_mode.add_argument(
         "--online",
         action="store_true",
-        help="Start online regardless of the saved local preference",
+        help=argparse.SUPPRESS,
     )
     _add_subcommands(parser)
     parser.add_argument(
@@ -525,9 +518,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise ValueError("--offline/--online apply only to start")
         if action == "init":
             return _initialize_config(args, settings)
-        if action == "logs":
+        if action in ("logs", "live"):
             if args.access:
                 raise ValueError("Log viewing does not activate owner access")
+            if getattr(args, "gui", False):
+                if args.once or args.json or args.details or args.tail != 30:
+                    raise ValueError("Use terminal log options without --gui")
+                from .activity_gui import run
+
+                return run(settings.home)
             from .activity import watch
 
             return watch(
@@ -557,25 +556,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.access:
                 raise ValueError("Cloud pairing does not grant owner access")
             from .cloud_pair import run as run_cloud_pair
+            from .onboarding import console_input
 
+            if not console_input():
+                raise ValueError("Cloud pairing requires an attended Windows terminal.")
             return run_cloud_pair(settings)
-        if action == "fleet-agent":
-            if args.access:
-                raise ValueError("Fleet agent does not change owner access")
-            from .fleet_agent import run_agent
-
-            return run_agent(
-                settings.home, args.device_id, args.port, args.allow_control
-            )
-        if action == "serve":
-            if args.access:
-                raise ValueError("Owner activation is not an MCP operation")
-            from .config import prepare_workspace
-            from .proxy import run
-
-            prepare_workspace(settings)
-            return run(settings)
-
         from . import owner_command
 
         legacy_args = [

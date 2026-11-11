@@ -45,7 +45,7 @@ def test_quickstart_returns_fixed_local_only_status_without_writing_grants(
         "chatgpt_remote_verified": False,
         "connection_mode": "offline",
         "local_manager": "running",
-        "next_step": "udb mcp-config",
+        "next_step": "udb setup",
         "result": "local_ready",
     }
     assert called == [(home.resolve(), tmp_path / "fake.exe", 30, False)]

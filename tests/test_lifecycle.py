@@ -399,13 +399,13 @@ def test_doctor_offline_is_useful_without_credentials(tmp_path, monkeypatch):
     assert next(c for c in checks if c["check"] == "credentials")["ok"] is None
 
 
-def test_online_start_overrides_saved_local_mode(tmp_path, monkeypatch):
+def test_explicit_online_start_requires_cloudflare_pairing(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(owner_command, "main", lambda args: calls.append(args) or 0)
     monkeypatch.setattr(onboarding, "attended_console", lambda: False)
     onboarding.save_mode(Settings(tmp_path, tmp_path / "work"), "offline")
-    assert cli.main(["start", "--home", str(tmp_path), "--online", "--json"]) == 0
-    assert "--offline" not in calls[0]
+    assert cli.main(["start", "--home", str(tmp_path), "--online", "--json"]) == 2
+    assert not calls
 
 
 def test_unready_stop_failure_keeps_reconnect_intent(controller, monkeypatch):

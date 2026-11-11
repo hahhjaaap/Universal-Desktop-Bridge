@@ -22,21 +22,21 @@ def test_paired_cloud_routes_main_connect_action_to_cloud_agent(tmp_path):
     view = SimpleNamespace(
         agent=SimpleNamespace(home=home),
         toggle_cloud=lambda: called.append("cloud"),
-        toggle_tunnel=lambda: called.append("tunnel"),
+        cloud_pair=lambda: called.append("pair"),
     )
     MainWindow.toggle_connection(view)
     assert called == ["cloud"]
 
 
-def test_unpaired_owner_retains_legacy_tunnel_compatibility(tmp_path):
+def test_unpaired_owner_opens_cloudflare_pairing(tmp_path):
     called = []
     view = SimpleNamespace(
         agent=SimpleNamespace(home=tmp_path),
         toggle_cloud=lambda: called.append("cloud"),
-        toggle_tunnel=lambda: called.append("tunnel"),
+        cloud_pair=lambda: called.append("pair"),
     )
     MainWindow.toggle_connection(view)
-    assert called == ["tunnel"]
+    assert called == ["pair"]
 
 
 def test_paired_cloud_dialog_never_requests_or_overwrites_tunnel_key(tmp_path):
@@ -65,9 +65,7 @@ def test_paired_cloud_dialog_never_requests_or_overwrites_tunnel_key(tmp_path):
     try:
         dialog.show()
         _app.processEvents()
-        assert dialog.cloud_selected
         assert "Cloudflare" in dialog.windowTitle()
-        assert not dialog.auto.isVisible()
         dialog.save()
         assert saved and dialog.result() == dialog.DialogCode.Accepted
     finally:

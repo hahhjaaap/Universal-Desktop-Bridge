@@ -1,9 +1,8 @@
 {
   "mcpServers": {
     "universal-desktop-bridge": {
-      "type": "stdio",
-      "command": "udb",
-      "args": ["serve", "--config", "PATH_TO_LOCAL_UDB_TOML"]
+      "type": "streamable-http",
+      "url": "https://YOUR_CLOUDFLARE_WORKER.workers.dev/v1/devices/YOUR_DEVICE_ID/mcp"
     }
   }
 }

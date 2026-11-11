@@ -359,9 +359,7 @@ def test_malformed_cloud_pairing_never_falls_back_to_tunnel_prompt(
     assert calls == []
 
 
-def test_paired_cloudflare_default_start_keeps_local_agent_without_legacy_tunnel(
-    tmp_path, monkeypatch
-):
+def test_paired_cloudflare_default_start_uses_cloud_agent(tmp_path, monkeypatch):
     home = tmp_path / "owner"
     home.mkdir()
     (home / "cloud-pairing.json").write_text(
@@ -375,11 +373,11 @@ def test_paired_cloudflare_default_start_keeps_local_agent_without_legacy_tunnel
         offline=False, online=False, detach=False, json=False, access=None
     )
     assert cli._prepare_startup(args, Settings(home, home / "work")) is None
-    assert args.offline is True
+    assert args.offline is False
     assert args.online is False
 
 
-def test_paired_cloudflare_keeps_explicit_legacy_online_override(tmp_path):
+def test_explicit_online_uses_the_paired_cloudflare_device(tmp_path):
     home = tmp_path / "owner"
     home.mkdir()
     (home / "cloud-pairing.json").write_text(

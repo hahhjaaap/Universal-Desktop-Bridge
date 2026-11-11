@@ -34,9 +34,17 @@ class Fixture(unittest.TestCase):
         path.write_text(json.dumps(value), encoding="utf-8")
 
     def report(self, running=True, ready=True):
-        return cli.inspect(
-            self.home, self.exe, running=lambda *a: running, ready=lambda *a: ready
-        )
+        with patch.object(
+            cli,
+            "headless_state",
+            return_value={
+                "connection_mode": "cloudflare",
+                "cloud_running": ready,
+            },
+        ):
+            return cli.inspect(
+                self.home, self.exe, running=lambda *a: running, ready=lambda *a: ready
+            )
 
 
 class InstallationTests(Fixture):
@@ -102,13 +110,13 @@ class InstallationTests(Fixture):
 class ReadinessTests(Fixture):
     def test_disabled_background_does_not_block_connection(self):
         report = self.report()
-        self.assertTrue(report["local_tunnel_ready"])
+        self.assertTrue(report["cloud_agent_running"])
         self.assertEqual(report["background"], "disabled")
         self.assertFalse(report["chatgpt_connection_verified"])
 
-    def test_tunnel_readiness_never_claims_chatgpt_tool_discovery(self):
+    def test_cloud_process_never_claims_chatgpt_tool_discovery(self):
         report = self.report(running=True, ready=True)
-        self.assertTrue(report["local_tunnel_ready"])
+        self.assertTrue(report["cloud_agent_running"])
         self.assertIs(report["chatgpt_connection_verified"], False)
         self.assertIn("bridge_status", report["next_action"])
 
@@ -116,14 +124,24 @@ class ReadinessTests(Fixture):
         second_home = Path(self.temp.name) / "SECOND-COMPUTER"
         (second_home / "state").mkdir(parents=True)
         for home in (self.home, second_home):
-            with self.subTest(home=home):
+            with (
+                self.subTest(home=home),
+                patch.object(
+                    cli,
+                    "headless_state",
+                    return_value={
+                        "connection_mode": "cloudflare",
+                        "cloud_running": True,
+                    },
+                ),
+            ):
                 report = cli.inspect(
                     home,
                     self.exe,
                     running=lambda *args: True,
                     ready=lambda *args: True,
                 )
-                self.assertTrue(report["local_tunnel_ready"])
+                self.assertTrue(report["cloud_agent_running"])
                 self.assertFalse(report["chatgpt_connection_verified"])
 
     def test_stale_health_without_live_manager_is_not_ready(self):
@@ -231,16 +249,22 @@ class ReadinessTests(Fixture):
         with patch.object(cli, "headless_state", return_value={"pid": os.getpid()}):
             self.assertTrue(cli.manager_running(self.home, Path(actual)))
 
-    def test_doctor_does_not_return_tunnel_id_or_secret(self):
-        tunnel = "tunnel_" + "a" * 32
-        self.write(
-            "connection.json", dict(tunnel_id=tunnel, synthetic_key="DO-NOT-DISPLAY")
+    def test_doctor_does_not_return_cloudflare_pairing_or_secret(self):
+        relay, device_id, token = (
+            "https://example.workers.dev",
+            "a" * 32,
+            "DO-NOT-DISPLAY",
         )
-        checks = cli.doctor(self.home, self.report())
-        self.assertNotIn(tunnel, json.dumps(checks))
-        self.assertNotIn("DO-NOT-DISPLAY", json.dumps(checks))
-        self.assertTrue(checks[0]["ok"])
-        self.assertIsNone(checks[-1]["ok"])
+        (self.home / "cloud-pairing.json").write_text(
+            json.dumps(dict(relay=relay, device_id=device_id)), encoding="utf-8"
+        )
+        (self.home / "cloud-device-token").write_text(token, encoding="utf-8")
+        checks = {row["check"]: row for row in cli.doctor(self.home, self.report())}
+        self.assertNotIn(relay, json.dumps(checks))
+        self.assertNotIn(device_id, json.dumps(checks))
+        self.assertNotIn(token, json.dumps(checks))
+        self.assertTrue(checks["connection_configuration"]["ok"])
+        self.assertIsNone(checks["chatgpt_session"]["ok"])
 
 
 class HTTPTests(Fixture):
@@ -334,7 +358,7 @@ class StartupTests(Fixture):
         report = cli.start(
             self.home, self.exe, snapshot=lambda *a: self.report(), spawn=forbidden
         )
-        self.assertTrue(report["local_tunnel_ready"])
+        self.assertTrue(report["cloud_agent_running"])
 
     def test_launches_selected_exe_once_with_argument_array(self):
         calls, count = [], [0]
@@ -377,8 +401,8 @@ class StartupTests(Fixture):
             snapshot=lambda *a: self.report(ready=False),
             spawn=forbidden,
         )
-        self.assertFalse(report["local_tunnel_ready"])
-        self.assertIn("legacy UDB window", report["next_action"])
+        self.assertFalse(report["cloud_agent_running"])
+        self.assertIn("udb reconnect", report["next_action"])
 
     def test_timeout_stops_without_resetting_settings(self):
         ticks = [0.0]
@@ -397,7 +421,7 @@ class StartupTests(Fixture):
             clock=lambda: ticks[0],
             pause=pause,
         )
-        self.assertFalse(report["local_tunnel_ready"])
+        self.assertFalse(report["cloud_agent_running"])
         self.assertLessEqual(ticks[0], 1.01)
         self.assertEqual(
             before, {p: p.read_bytes() for p in (self.home / "state").iterdir()}

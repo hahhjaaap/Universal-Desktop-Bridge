@@ -23,7 +23,9 @@ def test_real_mcp_logging_keeps_stdio_parseable_and_does_not_store_payloads(tmp_
     project.mkdir()
     child = StdioChild(
         "activity fixture",
-        command(["serve", "--home", str(home), "--root", str(project)]),
+        command(
+            ["_worker", "cloud-proxy", "--home", str(home), "--root", str(project)]
+        ),
         str(tmp_path),
         lambda _: None,
     )
@@ -71,6 +73,11 @@ def test_real_mcp_logging_keeps_stdio_parseable_and_does_not_store_payloads(tmp_
     )
     assert "text_hidden" in serialized
     assert not (home / "state/computer-access.dpapi").exists()
+    output = io.StringIO()
+    assert activity.watch(home, once=True, output=output) == 0
+    rendered = output.getvalue()
+    assert "CALLING bridge_status" in rendered and "PASS" in rendered
+    assert "ERROR" in rendered and "PRIVATE_FILE_CONTENT" not in rendered
 
 
 @pytest.mark.parametrize("raises", [False, True])
@@ -144,13 +151,14 @@ def test_pending_and_failure_are_never_logged_as_success(report, native, expecte
     assert activity.completion(result)[0] == expected
 
 
-def test_cli_snapshot_is_read_only_and_json_stays_json(tmp_path, capsys):
+@pytest.mark.parametrize("command_name", ["logs", "live"])
+def test_cli_snapshot_is_read_only_and_json_stays_json(tmp_path, capsys, command_name):
     home = tmp_path / "not-created"
-    assert cli.main(["logs", "--home", str(home), "--once", "--json"]) == 0
+    assert cli.main([command_name, "--home", str(home), "--once", "--json"]) == 0
     assert not home.exists()
     assert capsys.readouterr().out == ""
     Activity(home).emit("call", "file_read", "a", details={"path": "hello.py"})
-    assert cli.main(["logs", "--home", str(home), "--once", "--json"]) == 0
+    assert cli.main([command_name, "--home", str(home), "--once", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["tool"] == "file_read"
 
 

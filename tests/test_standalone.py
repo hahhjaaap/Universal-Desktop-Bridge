@@ -150,7 +150,7 @@ def test_frozen_mcp_launch_never_uses_a_development_manifest(tmp_path, monkeypat
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "executable", str(executable))
     argv = desktop.mcp_command(home)
-    assert argv[:2] == [str(executable), "serve"]
+    assert argv[:3] == [str(executable), "_worker", "cloud-proxy"]
     assert "-m" not in argv
     assert (home / "mcp.json").read_bytes() == original
 

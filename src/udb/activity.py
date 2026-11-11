@@ -324,9 +324,16 @@ def console_color(output):
     return True
 
 
+def event_status(row):
+    if row.get("kind") == "call":
+        return "CALLING"
+    status = row.get("status")
+    return status if status in ("PASS", "ERROR", "RUNNING") else "INFO"
+
+
 def render_event(row, *, details=False, color=False, emoji=True):
     stamp = time.strftime("%H:%M:%S", time.localtime(row["at"]))
-    state = "CALL" if row["kind"] == "call" else row["status"] or "INFO"
+    state = event_status(row)
     suffix = ""
     if row["kind"] == "result":
         suffix = {"RUNNING": " returned; task still running", "ERROR": " failed"}.get(
@@ -334,13 +341,13 @@ def render_event(row, *, details=False, color=False, emoji=True):
         )
         suffix += f" ({row['elapsed_ms']} ms)"
     symbol = (
-        {"CALL": "📞", "PASS": "✅", "ERROR": "❌", "RUNNING": "⏳"}.get(state, "ℹ️")
+        {"CALLING": "📞", "PASS": "✅", "ERROR": "❌", "RUNNING": "⏳"}.get(state, "ℹ️")
         if emoji
         else ""
     )
     label = f"{symbol} {state:7}" if symbol else f"{state:7}"
     if color:
-        code = {"CALL": 36, "PASS": 32, "ERROR": 31, "RUNNING": 33}.get(state, 37)
+        code = {"CALLING": 36, "PASS": 32, "ERROR": 31, "RUNNING": 33}.get(state, 37)
         label = f"\x1b[{code}m{label}\x1b[0m"
     value = f"[{stamp}] {label} {clean(row['tool'], 80)}{suffix} #{clean(row['call_id'], 20)}".rstrip(
         " #"

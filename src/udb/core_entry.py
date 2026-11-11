@@ -26,7 +26,7 @@ def main(argv=None):
     )
     parser.add_argument("--home", default=str(base))
     parser.add_argument("--stdio", action="store_true")
-    parser.add_argument("--serve", action="store_true")
+    parser.add_argument("--serve", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--diagnostics", action="store_true")
     parser.add_argument(
         "--probe",
@@ -53,7 +53,7 @@ def main(argv=None):
     parser.add_argument(
         "--start-tunnel",
         action="store_true",
-        help="Connect the existing configured tunnel after opening the GUI",
+        help=argparse.SUPPRESS,
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
@@ -67,7 +67,7 @@ def main(argv=None):
     parser.add_argument(
         "--no-connect",
         action="store_true",
-        help="Start the headless worker without a tunnel (offline diagnostics)",
+        help=argparse.SUPPRESS,
     )
     owner = parser.add_mutually_exclusive_group()
     owner.add_argument(
@@ -205,10 +205,14 @@ def main(argv=None):
 
         self_test()
         print("SYNTHETIC_WINDOWS_CREDENTIAL_ROUNDTRIP=PASS")
-    elif args.stdio or args.serve:
+    elif args.serve:
+        parser.error(
+            "The local HTTP MCP listener was removed. Use the paired Cloudflare endpoint."
+        )
+    elif args.stdio:
         from udb.server import serve
 
-        serve(args.home, stdio=args.stdio)
+        serve(args.home)
     elif args.diagnostics:
         import json
 
@@ -216,18 +220,13 @@ def main(argv=None):
 
         print(json.dumps(Agent(Path(args.home)).diagnostics()))
     elif args.gui or args.legacy_gui or args.gui_screenshot:
-        if args.legacy_gui:
-            from udb.manager_legacy import run
+        from udb.manager import run
 
-            run(Path(args.home))
-        else:
-            from udb.manager import run
-
-            run(
-                Path(args.home),
-                start_tunnel=args.start_tunnel,
-                screenshot=args.gui_screenshot,
-            )
+        run(
+            Path(args.home),
+            start_cloud=args.start_tunnel,
+            screenshot=args.gui_screenshot,
+        )
     else:
         from udb.headless import run
 

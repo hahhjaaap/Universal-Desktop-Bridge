@@ -240,9 +240,25 @@ def headless_state(home: Path) -> dict | None:
         return None
 
 
+def cloudflare_pairing_configured(home: Path) -> bool:
+    """Validate non-secret Cloudflare pairing metadata, not live connectivity.
+
+    The Manager can intentionally run --no-connect while a separate Cloud Agent
+    serves remote MCP requests. Never inspect device tokens or OAuth credentials.
+    """
+    try:
+        from .cloud_agent import load_pairing
+
+        load_pairing(home)
+        return True
+    except (OSError, ValueError, TypeError, KeyError):
+        return False
+
+
 def inspect(home: Path, exe: Path, running=manager_running, ready=tunnel_ready) -> dict:
     active = running(home, exe)
     connected = active and ready(home)
+    cloud_pairing = cloudflare_pairing_configured(home)
     hidden = headless_state(home) if active else None
     count = (hidden or {}).get("recovery_count", 0)
     count = count if type(count) is int and 0 <= count <= 10**9 else 0
@@ -256,6 +272,7 @@ def inspect(home: Path, exe: Path, running=manager_running, ready=tunnel_ready) 
             "headless" if hidden else "legacy_or_unknown" if active else "stopped"
         ),
         local_tunnel_ready=connected,
+        cloudflare_pairing_configured=cloud_pairing,
         background=background_state(home),
         connection_mode=hidden.get("connection_mode", "online")
         if hidden
@@ -269,7 +286,13 @@ def inspect(home: Path, exe: Path, running=manager_running, ready=tunnel_ready) 
         next_action=(
             "Call bridge_status in ChatGPT to verify the session."
             if connected
-            else "The local agent is running offline. Run udb setup to connect."
+            else (
+                "The local Manager is offline; Cloudflare uses a separate "
+                "Cloud Agent. Run udb doctor --cloud and call bridge_status "
+                "in ChatGPT to verify the remote session."
+                if cloud_pairing
+                else "The local agent is running offline. Run udb setup to connect."
+            )
             if hidden and hidden.get("connection_mode") == "offline"
             else "The background agent is retrying. Run udb doctor to inspect local readiness."
             if hidden

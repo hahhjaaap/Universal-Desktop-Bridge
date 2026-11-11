@@ -12,9 +12,9 @@ from tools import check_staging_worker_config as staging
 def test_repo_default_and_explicit_config_target_one_staging_gateway():
     result = staging.check_config(staging.DEFAULT_STAGING, staging.DEFAULT_PRIMARY)
     assert result["worker"] == "udb-private-relay-staging"
-    assert json.loads(staging.DEFAULT_PRIMARY.read_text(encoding="utf-8")) == json.loads(
-        staging.DEFAULT_STAGING.read_text(encoding="utf-8")
-    )
+    assert json.loads(
+        staging.DEFAULT_PRIMARY.read_text(encoding="utf-8")
+    ) == json.loads(staging.DEFAULT_STAGING.read_text(encoding="utf-8"))
     assert result["deployed"] is False
     assert result["oauth_verified"] is False
     assert result["authenticated_project_read_verified"] is False
@@ -51,7 +51,6 @@ def test_broken_default_wrangler_binding_cannot_pass_check(tmp_path):
     candidate.write_text(json.dumps(primary), encoding="utf-8")
     with pytest.raises(ValueError):
         staging.check_config(staging.DEFAULT_STAGING, candidate)
-
 
 
 @pytest.mark.parametrize(

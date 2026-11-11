@@ -233,7 +233,7 @@ def standalone_package(base, destination, asset_root, components, *, layout="one
         "it is never silently installed.\n\n"
         "Portable Start/Search shortcut (opt-in): run tools/create_start_shortcut.ps1 "
         "-Exe .\\udb.exe from this folder in a trusted, attended PowerShell session. "
-        "The shortcuts open the GUI and Cloudflare Live (Ctrl+Alt+U). They do not grant access.\n\n"
+        "The shortcuts open the Manager and Live activity window (Ctrl+Alt+U). They do not grant access.\n\n"
         "SHA256 detects accidental corruption, not publisher identity. This build is not code-signed.\n",
         encoding="utf-8",
     )

@@ -229,7 +229,11 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
             command.add_argument("--edit", action="store_true", help=argparse.SUPPRESS)
         if name == "runtime":
             command.add_argument("--probe", action="store_true")
-        if name == "logs":
+        if name in ("logs", "live"):
+            if name == "live":
+                command.add_argument(
+                    "--gui", action="store_true", help="Open the activity window"
+                )
             command.add_argument(
                 "--once", action="store_true", help="Print retained activity and exit"
             )
@@ -514,9 +518,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise ValueError("--offline/--online apply only to start")
         if action == "init":
             return _initialize_config(args, settings)
-        if action == "logs":
+        if action in ("logs", "live"):
             if args.access:
                 raise ValueError("Log viewing does not activate owner access")
+            if getattr(args, "gui", False):
+                if args.once or args.json or args.details or args.tail != 30:
+                    raise ValueError("Use terminal log options without --gui")
+                from .activity_gui import run
+
+                return run(settings.home)
             from .activity import watch
 
             return watch(
@@ -528,13 +538,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         if action == "gui":
             return _run_gui(args, settings)
-        if action == "live":
-            if args.access:
-                raise ValueError("Opening Live does not grant owner access")
-            from .connection import open_live
-
-            open_live(settings.home)
-            return 0
         if action in ("allow-source", "revoke-source"):
             if args.access or args.json:
                 raise ValueError(

@@ -155,7 +155,7 @@ def test_paired_device_uses_cloudflare_despite_old_offline_preference(
     assert onboarding.saved_mode(settings) == "offline"
 
 
-def test_live_and_mcp_config_use_one_paired_endpoint(tmp_path, monkeypatch, capsys):
+def test_mcp_config_uses_one_paired_endpoint(tmp_path, capsys):
     (tmp_path / "cloud-pairing.json").write_text(
         json.dumps(
             {
@@ -171,12 +171,6 @@ def test_live_and_mcp_config_use_one_paired_endpoint(tmp_path, monkeypatch, caps
         "type": "streamable-http",
         "url": endpoint,
     }
-    calls = []
-    monkeypatch.setattr(
-        "webbrowser.open", lambda url, **options: calls.append(url) or True
-    )
-    assert cli.main(["live", "--home", str(tmp_path)]) == 0
-    assert calls == [endpoint + "?view=live"]
     assert not (tmp_path / "state").exists()
 
 

@@ -45,3 +45,14 @@ test("developer-wide admin RPC is disabled unless explicitly opted in", async ()
   assert.deepEqual(await denied.json(), { error: "admin_rpc_disabled" });
   assert.equal(settings.forwards(), 0);
 });
+
+test("the retired browser viewer does not serve HTML or call the device", async () => {
+  const settings = env();
+  const health = await worker.fetch(new Request(base + "/health"), settings);
+  assert.equal(health.headers.get("x-udb-live-capable"), null);
+  const path = "/v1/devices/" + id + "/mcp?view=live&data=status";
+  const response = await worker.fetch(new Request(base + path), settings);
+  assert.ok(response.status >= 400);
+  assert.doesNotMatch(response.headers.get("content-type") ?? "", /html/);
+  assert.equal(settings.forwards(), 0);
+});

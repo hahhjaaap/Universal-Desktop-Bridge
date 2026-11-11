@@ -16,16 +16,16 @@ thiết bị, hoặc danh sách rỗng trước khi ghép nối.
 
 ```powershell
 udb live
+udb live --gui
 ```
 
-Bạn cũng có thể mở **UDB Live** trong Start Menu hoặc nhấn **Ctrl+Alt+U**
-sau khi cài shortcut. Trong UDB Manager, dùng **Ctrl+Shift+L**.
-Trang Live nằm tại URL MCP hiện có với query `?view=live`.
+`udb live` theo dõi lời gọi công cụ trong terminal. `udb live --gui`,
+**UDB Live** trong Start Menu và **Ctrl+Alt+U** mở cửa sổ nhật ký.
+Trong UDB Manager, **Ctrl+Shift+L** mở tab Live.
 
-Đăng nhập Cloudflare Access, chọn tab UDB và bấm **Bắt đầu Live**.
-Phải bật quyền trình duyệt nền trong UDB Manager trên Windows và đã có
-tab trong trình duyệt riêng UDB. Trong trang Live, **Space** bật/dừng,
-**R** tải lại danh sách tab, **F** mở toàn màn hình và **Esc** dừng.
+Các lời gọi qua Cloudflare hiện `CALLING`, sau đó là `PASS`, `ERROR`
+hoặc `RUNNING` khi tác vụ được giao chạy nền. Nhật ký có mã lời gọi và
+thời gian xử lý. Bạn có thể đóng cửa sổ Live trong khi Cloud Agent vẫn chạy.
 
 ## Chẩn đoán
 

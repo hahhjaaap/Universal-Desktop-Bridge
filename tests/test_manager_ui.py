@@ -585,7 +585,8 @@ def test_activity_timeline_uses_only_presented_metadata(manager, monkeypatch):
     row = window.activity_timeline.topLevelItem(0)
     displayed = " ".join(row.text(i) for i in range(3))
     assert "Tệp trên máy" in displayed
-    assert "Đã trả kết quả" in displayed
+    assert "PASS" in displayed
+    assert row.toolTip(2) == "Đã trả kết quả"
     assert "PRIVATE SECRET" not in displayed
     window._refresh_activity()
     assert window.activity_timeline.topLevelItemCount() == 1
@@ -672,10 +673,34 @@ def test_mcp_activity_tab_stays_available_with_no_sandbox_jobs(manager, monkeypa
     window._refresh_activity()
     window._refresh_jobs()
     assert window.job_tabs.isVisible() is False  # Jobs page isn't active.
-    window.navigate(2)
+    window.open_live()
     assert window.job_tabs.isVisible()
+    assert window.job_tabs.currentWidget() is window.activity_panel
     assert window.activity_timeline.topLevelItemCount() == 1
     assert not window.jobs_empty.isVisible()
+
+
+def test_live_window_keeps_call_and_result_with_manager_running(manager):
+    from udb.activity import Activity
+    from udb.activity_gui import LiveWindow
+
+    owner, _ = manager
+    writer = Activity(owner.agent.home)
+    viewer = LiveWindow(owner.agent.home)
+    try:
+        writer.emit("call", "bridge_status", "fixture")
+        viewer.poll()
+        assert viewer.timeline.topLevelItem(0).text(2) == "CALLING"
+        writer.emit("result", "bridge_status", "fixture", "PASS", 34)
+        viewer.poll()
+        result, call = (viewer.timeline.topLevelItem(i) for i in range(2))
+        assert result.text(1) == "bridge_status"
+        assert result.text(2) == "PASS" and result.text(3) == "34 ms"
+        assert result.text(4) == call.text(4) == "fixture"
+        assert call.text(2) == "CALLING"
+    finally:
+        viewer.timer.stop()
+        viewer.close()
 
 
 def test_security_posture_panel_is_owner_local_and_read_only(manager, monkeypatch):

@@ -4,7 +4,6 @@ import { HASH, bearer, adminAuthorized, digest, readJson, validRpc, fixedEqual }
 import { newPairing, PAIRING_TTL_MS } from "./pairing.js";
 import { handleMcp, protectedResource } from "./mcp.js";
 import { isReadTool } from "./read-tools.js";
-import { handleLive } from "./live.js";
 
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store",
@@ -39,7 +38,6 @@ export default {
       // A local operator must not activate Access mode against an older Worker.
       response.headers.set("X-UDB-Access-OAuth-Capable", "1");
       response.headers.set("X-UDB-Project-Read-Capable", "1");
-      response.headers.set("X-UDB-Live-Capable", "1");
       return response;
     }
     if (url.pathname === "/v1/admin/pairings" && request.method === "POST") {
@@ -86,8 +84,6 @@ export default {
       if (!env.DEVICES?.get || !env.DEVICES?.idFromName)
         return failure(503, "relay_not_configured");
       const stub = env.DEVICES.get(env.DEVICES.idFromName(mcpMatch[1]));
-      if (request.method === "GET" && url.searchParams.get("view") === "live")
-        return handleLive(request, env, mcpMatch[1], stub, ctx?.access);
       return handleMcp(request, env, mcpMatch[1], stub, fetch, ctx?.access);
     }
     const adminMatch = /^\/v1\/admin\/devices\/([a-f0-9]{32})(\/rpc|\/status)?$/.exec(url.pathname);

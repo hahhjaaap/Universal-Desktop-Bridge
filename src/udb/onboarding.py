@@ -43,7 +43,7 @@ def setup_cloud(settings):
             return result
     endpoint = cloud_mcp_url(settings.home)
     print("Cloudflare MCP: " + endpoint)
-    print("UDB Live: " + endpoint + "?view=live")
+    print("UDB Live activity: udb live or udb live --gui")
     print("Start the Windows agent with 'udb start'. Use OAuth in " + CHATGPT_URL)
     return 0
 

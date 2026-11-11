@@ -179,7 +179,7 @@ def main():
         )
         assert not refused.exists()
         run("setup", "--local", expect_success=False, error_contains="--local")
-        assert run("live", "--help")
+        assert "--gui" in run("live", "--help")
         assert json.loads(run("mcp-config", "--home", str(home))) == {"mcpServers": {}}
         paired = root / "paired-home"
         paired.mkdir()
@@ -511,6 +511,8 @@ def main():
             assert (
                 "PRIVATE_LOG_PAYLOAD" not in logged and "PRIVATE_LOG_KEY" not in logged
             )
+            live = run("live", "--home", str(home), "--once")
+            assert all(status in live for status in ("CALLING", "PASS", "ERROR"))
             assert not (project / ".udb-work-state").exists(), (
                 "Denied request created work records"
             )

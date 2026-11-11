@@ -7,6 +7,8 @@ from collections import OrderedDict
 from .activity import EventReader, clean
 
 TOOL_LABELS = {
+    "bridge_status": "bridge_status",
+    "list_projects": "list_projects",
     "host_browser": "Trình duyệt riêng",
     "host_screenshot": "Ảnh browser",
     "host_start_session": "Mở phiên riêng",
@@ -81,8 +83,9 @@ def event_state(row):
 
 
 class ActivityFeed:
-    def __init__(self, home):
+    def __init__(self, home, *, retain_transitions=False):
         self.reader = EventReader(home)
+        self.retain_transitions = retain_transitions
         self.after = None
         self.rows = OrderedDict()
 
@@ -104,7 +107,11 @@ class ActivityFeed:
                 or not 0 <= stamp <= time.time() + 86400
             ):
                 row["at"] = 0
-            key = (row.get("tool"), row.get("call_id") or str(row["seq"]))
+            key = (
+                row["seq"]
+                if self.retain_transitions
+                else (row.get("tool"), row.get("call_id") or str(row["seq"]))
+            )
             self.rows.pop(key, None)
             self.rows[key] = row
             while len(self.rows) > 40:

@@ -27,17 +27,14 @@ browser sessions, and owner approval controls. See [ARCHITECTURE.md](ARCHITECTUR
 
 ### UDB Live
 
-Open `udb live` or append `?view=live` to your existing device MCP URL.
-Sign in through Cloudflare Access. Live uses the existing `host_status`,
-`host_browser`, and `host_screenshot` grants to view tabs in the private
-UDB browser while they run in the background. Enable that browser locally
-and open a tab before starting the view. Capture is on demand at about one
-frame per second and pauses when the viewer is hidden.
+Run `udb live` to follow calls in the terminal. Start `udb live --gui` or
+press **Ctrl+Alt+U** to open the read-only activity window while the Cloud
+Agent continues running. In UDB Manager, **Ctrl+Shift+L** opens the Live tab.
 
-- Windows Start Menu **UDB Live** or **Ctrl+Alt+U** opens the Cloudflare page.
-- From UDB Manager, use **Ctrl+Shift+L**.
-- In the web viewer use **Space** to start/stop, **R** to refresh tabs,
-  **F** for fullscreen, and **Esc** to stop.
+Calls received by the Windows agent through Cloudflare show `CALLING` and
+then `PASS`, `ERROR`, or `RUNNING`, with a call ID and duration. `RUNNING`
+means the call handed off a background job. The default view displays
+activity metadata and omits tool inputs and output contents.
 
 The Cloudflare Worker deployment, OAuth configuration, device grant and ChatGPT
 tool discovery must each be verified independently: see
@@ -156,7 +153,7 @@ Verify the Cloud Agent process and a read-only invocation in ChatGPT.
 | `udb status` / `udb doctor --json` | Inspect health, runtime and setup |
 | `udb logs --details` | Follow redacted tool activity |
 | `udb setup` | Pair a Cloudflare device or display its existing endpoints |
-| `udb live` | Open the Cloudflare Live page |
+| `udb live` / `udb live --gui` | Follow tool activity in the terminal or read-only activity window |
 | `udb update --check` | Check the latest published stable release |
 | `udb update` / `udb rollback` | Managed installation update / previous-release rollback |
 | `udb autostart enable` / `udb autostart disable` | Opt in/out of startup at Windows sign-in |

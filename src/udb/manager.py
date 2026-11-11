@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import __version__
+from .activity_gui import configure_timeline
 from .activity_presenter import ActivityFeed
 from .build_identity import display_identity
 from .core import reject_links
@@ -80,7 +81,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.last_pending = None
         self.last_job_signature = None
         self.connection_signature = None
-        self.activity_feed = ActivityFeed(self.agent.home)
+        self.activity_feed = ActivityFeed(self.agent.home, retain_transitions=True)
         self.activity_signature = None
         self._closing = False
         self._last_project_auth_check = 0.0
@@ -486,16 +487,13 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         self.job_script = QPlainTextEdit()
         self.job_script.setReadOnly(True)
         self.job_tabs.addTab(self.job_script, "Script đã duyệt")
-        self.activity_timeline = self.tree(["Lúc", "Công cụ", "Kết quả"])
-        self.activity_timeline.setAccessibleName(
-            "Lịch sử hoạt động MCP đã lược bỏ dữ liệu nhạy cảm"
-        )
+        self.activity_timeline = self.tree([])
+        configure_timeline(self.activity_timeline)
         self.activity_timeline.setToolTip(
             "Tối đa 40 bản ghi metadata; không chứa log, script hoặc tài liệu gốc."
         )
-        self.activity_timeline.setColumnWidth(0, 85)
-        self.activity_timeline.setColumnWidth(1, 210)
         activity_panel = QWidget()
+        self.activity_panel = activity_panel
         activity_layout = QVBoxLayout(activity_panel)
         activity_layout.setContentsMargins(8, 8, 8, 8)
         activity_layout.setSpacing(8)
@@ -505,7 +503,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         )
         self.activity_export_button.clicked.connect(self.export_activity)
         activity_layout.addLayout(row(None, self.activity_export_button))
-        self.job_tabs.addTab(activity_panel, "Hoạt động MCP")
+        self.job_tabs.addTab(activity_panel, "UDB Live")
         lay.addWidget(self.job_tabs, 1)
         self.jobs_empty = empty_state(
             "Chưa có tác vụ",
@@ -744,7 +742,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         )
         cloud_layout.addWidget(self.cloud_probe_status)
         lay.addWidget(cloud_panel)
-        self.live_button = MotionButton("Mở UDB Live", "browser", "primary")
+        self.live_button = MotionButton("Mở UDB Live", "activity", "primary")
         self.live_button.clicked.connect(self.open_live)
         self.live_button.setToolTip("Ctrl+Shift+L")
         cloud_layout.addWidget(self.live_button)
@@ -814,6 +812,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             )
             return
         apply_theme(QApplication.instance(), choice)
+        self.activity_signature = None
         self._update_window_chrome()
         self.refresh()
 
@@ -1009,11 +1008,14 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
             self.cloud_pair()
 
     def open_live(self):
-        from .connection import cloud_mcp_url
-
-        self.guarded(
-            lambda: self.open_url(cloud_mcp_url(self.agent.home) + "?view=live")
-        )
+        self.navigate(2)
+        self.job_tabs.setCurrentWidget(self.activity_panel)
+        self._refresh_activity()
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+        if getattr(self, "quick_controls", None):
+            self.quick_controls.hide()
 
     def configure(self):
         if not self.busy:

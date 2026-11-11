@@ -200,7 +200,7 @@ function Register-UdbStartMenu([string]$Image) {
         return
     }
     $live.TargetPath = $launcher
-    $live.Arguments = 'live'
+    $live.Arguments = 'live --gui'
     $live.WorkingDirectory = [IO.Path]::GetDirectoryName($launcher)
     $live.IconLocation = $Image + ',0'
     $live.Hotkey = 'CTRL+ALT+U'
@@ -208,7 +208,7 @@ function Register-UdbStartMenu([string]$Image) {
     $live.Save()
     $liveCheck = $shell.CreateShortcut($liveLink)
     $verifiedHotkey = ($liveCheck.Hotkey.ToUpperInvariant().Split('+') | Sort-Object) -join '+'
-    if ($liveCheck.TargetPath -ine $launcher -or $liveCheck.Arguments -ne 'live' -or $verifiedHotkey -ne 'ALT+CTRL+U') {
+    if ($liveCheck.TargetPath -ine $launcher -or $liveCheck.Arguments -ne 'live --gui' -or $verifiedHotkey -ne 'ALT+CTRL+U') {
         throw 'UDB Live shortcut verification failed.'
     }
 }

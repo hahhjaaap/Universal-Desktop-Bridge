@@ -55,7 +55,7 @@ if ((Test-Path -LiteralPath $liveLink) -and $live.Description -ne $liveDescripti
     throw 'The existing UDB Live shortcut is not UDB-managed; preserved it.'
 }
 $live.TargetPath = $target
-$live.Arguments = '--home "' + ([IO.Path]::GetFullPath($DataHome)) + '" live'
+$live.Arguments = '--home "' + ([IO.Path]::GetFullPath($DataHome)) + '" live --gui'
 $live.WorkingDirectory = [IO.Path]::GetDirectoryName($target)
 $live.IconLocation = $target + ',0'
 $live.Hotkey = 'CTRL+ALT+U'

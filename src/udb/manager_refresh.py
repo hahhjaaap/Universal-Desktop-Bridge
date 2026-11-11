@@ -8,7 +8,7 @@ import time
 from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import QTreeWidgetItem
 
-from .activity_presenter import describe, event_state
+from .activity_gui import READ_ERRORS, render_timeline
 from .manager_job_refresh import should_reload_job_details
 from .manager_widgets import icon
 from .ui_connection import unknown_indicator, worker_indicator
@@ -526,7 +526,7 @@ class ManagerRefreshMixin:
     def _refresh_activity(self):
         try:
             events = self.activity_feed.poll()
-        except (OSError, ValueError):
+        except READ_ERRORS:
             self.activity_timeline.clear()
             self.activity_signature = None
             self.jobs_empty.setVisible(self.jobs.topLevelItemCount() == 0)
@@ -545,17 +545,7 @@ class ManagerRefreshMixin:
         self.activity_signature = signature
         self.jobs_empty.setVisible(self.jobs.topLevelItemCount() == 0 and not events)
         with QSignalBlocker(self.activity_timeline):
-            self.activity_timeline.clear()
-            for event in events:
-                stamp = event.get("at")
-                clock = (
-                    time.strftime("%H:%M:%S", time.localtime(stamp))
-                    if isinstance(stamp, (int, float)) and stamp > 0
-                    else "—"
-                )
-                self.activity_timeline.addTopLevelItem(
-                    QTreeWidgetItem([clock, describe(event), event_state(event)])
-                )
+            render_timeline(self.activity_timeline, events)
 
     def _refresh_connection(self, source_auto_projects):
         status = self.controller.status()

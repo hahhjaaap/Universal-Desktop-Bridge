@@ -9,9 +9,12 @@ import pytest
 from tools import check_staging_worker_config as staging
 
 
-def test_repo_staging_config_is_isolated_and_offline():
-    result = staging.check_config(staging.DEFAULT_STAGING, staging.DEFAULT_PRODUCTION)
-    assert result["worker"] != "udb-private-relay"
+def test_repo_default_and_explicit_config_target_one_staging_gateway():
+    result = staging.check_config(staging.DEFAULT_STAGING, staging.DEFAULT_PRIMARY)
+    assert result["worker"] == "udb-private-relay-staging"
+    assert json.loads(staging.DEFAULT_PRIMARY.read_text(encoding="utf-8")) == json.loads(
+        staging.DEFAULT_STAGING.read_text(encoding="utf-8")
+    )
     assert result["deployed"] is False
     assert result["oauth_verified"] is False
     assert result["authenticated_project_read_verified"] is False
@@ -38,14 +41,35 @@ def test_unsafe_staging_changes_are_rejected(tmp_path, edit):
     candidate = tmp_path / "staging.jsonc"
     candidate.write_text(json.dumps(modified), encoding="utf-8")
     with pytest.raises(ValueError):
-        staging.check_config(candidate, staging.DEFAULT_PRODUCTION)
+        staging.check_config(candidate, staging.DEFAULT_PRIMARY)
 
 
-def test_broken_production_binding_cannot_pass_check(tmp_path):
-    production = json.loads(staging.DEFAULT_PRODUCTION.read_text(encoding="utf-8"))
-    production["durable_objects"]["bindings"][0]["class_name"] = "OtherRelay"
-    candidate = tmp_path / "production.jsonc"
-    candidate.write_text(json.dumps(production), encoding="utf-8")
+def test_broken_default_wrangler_binding_cannot_pass_check(tmp_path):
+    primary = json.loads(staging.DEFAULT_PRIMARY.read_text(encoding="utf-8"))
+    primary["durable_objects"]["bindings"][0]["class_name"] = "OtherRelay"
+    candidate = tmp_path / "default.jsonc"
+    candidate.write_text(json.dumps(primary), encoding="utf-8")
+    with pytest.raises(ValueError):
+        staging.check_config(staging.DEFAULT_STAGING, candidate)
+
+
+
+@pytest.mark.parametrize(
+    "bad_edit",
+    [
+        {"name": "udb-private-relay"},
+        {"workers_dev": False},
+        {"routes": ["example.com/*"]},
+        {"vars": {"UDB_AUTH_MODE": "cloudflare-access"}},
+        {"account_id": "fake-account"},
+        {"main": "src/other-worker.js"},
+    ],
+)
+def test_default_wrangler_cannot_create_legacy_or_alternate_gateway(tmp_path, bad_edit):
+    primary = json.loads(staging.DEFAULT_PRIMARY.read_text(encoding="utf-8"))
+    primary.update(bad_edit)
+    candidate = tmp_path / "default.jsonc"
+    candidate.write_text(json.dumps(primary), encoding="utf-8")
     with pytest.raises(ValueError):
         staging.check_config(staging.DEFAULT_STAGING, candidate)
 

@@ -183,9 +183,13 @@ def main():
         refused = run([exe, "--home", setup_home, "setup"], success=False)
         assert refused.returncode and not setup_home.exists()
         assert "attended Windows terminal" in refused.stdout + refused.stderr
-        saved_local_mode = tuple(map(int, version.split("."))) >= (0, 9, 3)
+        saved_local_mode = not cloud_only and tuple(map(int, version.split("."))) >= (
+            0,
+            9,
+            3,
+        )
         mode_flags = ["--offline"]
-        if saved_local_mode and not cloud_only:
+        if saved_local_mode:
             help_text = run([exe, "setup", "--help"]).stdout
             assert "--edit" in help_text and "--local" in help_text
             for flag in ("--edit", "--local"):

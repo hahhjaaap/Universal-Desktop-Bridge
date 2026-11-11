@@ -1,4 +1,4 @@
-"""Offline, fail-closed verification of the dedicated Cloudflare staging config.
+"""Offline, fail-closed verification that both Wrangler configs target one UDB gateway.
 
 Never calls Wrangler, Cloudflare APIs, a local UDB agent, or the network.
 """
@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_PRODUCTION = ROOT / "cloudflare" / "wrangler.jsonc"
+DEFAULT_PRIMARY = ROOT / "cloudflare" / "wrangler.jsonc"
 DEFAULT_STAGING = ROOT / "cloudflare" / "wrangler.staging.jsonc"
 EXPECTED_STAGING_NAME = "udb-private-relay-staging"
 ALLOWED_STAGING_KEYS = {
@@ -33,19 +33,17 @@ def _load_config(path: Path) -> dict:
     return value
 
 
-def check_config(staging_path: Path, production_path: Path) -> dict:
+def check_config(staging_path: Path, primary_path: Path) -> dict:
     staging = _load_config(staging_path)
-    production = _load_config(production_path)
+    primary = _load_config(primary_path)
     if (
         set(staging) != ALLOWED_STAGING_KEYS
+        or set(primary) != ALLOWED_STAGING_KEYS
         or staging.get("name") != EXPECTED_STAGING_NAME
-        or staging["name"] == production.get("name")
+        or primary.get("name") != EXPECTED_STAGING_NAME
         or staging.get("workers_dev") is not True
-        or not isinstance(production.get("main"), str)
-        or staging.get("main") != production["main"]
-        or staging.get("compatibility_date") != production.get("compatibility_date")
-        or staging.get("durable_objects") != production.get("durable_objects")
-        or staging.get("migrations") != production.get("migrations")
+        or staging.get("main") != "src/index.js"
+        or primary != staging
     ):
         raise ValueError("Unsafe staging deployment configuration")
     if staging["durable_objects"] != {
@@ -66,10 +64,13 @@ def check_config(staging_path: Path, production_path: Path) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--staging-config", type=Path, default=DEFAULT_STAGING)
-    parser.add_argument("--production-config", type=Path, default=DEFAULT_PRODUCTION)
+    parser.add_argument(
+        "--primary-config", "--production-config",
+        dest="primary_config", type=Path, default=DEFAULT_PRIMARY,
+    )
     args = parser.parse_args()
     try:
-        result = check_config(args.staging_config, args.production_config)
+        result = check_config(args.staging_config, args.primary_config)
     except (OSError, ValueError, TypeError):
         print(json.dumps({"result": "failed", "reason": "unsafe_staging_config"}))
         return 1

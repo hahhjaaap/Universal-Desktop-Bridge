@@ -5,6 +5,7 @@
 import { AuthError, deviceGrant } from "./oauth.js";
 import { ownerToolGrant } from "./owner-tools.js";
 import { companionToolGrant } from "./companion-tools.js";
+import { READ_TOOLS } from "./read-tools.js";
 
 const MAX_ASSERTION = 8192;
 const MAX_JWKS = 16384;
@@ -180,7 +181,20 @@ export async function authorizeAccess(access, env, deviceId, request = null,
       subject = await verifyAccessAssertion(request, env, fetchImpl);
     }
   }
-  const readTools = deviceGrant(env, deviceId, subject);
+  let readTools = deviceGrant(env, deviceId, subject);
+  let stagingFixtureProject;
+  const fixtureGrant = env?.UDB_STAGING_FIXTURE_READ_GRANT;
+  if (readTools.length === 0 && mode === "email" &&
+      env?.UDB_TENANT_POLICY === undefined &&
+      typeof fixtureGrant === "string" && fixtureGrant.length <= 1024) {
+    let grant;
+    try { grant = JSON.parse(fixtureGrant); } catch { /* Malformed grant denies access. */ }
+    if (/^[a-f0-9]{32}$/.test(deviceId) && grant?.device_id === deviceId &&
+        grant.subject === subject && grant.project === "udb-staging-fixture") {
+      readTools = READ_TOOLS;
+      stagingFixtureProject = grant.project;
+    }
+  }
   // Owner tools never replace the independently granted read identity.
   if (readTools.length === 0) throw new AuthError("device_grant_missing");
   const ownerTools = [
@@ -189,7 +203,8 @@ export async function authorizeAccess(access, env, deviceId, request = null,
   ];
   // Preserve the legacy read-only authorization response exactly when the
   // opt-in profile is absent; existing Access integrations remain unchanged.
+  const readScope = stagingFixtureProject ? { stagingFixtureProject } : {};
   return ownerTools.length
-    ? { subject, allowTools: [...readTools, ...ownerTools], ownerTools }
-    : { subject, allowTools: readTools };
+    ? { subject, allowTools: [...readTools, ...ownerTools], ownerTools, ...readScope }
+    : { subject, allowTools: readTools, ...readScope };
 }

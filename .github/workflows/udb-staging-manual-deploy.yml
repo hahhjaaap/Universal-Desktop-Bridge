@@ -1,0 +1,39 @@
+name: UDB staging gateway deploy (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: udb-staging-manual-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: udb-staging
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run complete Cloudflare MCP test suite
+        run: node --test cloudflare/tests/*.test.js
+      - name: Validate the separate staging configuration
+        run: python tools/check_staging_worker_config.py
+      - name: Install Wrangler without executing package scripts
+        run: npm install --ignore-scripts --no-audit --no-fund
+        working-directory: cloudflare
+      - name: Deploy only the existing staging Worker
+        working-directory: cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          npm run deploy

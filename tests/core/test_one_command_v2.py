@@ -249,16 +249,22 @@ class ReadinessTests(Fixture):
         with patch.object(cli, "headless_state", return_value={"pid": os.getpid()}):
             self.assertTrue(cli.manager_running(self.home, Path(actual)))
 
-    def test_doctor_does_not_return_tunnel_id_or_secret(self):
-        tunnel = "tunnel_" + "a" * 32
-        self.write(
-            "connection.json", dict(tunnel_id=tunnel, synthetic_key="DO-NOT-DISPLAY")
+    def test_doctor_does_not_return_cloudflare_pairing_or_secret(self):
+        relay, device_id, token = (
+            "https://example.workers.dev",
+            "a" * 32,
+            "DO-NOT-DISPLAY",
         )
-        checks = cli.doctor(self.home, self.report())
-        self.assertNotIn(tunnel, json.dumps(checks))
-        self.assertNotIn("DO-NOT-DISPLAY", json.dumps(checks))
-        self.assertTrue(checks[0]["ok"])
-        self.assertIsNone(checks[-1]["ok"])
+        (self.home / "cloud-pairing.json").write_text(
+            json.dumps(dict(relay=relay, device_id=device_id)), encoding="utf-8"
+        )
+        (self.home / "cloud-device-token").write_text(token, encoding="utf-8")
+        checks = {row["check"]: row for row in cli.doctor(self.home, self.report())}
+        self.assertNotIn(relay, json.dumps(checks))
+        self.assertNotIn(device_id, json.dumps(checks))
+        self.assertNotIn(token, json.dumps(checks))
+        self.assertTrue(checks["connection_configuration"]["ok"])
+        self.assertIsNone(checks["chatgpt_session"]["ok"])
 
 
 class HTTPTests(Fixture):

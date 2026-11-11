@@ -4,7 +4,7 @@
 
 **Tiếng Việt:** UDB kết nối trợ lý AI với máy tính Windows theo quyền do chủ máy cấp. Hỗ trợ thao tác tệp, terminal, ứng dụng, trình duyệt riêng biệt và rà soát hóa đơn Excel. **Không tự cấp quyền, không tự kê khai thuế, không tự sửa dữ liệu kế toán gốc.**
 
-> **Source, release and installation (2026-11-04):** The source package still reports **0.11.0**. Merged [PR #87](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/87) unifies Cloudflare-first setup and repairs Workspace browser fallback; merged [PR #88](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/88) improves Common Room snapshot generation and SQLite read consistency. A merged PR or green CI **does not publish a release or deploy Cloudflare Worker**. Check [GitHub Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases), [release notes](docs/release-notes.md), and your installed `udb --version` separately. `udb tools` reports the runtime tool catalog.
+> **UDB 0.12.0 (2026-11-11):** Cloudflare is the remote MCP transport for paired Windows devices, and UDB Live adds terminal and read-only GUI activity views (`udb live`, `udb live --gui`). The new build removes the public local stdio MCP command and legacy OpenAI Tunnel compatibility; pair with `udb setup`, then use `udb mcp-config` for the device-specific HTTPS endpoint. Check [GitHub Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases), [release notes](docs/release-notes.md), and your installed `udb --version` separately. Worker deployment, Access/OAuth, device grants, and ChatGPT catalog discovery are still configured and verified separately.
 
 ## What UDB does
 

@@ -1,4 +1,12 @@
-# UDB Enterprise Desktop UI — design, security and delivery roadmap
+# UDB Enterprise Desktop UI — historical design and delivery roadmap
+
+> **Historical snapshot, not current operating instructions.** The status table below
+> was recorded on 2026-11-01 against UDB 0.10.x. UDB v0.12.0 was published
+> on 2026-11-11 and uses Cloudflare-only remote MCP; OpenAI Tunnel has been
+> retired from the public v0.12 command path. For supported behavior, consult
+> [current GUI instructions](gui-user-guide.md),
+> [release notes](release-notes.md) and
+> [Cloudflare staging operations](../cloudflare/STAGING-OPERATIONS.md).
 
 **Status (2026-11-01):** incremental implementation underway in source; the full enterprise GUI and hardening plan remain **unfinished**.
 **Baseline:** UDB `main` 0.10.1; latest published Windows installer v0.10.0. GUI changes merged after that release do **not** update the installer.

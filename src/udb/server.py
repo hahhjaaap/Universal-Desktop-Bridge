@@ -9,8 +9,7 @@ import sys
 import threading
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
-from mcp.server.transport_security import TransportSecuritySettings
+from mcp.server.mcpserver import MCPServer
 from mcp.types import CallToolResult, ImageContent, TextContent, ToolAnnotations
 from pydantic import StrictBool
 
@@ -76,18 +75,11 @@ def make_server(agent: Agent):
     live_desktop = None
     live_desktop_grant = None
     desktop_lock = threading.RLock()
-    mcp = FastMCP(
+    # v2 moves HTTP transport settings to run()/streamable_http_app().
+    # UDB v0.12's Cloud Agent serves the MCP backend over owned local stdio.
+    mcp = MCPServer(
         "Universal Desktop Bridge",
-        host="127.0.0.1",
-        port=PORT,
         log_level="WARNING",
-        stateless_http=True,
-        json_response=True,
-        transport_security=TransportSecuritySettings(
-            enable_dns_rebinding_protection=True,
-            allowed_hosts=[f"127.0.0.1:{PORT}", f"localhost:{PORT}"],
-            allowed_origins=[],
-        ),
         instructions=SERVER_INSTRUCTIONS,
     )
     read = ToolAnnotations(
@@ -886,8 +878,8 @@ def serve(home):
                 stdin=anyio.wrap_file(input_file),
                 stdout=anyio.wrap_file(output_file),
             ) as (reader, writer):
-                await mcp._mcp_server.run(
-                    reader, writer, mcp._mcp_server.create_initialization_options()
+                await mcp._lowlevel_server.run(
+                    reader, writer, mcp._lowlevel_server.create_initialization_options()
                 )
 
     anyio.run(run_stdio)

@@ -101,6 +101,7 @@ def test_existing_download_is_preserved(tmp_path):
         )
     assert target.read_bytes() == b"keep"
 
+
 def test_retired_tunnel_client_cannot_enter_new_builds(tmp_path, monkeypatch):
     """Reject the removed OpenAI Tunnel helper before attempting a download."""
     import json
@@ -115,9 +116,7 @@ def test_retired_tunnel_client_cannot_enter_new_builds(tmp_path, monkeypatch):
             }
         ]
     }
-    (tmp_path / "components.json").write_text(
-        json.dumps(manifest), encoding="utf-8"
-    )
+    (tmp_path / "components.json").write_text(json.dumps(manifest), encoding="utf-8")
     monkeypatch.setattr(
         sys,
         "argv",

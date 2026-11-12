@@ -69,22 +69,18 @@ On Windows, new device tokens are stored in **Windows Credential Manager**, unde
 The following is an **archived design record, not executable setup guidance**.
 The old global-admin enrollment script `tools/cloud_enroll.py` was removed
 from current source because UDB v0.12 uses attended Cloudflare pairing. Do not
-deploy or activate this admin-only relay; use the [current pairing checklist]
-(pairing-checklist-vi.md) and reviewed [staging operations]
-(../cloudflare/STAGING-OPERATIONS.md) instead.
+deploy or activate this admin-only relay; use the
+[current pairing checklist](pairing-checklist-vi.md) and reviewed
+[staging operations](../cloudflare/STAGING-OPERATIONS.md) instead.
 
-Original sequence (historical only):
+The original prototype used a global `UDB_ADMIN_KEY` to create devices and
+invoke administrative RPC. This bootstrap process has been retired: do not
+recreate its old scripts, re-enable admin RPC, or redeploy the deleted
+production-named Worker. UDB v0.12 owners should pair via `udb setup` or the
+attended Cloud Pair UI, followed by explicit OAuth and per-device grants.
 
-1. Using a test Cloudflare account, open a terminal in the `cloudflare/` folder and run `npm install`.
-2. Create a random admin secret of at least 32 characters, and run `npx wrangler secret put UDB_ADMIN_KEY`. Enter the secret only in the hidden prompt.
-3. In the original test environment, deploy with `npm run deploy`; capture
-   the origin. **This is historical context, not a recommendation to redeploy
-   an admin-enabled Worker over a current production MCP gateway.**
-4. The removed legacy `tools/cloud_enroll.py` script formerly enrolled a device via the global admin secret. **It is no longer provided or supported; do not recreate or execute this step.** Current device pairing uses `udb setup` or the owner-attended Cloud Pair UI instead.
-5. With this branch installed as a local development build, run `udb cloud-agent` in a local attended terminal. This is a foreground client and does not set up autostart.
-6. For a read-only check use `GET /v1/admin/devices/{device_id}/status` with the admin bearer secret. The protected RPC endpoint is `POST /v1/admin/devices/{device_id}/rpc` and accepts standard JSON-RPC for the allowed methods, e.g. `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`.
-
-Keep the owner secret and pairing files out of git, chat transcripts and release artifacts.
+Keep all historical secrets and pairing files out of git, chat transcripts and
+release artifacts.
 
 ## Original follow-up milestones (historical)
 

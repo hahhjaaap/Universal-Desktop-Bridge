@@ -45,11 +45,14 @@ def safe_error(exc):
 
 
 def payload(result, tool):
-    if result.isError:
+    if getattr(result, "is_error", getattr(result, "isError", False)):
         raise ProbeFailure(
             tool + " was refused; inspect udb doctor and resource/access status."
         )
-    data = result.structuredContent
+    # MCP Python SDK v2 uses Pythonic snake_case; v1 fixtures used camelCase.
+    data = getattr(result, "structured_content", None)
+    if data is None:
+        data = getattr(result, "structuredContent", None)
     if data is None:
         text = next(
             (block.text for block in result.content if block.type == "text"), ""

@@ -90,7 +90,7 @@ jobs:
       - name: Retain public installer acceptance report
         if: always() && steps.gate.outputs.publish == 'true'
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-installer-acceptance
           path: reports/public-installer.json

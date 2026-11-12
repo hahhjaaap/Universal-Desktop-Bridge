@@ -58,7 +58,7 @@ jobs:
       - name: Upload regression scenario report
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: scenarios-${{ matrix.os }}-${{ matrix.python }}
           path: |
@@ -71,7 +71,7 @@ jobs:
       - name: Upload native pointer preview
         if: runner.os == 'Windows'
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: native-pointer-${{ matrix.os }}-${{ matrix.python }}
           path: ${{ runner.temp }}/udb-ui/native-pointer.png
@@ -92,7 +92,7 @@ jobs:
           assert not any("/tests/" in name for name in names), "Tests were packaged into sdist"
           print("Source archive contains no regression suite")
           PY
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         id: artifact_upload
         continue-on-error: true
         with:
@@ -134,14 +134,14 @@ jobs:
         run: .\dist\udb.exe _worker core --gui-check --gui-qa-dir "${{ runner.temp }}/udb-quick-ui"
       - name: Upload compact GUI previews
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: compact-gui-previews
           path: ${{ runner.temp }}/udb-quick-ui/*.png
           retention-days: 3
       - name: Exercise managed update and rollback on Windows
         run: python tools/check_installer.py install.ps1 (Get-ChildItem dist/udb-*-windows-standalone.zip | Select-Object -First 1).FullName
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         id: artifact_upload
         continue-on-error: true
         with:

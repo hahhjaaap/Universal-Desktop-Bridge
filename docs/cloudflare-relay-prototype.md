@@ -60,22 +60,27 @@ with its owned local MCP proxy when the owner fully exits the GUI. Minimizing
 the window to the tray does not count as exiting. The UI intentionally reports
 only the agent process status, **not verified ChatGPT connectivity**.
 
-On Windows, new device tokens are stored in **Windows Credential Manager**, under a unique device-scoped credential target. No plaintext cloud token file is created by the new GUI pairing or developer bootstrap. Other platforms in source-only tests use a local test token file; production UDB remains Windows-only. This protects credentials at rest using the existing UDB credential backend, but does not replace OAuth or per-user device authorization. After a successful remote claim followed by a local disk failure, the server registration must be revoked administratively before pairing again. The prototype owner must safeguard invitation codes and the global admin secret; the cloud is not encrypted end-to-end.
+On Windows, new device tokens are stored in **Windows Credential Manager**, under a unique device-scoped credential target. No plaintext cloud token file is created by the current GUI pairing. Other platforms in source-only tests use a local test token file; production UDB remains Windows-only. This protects credentials at rest using the existing UDB credential backend, but does not replace OAuth or per-user device authorization. After a successful remote claim followed by a local disk failure, the server registration must be revoked administratively before pairing again. The prototype owner must safeguard invitation codes and the global admin secret; the cloud is not encrypted end-to-end.
 
 **Security limitation:** The GUI button only registers the device; it does not start the background agent, configure ChatGPT or grant Windows permissions. Until the ChatGPT MCP resource server authenticates per-user OAuth tokens and enforces user-to-device ownership, this developer-only relay must not be exposed to unrelated users or sensitive PCs.
 
 ## Developer-only validation
 
-The following was an **early developer bootstrap**, not current end-user
-setup. Avoid deploying or activating the old admin-only relay from these
-steps; use the current reviewed Wrangler configuration and runbook instead:
+The following is an **archived design record, not executable setup guidance**.
+The old global-admin enrollment script `tools/cloud_enroll.py` was removed
+from current source because UDB v0.12 uses attended Cloudflare pairing. Do not
+deploy or activate this admin-only relay; use the [current pairing checklist]
+(pairing-checklist-vi.md) and reviewed [staging operations]
+(../cloudflare/STAGING-OPERATIONS.md) instead.
+
+Original sequence (historical only):
 
 1. Using a test Cloudflare account, open a terminal in the `cloudflare/` folder and run `npm install`.
 2. Create a random admin secret of at least 32 characters, and run `npx wrangler secret put UDB_ADMIN_KEY`. Enter the secret only in the hidden prompt.
 3. In the original test environment, deploy with `npm run deploy`; capture
    the origin. **This is historical context, not a recommendation to redeploy
    an admin-enabled Worker over a current production MCP gateway.**
-4. On Windows with a source checkout, run `python tools/cloud_enroll.py --relay https://YOUR-WORKER.workers.dev`. Enter the same admin secret in the hidden prompt. The script creates the per-device token and pairing file under the current user's UDB data home.
+4. The removed legacy `tools/cloud_enroll.py` script formerly enrolled a device via the global admin secret. **It is no longer provided or supported; do not recreate or execute this step.** Current device pairing uses `udb setup` or the owner-attended Cloud Pair UI instead.
 5. With this branch installed as a local development build, run `udb cloud-agent` in a local attended terminal. This is a foreground client and does not set up autostart.
 6. For a read-only check use `GET /v1/admin/devices/{device_id}/status` with the admin bearer secret. The protected RPC endpoint is `POST /v1/admin/devices/{device_id}/rpc` and accepts standard JSON-RPC for the allowed methods, e.g. `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`.
 

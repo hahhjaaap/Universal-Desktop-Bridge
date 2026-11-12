@@ -37,7 +37,7 @@ jobs:
           node-version: "22"
       - name: Cloud relay and Render dashboard unit tests
         run: node --test cloudflare/tests/*.test.js render/tests/*.test.mjs
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: UDB Python client tests

@@ -28,10 +28,12 @@ secret values or Cloudflare Access app configuration.
    `bridge_status`, `list_projects`, authorized `read_file`, and rejection
    of unauthorized paths and devices. Record the deployed version.
 
-The historical `wrangler.jsonc` still names the deleted Worker because the
-offline staging/production isolation validator expects separate identities.
-Never invoke bare `wrangler deploy` from the `cloudflare` folder; it could
-recreate that Worker. Use only the explicit staging script or manual workflow.
+Both `wrangler.jsonc` (the implicit Wrangler default) and
+`wrangler.staging.jsonc` now name the **same existing staging Worker**. The
+offline validator requires identical permitted configuration in both files
+and rejects the deleted legacy Worker identity. Run the reviewed `npm run
+deploy` or the manual GitHub workflow instead of bare Wrangler, because the
+reviewed command includes `--keep-vars --strict` to protect remote settings.
 
 ## Security boundaries
 

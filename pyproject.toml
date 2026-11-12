@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-office = ["openpyxl==3.1.5", "python-docx==1.2.0", "pypdf==6.21.4", "reportlab==4.4.9"]
+office = ["openpyxl==3.1.5", "python-docx==1.2.0", "pypdf==7.0.1", "reportlab==5.1.0"]
 dev = ["pytest>=8,<10", "build>=1.2,<2", "setuptools>=77", "wheel", "ruff>=0.17,<0.18"]
 freeze = ["pyinstaller>=6.16,<7"]
 

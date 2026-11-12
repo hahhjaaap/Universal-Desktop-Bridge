@@ -1,7 +1,7 @@
 # Windows release trust and signing
 
-**Status (2026-11-01):** UDB's published v0.10.0 standalone installer is
-SHA-256 checked, but **not Authenticode-signed**. A SHA256SUMS file generated
+**Status (2026-11-12):** UDB's latest published v0.12.0 standalone installer is
+SHA-256 checked, but **not Authenticode-signed**, as confirmed by its release notes. A SHA256SUMS file generated
 by the same release workflow detects accidental corruption but does not, on
 its own, authenticate the publisher against a compromised release workflow.
 

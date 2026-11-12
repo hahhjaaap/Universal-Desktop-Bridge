@@ -1,5 +1,12 @@
 # UDB Multi-PC over two different Wi-Fi networks (experimental)
 
+> **Historical experimental transport, not the UDB v0.12.0 remote setup path.**
+> UDB v0.12.0 removed the OpenAI Tunnel compatibility transport. The
+> hub/Tunnel design below is kept for architectural research and must not be
+> presented as a supported v0.12.0 installation or deployed to a real device.
+> Current supported pairing instructions: [standalone quickstart](standalone-quickstart-vi.md)
+> and [remote troubleshooting](remote-device-troubleshooting.md).
+
 This is an **opt-in source feature** on the `feature/multi-pc-tailscale-router`
 branch, not a released or deployed Windows installer. Do not replace a working
 UDB installation with untested branch code. Test it on a separate source checkout.

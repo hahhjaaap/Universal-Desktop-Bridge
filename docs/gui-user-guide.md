@@ -1,10 +1,11 @@
 # UDB desktop GUI — appearance, navigation and security
 
-Applies to the **source GUI on `main` after PRs #42 and #44**. The last
-published stable Windows installer may still use an earlier interface: check
-[`Releases`](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases).
-This guide documents implemented behavior, not a promise of a full enterprise
-redesign.
+Applies to the UDB v0.12.0 Cloudflare-connected source GUI. Check the
+[installed release](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases)
+separately: source on `main` does not update a previously installed EXE.
+The public OpenAI Tunnel compatibility transport was removed in v0.12.0;
+any legacy Tunnel UI references in earlier releases are historical, not a
+supported setup path. This guide does not promise an enterprise redesign.
 
 ## Start the interface
 
@@ -73,10 +74,10 @@ then saves a **new** JSON file (never overwriting an existing file) with
 only timestamps, tool labels and states. Inspect the destination before sharing
 it because even sanitized metadata can reveal which tools were used.
 A persistent header displays the current page, a **Cloud Agent process**
-indicator on Cloudflare-paired profiles (or the legacy **Tunnel-only** status
-on unpaired profiles), and a separate **Windows privilege** indicator.
-Neither Cloud Agent running nor a green legacy Tunnel proves that ChatGPT can
-invoke MCP tools. If the optional broad
+indicator for paired profiles and a separate **Windows privilege** indicator.
+An unpaired v0.12.0 profile must be paired through `udb setup`, not through an
+old Tunnel transport. Neither a running Cloud Agent nor a green local status
+proves ChatGPT can invoke MCP tools. If the optional broad
 current-user computer grant is active, it warns **Windows: không sandbox**
 on every page. Unknown local grant status stays **chưa xác minh**, never a
 green authorization or safety claim. Disabling that broad grant does not
@@ -134,17 +135,18 @@ session/job controls when necessary.
 
 ## First-run onboarding in Connection settings
 
-The **Kết nối** page displays three distinct steps: **Agent trên Windows**
-(local worker heartbeat), **Cloud Agent** on already paired Cloudflare
-profiles (or **Kết nối Tunnel** on unpaired legacy profiles), and
-**Xác minh tại ChatGPT** (requires a separate read-only UDB tool call).
+The **Kết nối** page distinguishes three checks: **Agent trên Windows**
+(local worker heartbeat), **Cloud Agent** (requires an explicit Cloudflare
+pairing), and **Xác minh tại ChatGPT** (requires a separate read-only UDB
+tool call). In v0.12.0, an unpaired profile must use `udb setup`; historical
+**Kết nối Tunnel** controls are not the supported remote setup route.
 The Cloud Agent indicator reports its **local process** state, not a verified
 remote WebSocket/OAuth session. The ChatGPT step stays **Chưa xác minh**
 until tested from the actual conversation. Unreadable local status must not
 retain a stale positive state. The guide does not store a password, test a remote endpoint,
 start a browser, approve an operation or grant computer permissions.
 The **Sao chép lệnh kiểm tra** control copies `udb doctor --cloud --json`
-for Cloudflare-paired profiles, or `udb doctor --json` for local/Tunnel
+for Cloudflare-paired profiles, or `udb doctor --json` for unpaired
 profiles. This fixes the case where a Cloudflare owner ran a local-only check
 and mistakenly assumed OAuth had been tested.
 
@@ -163,7 +165,7 @@ The top of **Dự án** displays three compact indicators:
 | Indicator | What it verifies | What it does not verify |
 | --- | --- | --- |
 | **Agent** | Host worker reported a local readiness heartbeat | Authorized computer access or ChatGPT RPC |
-| **Cloud Agent / legacy Tunnel** | Cloud Agent process state on paired profiles; Tunnel health on unpaired profiles | Whether Worker is deployed, OAuth/grants are valid or ChatGPT discovered tools |
+| **Cloud Agent** | Local Cloud Agent process state on paired profiles; unpaired devices require explicit setup | Whether Worker is deployed, OAuth/grants are valid or ChatGPT discovered tools |
 | **ChatGPT** | Always **Chưa xác minh** (unverified) in this GUI release | No GUI-side network test is invented |
 
 On a failed local status refresh, the corresponding Agent/transport indicator
@@ -187,17 +189,16 @@ write, terminal or desktop access follows automatically.
 ## Connection status is not authorization
 
 - **Local agent:** the worker is reachable on this PC.
-- **Cloud Agent / legacy Tunnel:** process running or Tunnel ready is a local
-  transport observation. It does *not* prove that Cloudflare Worker, device
-  OAuth/grants, MCP discovery or ChatGPT tool invocation succeeded.
+- **Cloud Agent:** process running is a local transport observation. It does
+  *not* prove that Cloudflare Worker, device OAuth/grants, MCP discovery or
+  ChatGPT tool invocation succeeded.
 - **ChatGPT invocation:** confirm in ChatGPT with a *read-only* status tool.
 - **Permission grant:** separately authorized by the owner on the Windows
   machine; not inferred from any connected indicator.
 
 The current source does **not** implement production one-plugin Multi-PC
 selection. Do not infer another PC from a green connection label; distinguish
-the exact Cloudflare device ID and owner grants on paired devices (or
-separate Tunnel IDs in legacy mode). See
+the exact Cloudflare device ID and owner grants on paired devices. See
 [remote-device troubleshooting](remote-device-troubleshooting.md) and
 [Cloudflare deployment acceptance](cloudflare-project-read-acceptance.md).
 
@@ -245,7 +246,8 @@ without backend checks. In particular:
 - A timed-out file change or UI action can have an **unknown outcome**.
   Inspect the state before trying again. Never automatically replay mutations.
 - Published ZIP/installer signing is a separate release-supply-chain concern;
-  the earlier v0.10.0 standalone ZIP was not code-signed.
+  the latest published v0.12.0 standalone ZIP is still not Authenticode-signed
+  (see [release notes](release-notes.md)).
 
 ## Quality assurance for developers
 

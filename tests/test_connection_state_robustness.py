@@ -95,4 +95,3 @@ def test_symlinked_connection_never_changes_credentials(tmp_path, monkeypatch):
         desktop.DesktopController.configure(
             controller_for(tmp_path), "tunnel_" + "b" * 32, "SYNTHETIC_ONLY"
         )
-

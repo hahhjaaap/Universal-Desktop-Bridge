@@ -141,9 +141,12 @@ def test_remote_browser_tool_cannot_change_handoff_or_login_preferences(tmp_path
         )
         return result
 
-    # FastMCP raises rather than exposing the local manager operation.
-    with pytest.raises(Exception, match="Unsupported background browser action"):
+    # MCP SDK v2 wraps a denied tool operation; verify the original
+    # domain-level authorization refusal rather than only its wrapper text.
+    with pytest.raises(Exception, match="Error executing tool host_browser") as error:
         asyncio.run(check())
+    assert error.value.__cause__ is not None
+    assert "Unsupported background browser action" in str(error.value.__cause__)
 
 
 def host_engine(tmp_path):

@@ -23,7 +23,7 @@ jobs:
     env:
       UDB_RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.UDB_RELEASE_SHA }}
       - uses: actions/setup-python@v7

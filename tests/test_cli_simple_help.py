@@ -109,7 +109,9 @@ def test_old_setup_edit_warns_but_preserves_cloudflare_flow(
     from udb import onboarding
 
     received = []
-    monkeypatch.setattr(onboarding, "setup_cloud", lambda settings: received.append(settings) or 0)
+    monkeypatch.setattr(
+        onboarding, "setup_cloud", lambda settings: received.append(settings) or 0
+    )
     assert cli.main(["setup", "--edit", "--home", str(tmp_path)]) == 0
     out = capsys.readouterr()
     assert "--edit is obsolete" in out.err

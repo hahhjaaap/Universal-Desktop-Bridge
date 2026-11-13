@@ -50,9 +50,7 @@ def test_redirected_cloud_setup_refuses_before_pairing_or_state_write(
     assert not selected.home.exists()
 
 
-def test_cloud_pair_cancellation_does_not_fall_back_to_tunnel(
-    tmp_path, monkeypatch
-):
+def test_cloud_pair_cancellation_does_not_fall_back_to_tunnel(tmp_path, monkeypatch):
     selected = settings(tmp_path)
     monkeypatch.setattr(onboarding, "console_input", lambda: True)
     monkeypatch.setattr(onboarding, "paired_cloud", lambda _: None)
@@ -72,9 +70,7 @@ def test_existing_cloud_pairing_preserves_legacy_state_without_key_prompt(
     legacy.write_bytes(legacy_bytes)
     pairing = selected.home / "cloud-pairing.json"
     pairing_bytes = (
-        b'{"relay":"https://example.workers.dev","device_id":"'
-        + b"a" * 32
-        + b'"}'
+        b'{"relay":"https://example.workers.dev","device_id":"' + b"a" * 32 + b'"}'
     )
     pairing.write_bytes(pairing_bytes)
     monkeypatch.setattr(onboarding, "console_input", lambda: True)
@@ -128,9 +124,9 @@ def test_new_cloud_pairing_prints_only_the_scoped_https_endpoint(
     monkeypatch.setattr(
         onboarding,
         "paired_cloud",
-        lambda _: ("https://example.workers.dev", "a" * 32)
-        if state["paired"]
-        else None,
+        lambda _: (
+            ("https://example.workers.dev", "a" * 32) if state["paired"] else None
+        ),
     )
 
     def simulate_pair(_):

@@ -457,7 +457,6 @@ def test_cloudflare_setup_does_not_require_retired_tunnel_runtime(
     assert not selected.home.exists()
 
 
-
 def test_timed_out_update_reports_unknown_outcome_without_retry(tmp_path, monkeypatch):
     root, record, exe = managed(tmp_path)
     monkeypatch.setattr(maintenance, "installation", lambda: (root, record))

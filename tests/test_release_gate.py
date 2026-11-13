@@ -24,9 +24,13 @@ def run(**overrides):
 
 
 def test_release_gate_skips_existing_version_and_superseded_commit():
-    assert decide(REPOSITORY, SHA, SHA, [run()], False)["publish"]
-    assert not decide(REPOSITORY, SHA, SHA, [run()], True)["publish"]
-    assert not decide(REPOSITORY, SHA, "b" * 40, [run()], False)["publish"]
+    assert decide(REPOSITORY, SHA, SHA, [run()], False, main_protected=True)["publish"]
+    assert not decide(REPOSITORY, SHA, SHA, [run()], True, main_protected=True)[
+        "publish"
+    ]
+    assert not decide(REPOSITORY, SHA, "b" * 40, [run()], False, main_protected=True)[
+        "publish"
+    ]
 
 
 @pytest.mark.parametrize(
@@ -43,4 +47,18 @@ def test_release_gate_skips_existing_version_and_superseded_commit():
 )
 def test_release_gate_rejects_incomplete_failed_or_unrelated_ci(changes):
     with pytest.raises(ValueError, match="no successful"):
-        decide(REPOSITORY, SHA, SHA, [run(**changes)], False)
+        decide(REPOSITORY, SHA, SHA, [run(**changes)], False, main_protected=True)
+
+
+def test_release_gate_blocks_automatic_publication_on_unprotected_main():
+    result = decide(REPOSITORY, SHA, SHA, [run()], False, main_protected=False)
+    assert result["publish"] is False
+    assert "not protected" in result["reason"]
+
+
+def test_release_gate_requires_explicit_protection_before_publication():
+    assert decide(REPOSITORY, SHA, SHA, [run()], False)["publish"] is False
+    assert (
+        decide(REPOSITORY, SHA, SHA, [run()], False, main_protected=True)["publish"]
+        is True
+    )

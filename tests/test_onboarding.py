@@ -1,41 +1,19 @@
-"""Only the attended local owner can supply connection details or opt in."""
+"""Cloudflare-only attended setup and read-only legacy state regressions."""
 
 import io
+import json
 import os
 from types import SimpleNamespace
 
 import pytest
 
-from udb import cli, desktop, onboarding, owner_command
+from udb import cli, cloud_agent, cloud_pair, connection, onboarding, owner_command
 from udb.config import Settings
 
 
-class Console(io.StringIO):
-    def isatty(self):
-        return True
-
-
-def local(monkeypatch, answers):
-    monkeypatch.setattr(onboarding, "console_input", lambda: True)
-    values = iter(answers)
-    monkeypatch.setattr(onboarding, "os", SimpleNamespace(name="nt"))
-    monkeypatch.setattr(onboarding.sys, "stdin", Console())
-    monkeypatch.setattr("builtins.input", lambda _: next(values))
-    calls = []
-    monkeypatch.setattr(owner_command, "main", lambda args: calls.append(args) or 0)
-    monkeypatch.setattr(owner_command, "headless_state", lambda _: None)
-    return calls
-
-
-def test_redirected_setup_cannot_create_state_or_prompt_for_secrets(
-    tmp_path, monkeypatch
-):
-    monkeypatch.setattr(onboarding, "os", SimpleNamespace(name="nt"))
-    monkeypatch.setattr(onboarding.sys, "stdin", io.StringIO("y\n"))
-    home = tmp_path / "unused"
-    with pytest.raises(ValueError, match="attended"):
-        onboarding.run(Settings(home, home / "work"))
-    assert not home.exists()
+def settings(tmp_path):
+    home = tmp_path / "owner"
+    return Settings(home, home / "work")
 
 
 def test_setup_json_is_refused_before_any_state_write(tmp_path):
@@ -44,262 +22,193 @@ def test_setup_json_is_refused_before_any_state_write(tmp_path):
     assert not home.exists()
 
 
-def test_offline_setup_starts_local_runtime_without_owner_access(tmp_path, monkeypatch):
-    calls = local(monkeypatch, ["n"])
-    home = tmp_path / "owner"
-    assert onboarding.run(Settings(home, home / "work")) == 0
-    assert "--offline" in calls[-1] and "--follow" in calls[-1]
-    assert "--access" not in calls[-1]
-    assert not (home / "state/connection.json").exists()
-    assert not (home / "state/computer-access.dpapi").exists()
-
-
-def test_invalid_tunnel_is_refused_before_reading_key_or_creating_home(
+def test_public_setup_dispatches_only_cloudflare_without_state_write(
     tmp_path, monkeypatch
 ):
-    calls = local(monkeypatch, ["y", "not-a-tunnel"])
-    home = tmp_path / "unused"
+    selected = settings(tmp_path)
+    calls = []
     monkeypatch.setattr(
-        onboarding.getpass, "getpass", lambda _: pytest.fail("Must not request a key")
+        onboarding, "setup_cloud", lambda candidate: calls.append(candidate) or 0
     )
-    with pytest.raises(ValueError, match="Invalid tunnel"):
-        onboarding.run(Settings(home, home / "work"))
-    assert not calls and not home.exists()
+    args = SimpleNamespace(json=False, access=None, offline=False, online=False)
+    assert cli._run_setup(args, selected) == 0
+    assert calls == [selected]
+    assert not selected.home.exists()
 
 
-@pytest.mark.parametrize("answer", ["y", ""])
-def test_local_key_is_not_echoed_or_forwarded_in_process_arguments(
-    tmp_path, monkeypatch, capsys, answer
-):
-    tunnel = "tunnel_" + "a" * 32
-    calls = local(monkeypatch, [answer, tunnel, "n"])
-    secret = "SYNTHETIC_LOCAL_KEY_DO_NOT_LOG"
-    monkeypatch.setattr(onboarding.getpass, "getpass", lambda _: secret)
-    saved = []
-
-    class Controller:
-        def __init__(self, home, monitor):
-            assert monitor is False
-
-        def configure(self, tunnel_id, key):
-            saved.append((tunnel_id, key))
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr(desktop, "DesktopController", Controller)
-    home = tmp_path / "owner"
-    assert onboarding.run(Settings(home, home / "work")) == 0
-    assert saved == [(tunnel, secret)]
-    assert secret not in capsys.readouterr().out
-    assert all(secret not in arg for call in calls for arg in call)
-    assert "--access" not in calls[-1]
-
-
-def test_existing_configuration_needs_no_key_or_connection_overwrite(
+def test_redirected_cloud_setup_refuses_before_pairing_or_state_write(
     tmp_path, monkeypatch
 ):
-    calls = local(monkeypatch, ["n"])
-    home = tmp_path / "owner"
-    (home / "state").mkdir(parents=True)
-    connection = home / "state/connection.json"
-    data = '{"tunnel_id":"tunnel_' + "b" * 32 + '"}'
-    connection.write_text(data)
+    selected = settings(tmp_path)
+    monkeypatch.setattr(onboarding, "console_input", lambda: False)
     monkeypatch.setattr(
-        onboarding.getpass,
-        "getpass",
-        lambda _: pytest.fail("Existing key must not be read or requested"),
+        cloud_pair,
+        "run",
+        lambda *_: pytest.fail("Non-attended setup may not pair"),
     )
-    monkeypatch.setattr(
-        owner_command, "headless_state", lambda _: {"connection_mode": "offline"}
-    )
-    assert onboarding.run(Settings(home, home / "work")) == 0
-    assert [call[0] for call in calls] == ["stop", "start"]
-    assert connection.read_text() == data
-    assert "--access" not in calls[-1]
-
-
-def test_mcp_url_setup_saves_namespaced_id_and_shows_account_steps(
-    tmp_path, monkeypatch, capsys
-):
-    tunnel = "tunnel_eu01_" + "c" * 32
-    calls = local(monkeypatch, ["y", "https://api.openai.com/v1/mcp/" + tunnel, "n"])
-    secret = "SYNTHETIC_SETUP_KEY_DO_NOT_LOG"
-    monkeypatch.setattr(onboarding.getpass, "getpass", lambda _: secret)
-    saved = []
-
-    class Controller:
-        def __init__(self, home, monitor):
-            assert monitor is False
-
-        def configure(self, tunnel_id, key):
-            saved.append((tunnel_id, key))
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr(desktop, "DesktopController", Controller)
-    home = tmp_path / "owner"
-    assert onboarding.run(Settings(home, home / "work")) == 0
-    assert saved == [(tunnel, secret)] and "--offline" not in calls[-1]
-    output = capsys.readouterr().out
-    assert all(
-        url in output
-        for url in (onboarding.TUNNELS_URL, onboarding.KEYS_URL, onboarding.CHATGPT_URL)
-    )
-    assert secret not in output and secret not in repr(calls)
-
-
-@pytest.mark.parametrize("answers", [["y", ""], ["y", "?", ""]])
-def test_empty_tunnel_or_help_then_cancel_starts_only_offline(
-    tmp_path, monkeypatch, answers
-):
-    calls = local(monkeypatch, answers)
-    monkeypatch.setattr(
-        onboarding.getpass, "getpass", lambda _: pytest.fail("Must not request a key")
-    )
-    home = tmp_path / "owner"
-    assert onboarding.run(Settings(home, home / "work")) == 0
-    assert "--offline" in calls[-1] and "--access" not in calls[-1]
-    assert not (home / "state/connection.json").exists()
-
-
-def test_empty_key_does_not_save_partial_connection(tmp_path, monkeypatch):
-    calls = local(monkeypatch, ["y", "tunnel_" + "a" * 32])
-    monkeypatch.setattr(onboarding.getpass, "getpass", lambda _: "")
-    monkeypatch.setattr(
-        desktop,
-        "DesktopController",
-        lambda *a, **k: pytest.fail("Must not create credential controller"),
-    )
-    home = tmp_path / "owner"
-    assert onboarding.run(Settings(home, home / "work")) == 0
-    assert "--offline" in calls[-1] and "--access" not in calls[-1]
-    assert not (home / "state/connection.json").exists()
-
-
-def test_existing_namespaced_connection_is_reused_without_requesting_key(
-    tmp_path, monkeypatch
-):
-    calls = local(monkeypatch, ["n"])
-    home = tmp_path / "owner"
-    (home / "state").mkdir(parents=True)
-    connection = home / "state/connection.json"
-    data = '{"tunnel_id":"tunnel_us01_' + "b" * 32 + '"}'
-    connection.write_text(data)
-    monkeypatch.setattr(
-        onboarding.getpass,
-        "getpass",
-        lambda _: pytest.fail("Must not request or read the existing key"),
-    )
-    assert onboarding.run(Settings(home, home / "work")) == 0
-    assert connection.read_text() == data and "--offline" not in calls[-1]
-
-
-def test_edit_cancel_keeps_the_current_connection_and_mode(tmp_path, monkeypatch):
-    calls = local(monkeypatch, [""])
-    home = tmp_path / "owner"
-    settings = Settings(home, home / "work")
-    onboarding.save_mode(settings, "online")
-    connection = home / "state/connection.json"
-    original = '{"tunnel_id":"tunnel_' + "a" * 32 + '"}'
-    connection.write_text(original)
-    monkeypatch.setattr(onboarding.getpass, "getpass", lambda _: "")
-    monkeypatch.setattr(
-        desktop,
-        "DesktopController",
-        lambda *a, **kw: pytest.fail("Cancel must not write credentials"),
-    )
-    assert onboarding.run(settings, edit=True) == 0
-    assert not calls and connection.read_text() == original
-    assert onboarding.saved_mode(settings) == "online"
-
-
-def test_edit_online_connection_restarts_agent_to_apply_the_new_key(
-    tmp_path, monkeypatch, capsys
-):
-    calls = local(monkeypatch, ["", "n"])
-    home = tmp_path / "owner"
-    settings = Settings(home, home / "work")
-    (home / "state").mkdir(parents=True)
-    tunnel = "tunnel_" + "a" * 32
-    connection = home / "state/connection.json"
-    connection.write_text('{"tunnel_id":"' + tunnel + '"}')
-    saved = []
-    secret = "SYNTHETIC_NEW_RUNTIME_KEY"
-    monkeypatch.setattr(onboarding.getpass, "getpass", lambda _: secret)
-    monkeypatch.setattr(
-        owner_command, "headless_state", lambda _: {"connection_mode": "online"}
-    )
-
-    class Controller:
-        def __init__(self, home, monitor):
-            assert monitor is False
-
-        def configure(self, tunnel_id, key):
-            saved.append((tunnel_id, key))
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr(desktop, "DesktopController", Controller)
-    assert onboarding.run(settings, edit=True) == 0
-    assert saved == [(tunnel, secret)]
-    assert [args[0] for args in calls] == ["stop", "start"]
-    assert onboarding.saved_mode(settings) == "online"
-    assert secret not in capsys.readouterr().out and secret not in repr(calls)
-
-
-def test_local_mode_can_be_selected_without_reading_or_replacing_a_key(
-    tmp_path, monkeypatch
-):
-    calls = local(monkeypatch, [])
-    home = tmp_path / "owner"
-    settings = Settings(home, home / "work")
-    (home / "state").mkdir(parents=True)
-    connection = home / "state/connection.json"
-    original = '{"tunnel_id":"tunnel_' + "a" * 32 + '"}'
-    connection.write_text(original)
-    monkeypatch.setattr(
-        onboarding.getpass, "getpass", lambda _: pytest.fail("Must not read a key")
-    )
-    monkeypatch.setattr(
-        owner_command, "headless_state", lambda _: {"connection_mode": "online"}
-    )
-    assert onboarding.run(settings, local=True) == 0
-    assert [args[0] for args in calls] == ["stop", "start"]
-    assert "--offline" in calls[-1] and "--access" not in calls[-1]
-    assert onboarding.saved_mode(settings) == "offline"
-    assert connection.read_text() == original
-
-
-def test_failed_mode_switch_does_not_replace_the_previous_startup_choice(
-    tmp_path, monkeypatch
-):
-    calls = local(monkeypatch, [])
-    home = tmp_path / "owner"
-    settings = Settings(home, home / "work")
-    onboarding.save_mode(settings, "online")
-    monkeypatch.setattr(
-        owner_command, "headless_state", lambda _: {"connection_mode": "online"}
-    )
-    monkeypatch.setattr(owner_command, "main", lambda args: calls.append(args) or 1)
-    with pytest.raises(ValueError, match="did not stop"):
-        onboarding.run(settings, local=True)
-    assert [args[0] for args in calls] == ["stop"]
-    assert onboarding.saved_mode(settings) == "online"
-
-
-@pytest.mark.parametrize("options", [{"edit": True}, {"local": True}])
-def test_edit_and_local_setup_still_refuse_redirected_input(
-    tmp_path, monkeypatch, options
-):
-    monkeypatch.setattr(onboarding, "os", SimpleNamespace(name="nt"))
-    monkeypatch.setattr(onboarding.sys, "stdin", io.StringIO())
-    home = tmp_path / "unused"
     with pytest.raises(ValueError, match="attended"):
-        onboarding.run(Settings(home, home / "work"), **options)
-    assert not home.exists()
+        onboarding.setup_cloud(selected)
+    assert not selected.home.exists()
+
+
+def test_cloud_pair_cancellation_does_not_fall_back_to_tunnel(
+    tmp_path, monkeypatch
+):
+    selected = settings(tmp_path)
+    monkeypatch.setattr(onboarding, "console_input", lambda: True)
+    monkeypatch.setattr(onboarding, "paired_cloud", lambda _: None)
+    monkeypatch.setattr(cloud_pair, "run", lambda _: 130)
+    assert onboarding.setup_cloud(selected) == 130
+    assert not selected.home.exists()
+
+
+def test_existing_cloud_pairing_preserves_legacy_state_without_key_prompt(
+    tmp_path, monkeypatch, capsys
+):
+    selected = settings(tmp_path)
+    selected.home.mkdir()
+    (selected.home / "state").mkdir()
+    legacy = selected.home / "state/connection.json"
+    legacy_bytes = b'{"tunnel_id":"tunnel_' + b"b" * 32 + b'"}'
+    legacy.write_bytes(legacy_bytes)
+    pairing = selected.home / "cloud-pairing.json"
+    pairing_bytes = b'{"relay":"https://example.workers.dev","device_id":"' + b"a" * 32 + b'"}'
+    pairing.write_bytes(pairing_bytes)
+    monkeypatch.setattr(onboarding, "console_input", lambda: True)
+    monkeypatch.setattr(
+        cloud_agent,
+        "load_pairing",
+        lambda _: ("https://example.workers.dev", "a" * 32, None),
+    )
+    monkeypatch.setattr(
+        connection,
+        "cloud_mcp_url",
+        lambda _: "https://example.workers.dev/v1/devices/" + "a" * 32 + "/mcp",
+    )
+    monkeypatch.setattr(
+        cloud_pair,
+        "run",
+        lambda *_: pytest.fail("Existing paired device may not be re-enrolled"),
+    )
+    assert onboarding.setup_cloud(selected) == 0
+    assert "Cloudflare MCP:" in capsys.readouterr().out
+    assert legacy.read_bytes() == legacy_bytes
+    assert pairing.read_bytes() == pairing_bytes
+    assert not (selected.home / "state/computer-access.dpapi").exists()
+
+
+def test_malformed_cloud_pairing_never_falls_back_to_legacy_enrollment(
+    tmp_path, monkeypatch
+):
+    selected = settings(tmp_path)
+    selected.home.mkdir()
+    pairing = selected.home / "cloud-pairing.json"
+    pairing.write_text('{"relay":"invalid"}', encoding="utf-8")
+    before = pairing.read_bytes()
+    monkeypatch.setattr(onboarding, "console_input", lambda: True)
+    monkeypatch.setattr(
+        cloud_pair,
+        "run",
+        lambda *_: pytest.fail("Malformed pairing may not prompt for Tunnel"),
+    )
+    with pytest.raises((ValueError, KeyError, OSError)):
+        onboarding.setup_cloud(selected)
+    assert pairing.read_bytes() == before
+
+
+def test_new_cloud_pairing_prints_only_the_scoped_https_endpoint(
+    tmp_path, monkeypatch, capsys
+):
+    selected = settings(tmp_path)
+    state = {"paired": False}
+    monkeypatch.setattr(onboarding, "console_input", lambda: True)
+    monkeypatch.setattr(
+        onboarding,
+        "paired_cloud",
+        lambda _: ("https://example.workers.dev", "a" * 32)
+        if state["paired"]
+        else None,
+    )
+
+    def simulate_pair(_):
+        state["paired"] = True
+        return 0
+
+    monkeypatch.setattr(cloud_pair, "run", simulate_pair)
+    monkeypatch.setattr(
+        connection,
+        "cloud_mcp_url",
+        lambda _: "https://example.workers.dev/v1/devices/" + "a" * 32 + "/mcp",
+    )
+    assert onboarding.setup_cloud(selected) == 0
+    output = capsys.readouterr().out
+    assert "https://example.workers.dev/v1/devices/" in output
+    assert "Tunnel ID" not in output and "Runtime key" not in output
+    assert not selected.home.exists()
+
+
+def test_legacy_connection_reader_is_read_only_and_fails_closed(tmp_path):
+    selected = settings(tmp_path)
+    state = selected.home / "state"
+    state.mkdir(parents=True)
+    path = state / "connection.json"
+    original = b'{"tunnel_id":"tunnel_' + b"a" * 32 + b'"}'
+    path.write_bytes(original)
+    assert onboarding.saved_connection(selected) == "tunnel_" + "a" * 32
+    assert path.read_bytes() == original
+
+    bad_id = b'{"tunnel_id":"not-a-tunnel"}'
+    path.write_bytes(bad_id)
+    assert onboarding.saved_connection(selected) is None
+    assert path.read_bytes() == bad_id
+
+    broken = b"{bad-json"
+    path.write_bytes(broken)
+    with pytest.raises(ValueError, match="Saved connection"):
+        onboarding.saved_connection(selected)
+    assert onboarding.saved_connection(selected, repair=True) is None
+    assert path.read_bytes() == broken
+
+
+def test_startup_preferences_are_preserved_during_legacy_state_reads(tmp_path):
+    selected = settings(tmp_path)
+    (selected.home / "state").mkdir(parents=True)
+    legacy = selected.home / "state/connection.json"
+    legacy.write_text('{"tunnel_id":"tunnel_' + "c" * 32 + '"}')
+    onboarding.save_mode(selected, "offline")
+    assert onboarding.saved_mode(selected) == "offline"
+    before = legacy.read_bytes()
+    with pytest.raises(ValueError, match="Invalid startup mode"):
+        onboarding.save_mode(selected, "invalid")
+    assert onboarding.saved_mode(selected) == "offline"
+    assert legacy.read_bytes() == before
+    saved = json.loads((selected.home / "state/startup-preferences.json").read_text())
+    assert saved == {"schema": 1, "mode": "offline"}
+
+
+def test_explicit_online_without_pairing_is_rejected_not_tunneled(
+    tmp_path, monkeypatch
+):
+    selected = settings(tmp_path)
+    monkeypatch.setattr(onboarding, "paired_cloud", lambda _: None)
+    args = SimpleNamespace(
+        offline=False, online=True, detach=False, json=False, access=None
+    )
+    with pytest.raises(ValueError, match="Cloudflare"):
+        cli._prepare_startup(args, selected)
+    assert not selected.home.exists()
+
+
+def test_unpaired_noninteractive_start_is_local_only(tmp_path, monkeypatch):
+    selected = settings(tmp_path)
+    monkeypatch.setattr(onboarding, "paired_cloud", lambda _: None)
+    monkeypatch.setattr(owner_command, "headless_state", lambda _: None)
+    args = SimpleNamespace(
+        offline=False, online=False, detach=False, json=True, access=None
+    )
+    assert cli._prepare_startup(args, selected) is None
+    assert args.offline is True
+    assert not selected.home.exists()
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows console API")
@@ -308,63 +217,16 @@ def test_windows_nul_is_not_an_attended_console():
         assert onboarding._console_stream(stream) is False
 
 
-def test_owner_setup_links_to_chatgpt_plugins_instead_of_legacy_connector_settings():
+def test_owner_setup_links_to_chatgpt_plugins():
     assert onboarding.CHATGPT_URL == "https://chatgpt.com/plugins"
 
 
-def test_paired_cloudflare_setup_edit_does_not_request_legacy_tunnel_or_key(
-    tmp_path, monkeypatch, capsys
-):
-    home = tmp_path / "owner"
-    home.mkdir()
-    device = "a" * 32
-    pairing = home / "cloud-pairing.json"
-    pairing.write_text(
-        '{"relay":"https://example.workers.dev","device_id":"' + device + '"}',
-        encoding="utf-8",
-    )
-    (home / "state").mkdir()
-    legacy = home / "state" / "connection.json"
-    legacy.write_text('{"tunnel_id":"tunnel_' + "b" * 32 + '"}')
-    calls = local(monkeypatch, [])
-    monkeypatch.setattr(
-        onboarding.getpass,
-        "getpass",
-        lambda _: pytest.fail("Cloudflare setup cannot request a Tunnel key"),
-    )
-    assert onboarding.run(Settings(home, home / "work"), edit=True) == 0
-    output = capsys.readouterr().out
-    assert "Cloudflare MCP is already paired" in output
-    assert "cloud-agent" in output and "example.workers.dev" in output
-    assert "tunnel_" not in output
-    assert calls == []
-    assert legacy.read_text() == '{"tunnel_id":"tunnel_' + "b" * 32 + '"}'
-    assert pairing.exists()
-
-
-def test_malformed_cloud_pairing_never_falls_back_to_tunnel_prompt(
-    tmp_path, monkeypatch
-):
-    home = tmp_path / "owner"
-    home.mkdir()
-    (home / "cloud-pairing.json").write_text('{"relay":"invalid"}', encoding="utf-8")
-    calls = local(monkeypatch, [])
-    monkeypatch.setattr(
-        onboarding.getpass,
-        "getpass",
-        lambda _: pytest.fail("Invalid pairing must not trigger Tunnel key prompt"),
-    )
-    with pytest.raises((ValueError, KeyError)):
-        onboarding.run(Settings(home, home / "work"), edit=True)
-    assert calls == []
-
-
 def test_paired_cloudflare_default_start_uses_cloud_agent(tmp_path, monkeypatch):
-    home = tmp_path / "owner"
-    home.mkdir()
-    (home / "cloud-pairing.json").write_text(
-        '{"relay":"https://example.workers.dev","device_id":"' + "a" * 32 + '"}',
-        encoding="utf-8",
+    selected = settings(tmp_path)
+    monkeypatch.setattr(
+        onboarding,
+        "paired_cloud",
+        lambda _: ("https://example.workers.dev", "a" * 32),
     )
     monkeypatch.setattr(
         owner_command, "headless_state", lambda _: {"connection_mode": "online"}
@@ -372,20 +234,19 @@ def test_paired_cloudflare_default_start_uses_cloud_agent(tmp_path, monkeypatch)
     args = SimpleNamespace(
         offline=False, online=False, detach=False, json=False, access=None
     )
-    assert cli._prepare_startup(args, Settings(home, home / "work")) is None
+    assert cli._prepare_startup(args, selected) is None
     assert args.offline is False
-    assert args.online is False
 
 
-def test_explicit_online_uses_the_paired_cloudflare_device(tmp_path):
-    home = tmp_path / "owner"
-    home.mkdir()
-    (home / "cloud-pairing.json").write_text(
-        '{"relay":"https://example.workers.dev","device_id":"' + "a" * 32 + '"}',
-        encoding="utf-8",
+def test_explicit_online_uses_paired_cloudflare_device(tmp_path, monkeypatch):
+    selected = settings(tmp_path)
+    monkeypatch.setattr(
+        onboarding,
+        "paired_cloud",
+        lambda _: ("https://example.workers.dev", "a" * 32),
     )
     args = SimpleNamespace(
         offline=False, online=True, detach=False, json=False, access=None
     )
-    assert cli._prepare_startup(args, Settings(home, home / "work")) is None
+    assert cli._prepare_startup(args, selected) is None
     assert args.online is True and args.offline is False

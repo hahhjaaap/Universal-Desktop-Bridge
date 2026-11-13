@@ -1,5 +1,7 @@
 # Windows startup layout candidate
 
+> **UDB 0.12.0 documentation review (2026-11-13):** This test/candidate record is not proof of the latest Windows release or live acceptance. See [version/status](current-version.md).
+
 The default build remains `onefile` until the candidate's Windows evidence is
 reviewed. This change neither installs software on the owner's device nor
 changes the public release. Both layouts use the canonical UDB package and the

@@ -1,5 +1,7 @@
 # Offline synthetic fixture for Cloudflare scoped-read acceptance
 
+> **UDB 0.12.0 documentation review (2026-11-13):** Staging/opt-in instructions do not change live Worker, OAuth, owner permissions or secrets. See [version/status](current-version.md).
+
 This is a **staging-only** test project generator for issue #94. It cannot
 deploy the Cloudflare Worker, grant access, authenticate ChatGPT, or prove that
 the Windows device is reachable. Do not run the acceptance against real

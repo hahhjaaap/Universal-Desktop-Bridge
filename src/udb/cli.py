@@ -231,7 +231,9 @@ class _UdbArgumentParser(argparse.ArgumentParser):
 
     def error(self, message):
         if message.startswith("argument COMMAND: invalid choice:"):
-            match = re.search(r"invalid choice: '([A-Za-z][A-Za-z0-9_-]{0,31})'", message)
+            match = re.search(
+                r"invalid choice: '([A-Za-z][A-Za-z0-9_-]{0,31})'", message
+            )
             if match:
                 wrong = match.group(1)
                 commands = next(
@@ -243,11 +245,7 @@ class _UdbArgumentParser(argparse.ArgumentParser):
                     (),
                 )
                 suggestion = difflib.get_close_matches(wrong, commands, n=1, cutoff=0.6)
-                hint = (
-                    f" Did you mean 'udb {suggestion[0]}'?"
-                    if suggestion
-                    else ""
-                )
+                hint = f" Did you mean 'udb {suggestion[0]}'?" if suggestion else ""
                 self.exit(
                     2,
                     f"UDB: Unknown command '{wrong}'.{hint}\n"

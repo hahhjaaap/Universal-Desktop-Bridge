@@ -1,6 +1,8 @@
 # UDB Desktop Bridge — ChatGPT plugin
 
-This package connects ChatGPT to the existing UDB staging Streamable HTTP MCP server.
+> **UDB 0.12.0 documentation review (2026-11-13):** Staging/opt-in instructions do not change live Worker, OAuth, owner permissions or secrets. See [version/status](../../docs/current-version.md).
+
+This optional package targets a reviewed **staging** Streamable HTTP MCP server. The listed staging device ID is an example of that integration, not an automatically configured device for other installations. Obtain the actual paired URL from `udb mcp-config` and verify OAuth/owner grants independently.
 
 - **Transport:** Streamable HTTP
 - **Authentication:** Cloudflare Access Managed OAuth with Dynamic Client Registration (DCR)

@@ -1,9 +1,14 @@
 # Checklist ghép nối UDB ↔ Cloudflare ↔ ChatGPT (owner-attended)
 
+> **UDB 0.12.0 docs review (2026-11-13):** **Current UDB 0.12.0 source guidance.** Verify the installed executable, Cloudflare Worker, OAuth and owner grants separately; source changes do not update them. See [version/status](current-version.md).
+
 > **Trạng thái:** hướng dẫn chuẩn bị, **không** phải bằng chứng đã kết nối.
 > Mọi thao tác cấp quyền/đăng nhập đều cần chủ máy tự xác nhận.
 
-> **Trạng thái mã nguồn (04/11/2026):** PR #85–#88 đã vào `main`.
+> **Mốc lịch sử (04/11/2026):** PR #85–#88 đã vào `main`.
+> **Đối chiếu 13/11/2026:** UDB v0.12.0 đã bỏ kết nối OpenAI Tunnel công khai;
+> thiết bị mới phải ghép Cloudflare bằng `udb setup`. Không dùng các hướng
+> dẫn Tunnel ID trong tài liệu/phần mềm cũ để thay cho ghép nối Cloudflare.
 > Máy có `cloud-pairing.json` hợp lệ sẽ ưu tiên Cloudflare trong
 > `udb setup`, `udb setup --edit`, GUI và `udb doctor`. **Không nhập URL
 > workers.dev vào ô Tunnel ID**. Kết nối Cloudflare vẫn chỉ được xác nhận

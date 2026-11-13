@@ -100,3 +100,30 @@ def test_existing_download_is_preserved(tmp_path):
             opener=lambda *a, **k: pytest.fail("Must not fetch over an existing file"),
         )
     assert target.read_bytes() == b"keep"
+
+
+def test_retired_tunnel_client_cannot_enter_new_builds(tmp_path, monkeypatch):
+    """Reject the removed OpenAI Tunnel helper before attempting a download."""
+    import json
+    import sys
+
+    manifest = {
+        "components": [
+            {
+                "name": "tunnel-client",
+                "binary": "bin/tunnel-client.exe",
+                "source_url": "https://public.example/retired.zip",
+            }
+        ]
+    }
+    (tmp_path / "components.json").write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["fetch_build_assets.py", "--assets", str(tmp_path)],
+    )
+    with pytest.raises(ValueError, match="Unknown helper"):
+        runpy.run_path(
+            str(Path(__file__).resolve().parents[1] / "tools/fetch_build_assets.py"),
+            run_name="__main__",
+        )

@@ -1,5 +1,7 @@
 # System-level simulation and Windows browser fixture reliability
 
+> **UDB 0.12.0 documentation review (2026-11-13):** This test/candidate record is not proof of the latest Windows release or live acceptance. See [version/status](current-version.md).
+
 UDB already runs a full pytest matrix on Windows/Linux, Python 3.11/3.12,
 plus native Windows browser, EXE/package and installer rollback checks. This
 addition makes the *scope and gaps* explicit rather than claiming every possible

@@ -161,13 +161,13 @@ class Desktop:
         UIA runtime IDs are compared before/after to identify the new tab.
         Existing tab names, URLs and content are not read.
         """
-        from .chrome_aura import launch_target
         from .chrome_tab_identity import observe_tabs, register_new_tab
         from .host_browser import validate_url
 
         self.interactive()
         target = validate_url(url)
-        chrome_target, branding_requested = launch_target(target)
+        # Open the validated URL directly; retired Aura markers are ignored.
+        chrome_target = target
         before = self._chrome_windows()
         if not before:
             raise PolicyError(
@@ -205,7 +205,7 @@ class Desktop:
             chrome_windows_after=len(after),
             existing_window_reused_observed=bool(after)
             and {row[0] for row in before} == {row[0] for row in after},
-            branding_requested=branding_requested,
+            branding_requested=False,
             branding_verified=False,
             native_tab_marker_verified=native_marker,
             dom_attached=False,

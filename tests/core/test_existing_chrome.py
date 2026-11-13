@@ -118,12 +118,10 @@ def test_open_tab_is_a_recognized_desktop_action():
     Desktop.validate_options("open_chrome_tab")
 
 
-def test_open_tab_uses_opted_in_chrome_aura_launcher(monkeypatch, tmp_path):
-    from udb.chrome_aura import EXTENSION_ID
-
+def test_open_tab_ignores_retired_aura_marker(monkeypatch, tmp_path):
     marker = tmp_path / "UniversalDesktopBridge" / "chrome-aura-enabled"
     marker.parent.mkdir()
-    marker.write_text(EXTENSION_ID, encoding="ascii")
+    marker.write_text("ancaoelohcjcbbmncfhimpookhdelhle", encoding="ascii")
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     d = desktop()
     calls = []
@@ -134,9 +132,6 @@ def test_open_tab_uses_opted_in_chrome_aura_launcher(monkeypatch, tmp_path):
 
     monkeypatch.setattr("udb.computer_desktop.subprocess.run", run)
     result = d.open_chrome_tab("https://example.org/ai?test=1")
-    assert result["branding_requested"] is True
+    assert result["branding_requested"] is False
     assert result["branding_verified"] is False
-    assert calls[0][0] == CHROME
-    assert calls[0][1] == "--new-tab"
-    assert calls[0][2].startswith(f"chrome-extension://{EXTENSION_ID}/launch.html#")
-    assert "https%3A%2F%2Fexample.org%2Fai%3Ftest%3D1" in calls[0][2]
+    assert calls == [[CHROME, "--new-tab", "https://example.org/ai?test=1"]]

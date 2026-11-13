@@ -1,5 +1,7 @@
 # ChatGPT Common Room
 
+> **UDB 0.12.0 documentation review (2026-11-13):** Current source targets UDB 0.12.0; installed Windows releases and deployed Cloudflare services must be verified independently. See [version/status](../../docs/current-version.md).
+
 Copy this example folder to `chatgpt-workspace` inside your registered UDB project. Requires Python 3.11+, Tk, and Microsoft Edge **or** Google Chrome on Windows. Install optional browser/image dependencies with `python -m pip install --target browser_deps -r requirements-browser.txt`. Conversation databases, screenshots, and installed dependencies stay local.
 
 ## Workspace v2 — cửa sổ chung

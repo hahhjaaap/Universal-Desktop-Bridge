@@ -1,5 +1,7 @@
 # Staging gateway: source and deployment
 
+> **UDB 0.12.0 documentation review (2026-11-13):** Staging/opt-in instructions do not change live Worker, OAuth, owner permissions or secrets. See [version/status](../docs/current-version.md).
+
 The single active UDB Worker is `udb-private-relay-staging`. The earlier
 `udb-private-relay` Worker was deleted. Do not redeploy that legacy Worker.
 

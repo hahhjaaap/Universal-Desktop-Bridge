@@ -1,5 +1,7 @@
 # Compact local controls
 
+> **UDB 0.12.0 docs review (2026-11-13):** **Current UDB 0.12.0 source guidance.** Verify the installed executable, Cloudflare Worker, OAuth and owner grants separately; source changes do not update them. See [version/status](current-version.md).
+
 Launch with `udb gui`. When Windows provides a system tray, the GUI opens a small
 control panel and registers a UDB tray icon. Click that icon to reopen controls;
 its menu also offers pause, background-session closure and **Thoát UDB**.
@@ -9,11 +11,11 @@ local permissions, reviews and configuration. Its **Thu gọn** button returns
 to the small panel. If a system tray is unavailable, the full manager opens
 first; closing the compact panel returns to it.
 
-**New on source `main` (not yet in the v0.10.0 installer):** The full manager
+**Source GUI on UDB v0.12.x (verify your installed `udb --version`):** The full manager
 has a collapsible **200 px → 72 px** left sidebar with stable accessible route
 names and tooltips. Under **Kết nối → Giao diện ứng dụng**, choose
 **Theo hệ thống Windows**, **Sáng**, or **Tối**. The choice is a local
-appearance preference; no permissions or tunnel credentials are changed.
+appearance preference; no owner permissions or Cloudflare pairing credentials are changed.
 The Windows system color scheme is checked at startup and when Qt reports
 a color-scheme change; unsupported platforms retain startup detection. See the
 [Desktop GUI guide](gui-user-guide.md) for details.
@@ -22,7 +24,7 @@ a color-scheme change; unsupported platforms retain startup detection. See the
 
 | Action | Scope |
 | --- | --- |
-| Kết nối / Ngắt kết nối | The existing ChatGPT tunnel controls |
+| Kết nối / Ngắt kết nối | For a paired device, start/stop its Cloud Agent; for an unpaired device, open attended Cloudflare pairing. Does not grant Windows access or verify a ChatGPT tool call |
 | Tạm dừng / Tiếp tục Windows | The local input-pause latch; grants remain unchanged |
 | Tôi đăng nhập browser / Trả về cho AI | The existing UDB-owned browser handoff; disabled during unavailable capacity or another local operation |
 | Đóng phiên nền | Disable new host sessions and close UDB browser/workspace sessions |

@@ -1,7 +1,10 @@
 # Windows control tools
 
-The unified catalog has **59 public tools**, backed by the same 67 backend
-interfaces. Two overlapping Windows interfaces are consolidated:
+> **UDB 0.12.0 documentation review (2026-11-13):** Current source targets UDB 0.12.0; installed Windows releases and deployed Cloudflare services must be verified independently. See [version/status](current-version.md).
+
+The public catalog is generated from registered schemas and handlers; run
+`udb tools` to obtain the actual count for your installed build. Two
+Windows interfaces are consolidated:
 
 | Public entry point | Actions | Legacy interface retained |
 | --- | --- | --- |

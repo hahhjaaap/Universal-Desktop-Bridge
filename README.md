@@ -1,5 +1,7 @@
 # Universal Desktop Bridge (UDB)
 
+> **Version baseline (2026-11-13):** Source targets **UDB 0.12.0**; the published Windows v0.12.0 release is immutable and may use an earlier commit. The installed EXE, Cloudflare deployment and GitHub source are separate. See [version matrix](docs/current-version.md).
+
 **Windows-first MCP bridge for ChatGPT and other supported MCP clients.** UDB provides one Python package, one `udb` CLI and a derived public tool catalog (`udb tools` reports the actual count) for guarded local computer work. Its source of truth is `src/udb/`; the root-level `bridge.py` and `udb_*.py` files are compatibility launchers, not separate implementations.
 
 **Tiếng Việt:** UDB kết nối trợ lý AI với máy tính Windows theo quyền do chủ máy cấp. Hỗ trợ thao tác tệp, terminal, ứng dụng, trình duyệt riêng biệt và rà soát hóa đơn Excel. **Không tự cấp quyền, không tự kê khai thuế, không tự sửa dữ liệu kế toán gốc.**
@@ -223,10 +225,10 @@ Run locally in your owner terminal:
 ```powershell
 udb status --watch
 udb status --watch --json --interval 1 --count 10
-udb reconnect --wait 30 --json
+udb doctor --cloud --json
 ```
 
-The status viewer opens no GUI and reports heartbeat/uptime, local tunnel and worker readiness, active action/batch progress, the last operation and recent tool outcomes. It omits command bodies, page contents, selectors and result payloads. The viewer does not start the manager or change permissions. `udb reconnect` requests a new tunnel for the exact live headless process, preserving local grants and the host worker. Use it outside active tool calls: reconnection can drop an in-flight response; inspect status/page state before retrying uncertain input. It does not update the saved offline/online startup preference.
+`udb status` observes the local agent and Cloud Agent process. `udb doctor --cloud --json` provides local Cloudflare diagnostics. Neither proves ChatGPT authentication or tool discovery. The old Tunnel reconnect workflow is not a v0.12.0 Cloudflare setup procedure; avoid replaying uncertain operations.
 
 `bridge_status.readiness` distinguishes a responding MCP transport from worker readiness, pause and owner grants, and includes the next local action. If a client exposes only status/project tools, refresh its MCP catalog after updating; a plugin with a fixed tool allowlist must also expose the canonical browser tools. Reconnection alone cannot add tools to that allowlist.
 
@@ -255,36 +257,19 @@ window when several Chrome windows/profiles are open; inspect the returned
 window-reuse observation and the actual desktop before continuing. The tab
 uses the user's current Chrome profile and signed-in website context.
 
-### UDB Aura tab identity (optional Chrome extension)
+### Visible Chrome tabs without UDB Aura
 
-The existing-Chrome action can use the **UDB Aura** Manifest V3 extension in
-`chrome-extension/udb-aura/`. When installed and explicitly enabled, UDB
-opens a local extension launch page; the extension opens the destination in
-the **existing Chrome window**, groups it under **UDB • AI** (cyan), sets an
-**AI** toolbar badge, and injects a compact mint AI label **only into
-explicitly marked public HTTP(S) tabs**. It also adds a best-effort
-UDB favicon on marked tabs, without changing their page titles. It does not
-read page content or upload browsing data. Removing the mark removes the
-UDB favicon; Chrome does not allow arbitrary RGB effects in its native tab strip.
+The owner-granted `computer_desktop(action="open_chrome_tab")` command opens
+a validated HTTP(S) URL directly in an already running Chrome window. It
+does not attach CDP, read personal tab content, or install an extension.
+Chrome window reuse and UIA identity observations are best-effort.
 
-1. In Chrome, visit `chrome://extensions`, turn on **Developer mode**,
-   choose **Load unpacked**, and select `chrome-extension/udb-aura/`.
-2. Verify that the extension ID is `ancaoelohcjcbbmncfhimpookhdelhle`.
-3. In a **local owner terminal**, run
-   `powershell -NoProfile -File tools/enable_chrome_aura.ps1` and confirm
-   the ID displayed in Chrome. This writes an opt-in marker under
-   `%LOCALAPPDATA%\UniversalDesktopBridge`.
-4. After deploying a new UDB build, call `computer_desktop` with
-   `action="open_chrome_tab"` and a public URL in `text`. The result
-   reports `branding_requested`; actual group/badge application must be
-   verified visually. Without the marker, the ordinary visible tab is used.
-5. Disable via `powershell -NoProfile -File tools/enable_chrome_aura.ps1 -Disable`.
-
-**Permissions:** The extension requests Chrome `tabs`, `tabGroups`,
-`storage`, `scripting` and HTTP(S) site access to decorate only the
-marked tabs. This is broader Chrome permission than the original headless
-browser; review the extension source before installing. It is never
-silently installed or enabled by UDB.
+The optional UDB Aura Chrome extension and its bundle/launcher have been
+retired from source after the published v0.12.0 release. Deleting UDB source
+does **not** uninstall a Chrome extension previously installed by the owner;
+remove it manually from `chrome://extensions` if desired. An old local opt-in
+marker no longer changes which URL UDB opens. The UDB-owned `host_browser`
+status pill and independent virtual pointer require no Chrome extension.
 
 ### Automatic independent AI cursor
 
@@ -324,8 +309,7 @@ changes computer permissions, credentials or MCP access. The desktop shell
 uses shared Qt theme tokens and visible keyboard focus states, but it has not
 yet completed all enterprise GUI / accessibility milestones.
 
-The overview reports the local **Agent**, the selected **Cloud Agent or
-legacy Tunnel** state, and separate **ChatGPT** verification. ChatGPT remains
+The overview reports the local **Agent**, the **Cloud Agent process** state, and separate **ChatGPT** verification. ChatGPT remains
 **Chưa xác minh** until a read-only tool is actually invoked in the
 conversation. A failed local status read cannot retain a stale green
 indicator. Neither transport state proves ChatGPT tool discovery. The emergency
@@ -340,7 +324,7 @@ the existing allow-listed `motion` preference in `gui.json`; it cannot
 change browser, project or computer permissions.
 
 The full manager also includes a persistent themed page header with an
-transport-specific **Cloud Agent/Tunnel** (not ChatGPT) indicator. The **Hoạt động MCP** tab
+transport-specific **Cloud Agent process** (not ChatGPT) indicator. The **Hoạt động MCP** tab
 displays a bounded, sanitized tool activity timeline. Owner-triggered audit
 export writes only timestamps, tool labels and statuses to a new JSON file,
 after confirmation, and never overwrites an existing file.
@@ -362,7 +346,7 @@ assessment or the state of every background process. Failed reads show
 
 The **Kết nối** page now has a native three-step onboarding panel showing
 separately whether (1) the local Agent responds, (2) Cloud Agent is running
-or the legacy Tunnel is ready, and (3) ChatGPT has actually called a UDB tool. The third step stays
+and (3) ChatGPT has actually called a UDB tool. The third step stays
 **Chưa xác minh** until verified directly in ChatGPT; no remote grant or
 invented end-to-end success state is introduced. Failed local reads clear
 stale ready indicators.

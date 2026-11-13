@@ -1268,7 +1268,7 @@ def test_browser_open_mcp_schema_and_rpc_allow_omitted_session(tmp_path, monkeyp
     async def check():
         tools = await mcp.list_tools()
         tool = next(t for t in tools if t.name == "host_browser")
-        assert "session_id" not in tool.inputSchema.get("required", [])
+        assert "session_id" not in tool.input_schema.get("required", [])
         result = await mcp.call_tool(
             "host_browser", {"action": "open", "url": "https://example.org/"}
         )

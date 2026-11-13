@@ -1,5 +1,7 @@
 # Dedicated Cloudflare staging deployment for TD-02 (#94)
 
+> **UDB 0.12.0 docs review (2026-11-13):** **Historical design/evidence, not a current runbook.** Earlier experiments, metrics and version-specific status do not establish current v0.12.0 behavior; never execute obsolete deployment/transport instructions. See [version/status](current-version.md).
+
 > **Current single-gateway setup (11/11/2026):** The former production
 > `udb-private-relay` Worker and its Access application have been removed.
 > Both `cloudflare/wrangler.jsonc` and `wrangler.staging.jsonc` now target
@@ -8,17 +10,21 @@
 > and run the manual `UDB staging gateway deploy (manual)` workflow. Do not
 > follow the older production-worker deployment steps below.
 
-This runbook covers a **separate staging Worker**, not a replacement for the
-current personal/production `udb-private-relay` Worker. It does not grant
-remote access or establish authenticated ChatGPT reads by itself.
+**Archived two-Worker design:** The sections below originally described a
+separate staging deployment alongside a now-deleted `udb-private-relay`
+Worker. They are kept as historical acceptance context, not instructions to
+recreate that Worker. The current owner-controlled deployment uses only
+`udb-private-relay-staging` as documented in
+[STAGING-OPERATIONS.md](../cloudflare/STAGING-OPERATIONS.md). A successful
+deployment alone does not grant ChatGPT read access.
 
 ## Safe configuration and owner-controlled deploy
 
-The opt-in file `cloudflare/wrangler.staging.jsonc` names
-`udb-private-relay-staging`, keeps the reviewed `DeviceRelay` class and
-SQLite migration history, and defines **no** routes, credentials, OAuth
-audience, user identity, device token or production account. The standalone
-config does not inherit the production Worker's Durable Object storage.
+Both `cloudflare/wrangler.jsonc` and `cloudflare/wrangler.staging.jsonc`
+now target the **same** `udb-private-relay-staging` Worker, retaining the
+reviewed `DeviceRelay` class and SQLite migration history. Neither file
+contains routes, credentials, OAuth audiences, user identities or device
+tokens. Do not recreate the deleted production-named Worker.
 
 Run first from the repository root:
 
@@ -26,26 +32,28 @@ Run first from the repository root:
 python tools/check_staging_worker_config.py
 ```
 
-The validator is entirely offline. It rejects renamed production Workers,
-routes, environment variables, custom account IDs and changed Durable Object
+The validator is entirely offline. It checks both Wrangler files for the
+same staging identity, forbids alternate Worker names, routes, environment
+variables and custom account IDs, and enforces expected Durable Object
 bindings/migrations. It outputs only fixed non-secret status fields.
 
-An account owner must review the Cloudflare account and Worker before any
-deployment. From the reviewed source checkout:
+Before any deployment, the owner must review the Cloudflare account, existing
+Worker revision, grants and separate `udb-staging` GitHub environment approval.
+For source/config validation only, from the reviewed checkout:
 
 ```shell
+python tools/check_staging_worker_config.py
 cd cloudflare
-npx wrangler whoami
 npx wrangler deploy --dry-run --config wrangler.staging.jsonc
-npx wrangler deploy --config wrangler.staging.jsonc
 ```
 
-**Only the final command changes Cloudflare infrastructure.** Do not run it
-without an authorized staging account and explicit owner review. Never use
-`wrangler deploy` without `--config wrangler.staging.jsonc` for this test.
-Keep the current Worker deployment version, Durable Object data and private
-grants unchanged. Record the deployed staging Worker version/commit privately
-so the owner can roll it back.
+**Do not deploy from the historical command sequence in this document.** The
+current approved deployment entry point is the manually dispatched GitHub
+workflow **UDB staging gateway deploy (manual)** on reviewed `main` (with its
+required environment protection). Its package script explicitly uses
+`wrangler deploy --config wrangler.staging.jsonc --keep-vars --strict`.
+Never infer approval from a successful dry run. Record the deployed revision
+privately and preserve existing Durable Object state and grants.
 
 The staged code defaults to denying authenticated MCP requests until its
 separate authentication and grants have been explicitly configured. In the
@@ -82,10 +90,10 @@ denial/revocation steps below separate.
 1. **Source/CI:** full Linux/Windows/Node tests pass for the exact reviewed
    source; staging configuration validator passes.
 2. **Deployment:** verify the separate staging Worker and exact version.
-   Configure the GitHub `udb-staging` environment with *non-secret*
-   `UDB_STAGING_RELAY` and `UDB_STAGING_DEVICE_ID`. Run the
-   `Cloudflare staging read-only preflight` workflow manually. Its success
-   proves metadata and unauthenticated rejection only.
+   If using the dedicated read-only preflight, configure reviewed *non-secret*
+   `UDB_STAGING_RELAY` and `UDB_STAGING_DEVICE_ID` in its approved environment.
+   Run the `Cloudflare staging read-only preflight` workflow manually. Success
+   proves metadata and unauthenticated rejection only, not live ChatGPT access.
 3. **Authenticated live call:** sign into the staging device MCP connection
    in ChatGPT with the approved owner identity. Discover the granted subset
    of `bridge_status`, `list_projects`, `list_files`, `read_file`,
@@ -102,11 +110,12 @@ denial/revocation steps below separate.
    Record only pass/fail codes, the reviewed deployment SHA and synthetic
    hashes; never publish access tokens, identities or user files.
 
-The current ChatGPT UDB plugin advertising only two metadata tools is **not**
-evidence that four new project tools are available. The owner must refresh
-the actual MCP connection/tool catalog after the staged Worker, access policy,
-device permissions and local project all work.
+A ChatGPT UDB plugin advertising only metadata tools is **not** proof that
+project-read tools are available. The owner must refresh the actual MCP
+connection/tool catalog and test reads after the reviewed Worker, Access
+policy, device permissions and local project have been verified.
 
-Keep issue #94 open until real OAuth consent, successful read, denial,
-revoke/reconnect and repeatability have been observed. If any gate fails,
-leave production untouched; restore only the isolated staging resources.
+Regardless of GitHub issue status, do **not** treat this acceptance gate as
+passed until real OAuth consent, successful read, denial, revoke/reconnect
+and repeatability have been independently observed and recorded. If any gate
+fails, do not change owner permissions or redeploy the deleted Worker.

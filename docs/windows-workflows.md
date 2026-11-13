@@ -1,5 +1,7 @@
 # Browser and Windows workflows
 
+> **UDB 0.12.0 documentation review (2026-11-13):** Current source targets UDB 0.12.0; installed Windows releases and deployed Cloudflare services must be verified independently. See [version/status](current-version.md).
+
 UDB keeps ordinary web work in a private background Chrome/Edge profile. Windows
 desktop actions and utilities use the existing locally issued computer-access
 grant. No remote tool enables that grant or clears a local emergency pause.

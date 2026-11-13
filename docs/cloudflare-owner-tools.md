@@ -1,8 +1,8 @@
 # Cloudflare owner-gated tool catalog (opt-in)
 
-UDB's Windows MCP server defines 36 tools in the current source, but the
-original Cloudflare `udb:read` gateway intentionally exposed only six of
-them. The extra tools include file changes, sandbox jobs, UDB-owned browser
+> **Docs reviewed 2026-11-13 — UDB 0.12.0:** **Staging/opt-in scope.** Features and grants described below are not enabled for arbitrary devices and are not proof of a live ChatGPT connection. Check [current-version.md](current-version.md) and the installed `udb --version` before using commands.
+
+The local UDB tool catalog is generated from Core and Companion definitions; verify the current count with `udb tools`. The original Cloudflare `udb:read` gateway exposed a deliberately restricted read-only subset. The extra tools include file changes, sandbox jobs, UDB-owned browser
 sessions and optional Windows host/desktop operations. **Discoverability is
 not authorization and authorizing a cloud identity is not local desktop
 consent.**
@@ -84,7 +84,7 @@ For the exact, already paired staging device:
 
 **The ChatGPT connector may cache a fixed tool catalog.** Reconnect or
 recreate the **owner-approved staging MCP connection** after these tests;
-deploying a Worker alone does not install 36 tools in an existing ChatGPT
+deploying a Worker alone does not expose the expanded tool catalog in an existing ChatGPT
 connector. Do not claim complete remote tool availability until the client
 actually lists and invokes the approved tools.
 

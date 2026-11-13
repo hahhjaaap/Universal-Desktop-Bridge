@@ -1,5 +1,7 @@
 # Contributing to Universal Desktop Bridge
 
+> **UDB 0.12.0 documentation review (2026-11-13):** Current source targets UDB 0.12.0; installed Windows releases and deployed Cloudflare services must be verified independently. See [version/status](docs/current-version.md).
+
 UDB is a Windows-first, owner-authorized MCP bridge. Contributions are
 welcome when they preserve existing tools, device boundaries and reproducible
 installation. Please read [SECURITY.md](SECURITY.md) before reporting a
@@ -10,8 +12,9 @@ security defect.
 Use one focused PR for a measurable change. Explain the baseline, behavior
 change, regression tests, performance impact and rollback strategy. The
 priorities are **speed → stability → Windows control → connection UX →
-packaging**, subject to the P0 authentication, release-signing and
-end-to-end acceptance gates in [the roadmap](docs/public-release-plan.md).
+packaging**, subject to the outstanding authentication, signing and
+end-to-end acceptance gates described in [security](SECURITY.md) and the
+[historical readiness plan](docs/public-release-plan.md).
 
 Do not edit a real user's owner grants, Cloudflare secrets, OAuth identity,
 Windows permissions, live project registry or installed release as part of

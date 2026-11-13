@@ -1,8 +1,11 @@
 # UDB public-release readiness plan (proposal)
 
+> **UDB 0.12.0 docs review (2026-11-13):** **Historical design/evidence, not a current runbook.** Earlier experiments, metrics and version-specific status do not establish current v0.12.0 behavior; never execute obsolete deployment/transport instructions. See [version/status](current-version.md).
+
 **Date:** 2026-11-04  
-**Status:** Proposed roadmap; not an approved date or claim of production readiness  
-**Baseline:** `main` at `913b338658c898df64502f307ade4ed5c65d8df3`; source package `0.11.0`
+**Status:** Historical proposal based on UDB 0.11.0; not an approved date or claim of production readiness  
+**Baseline (historical, 2026-11-04):** `main` at `913b338658c898df64502f307ade4ed5c65d8df3`; source package `0.11.0`  
+**Current source/release note (2026-11-12):** UDB v0.12.0 is the latest published Windows release; Cloudflare-only remote MCP replaced the former OpenAI Tunnel path. `SECURITY.md`, `CONTRIBUTING.md`, and `PRIVACY.md` now exist, but security and privacy approvals remain separate release gates. See [release notes](release-notes.md), [release security](release-security.md), and [staging operations](../cloudflare/STAGING-OPERATIONS.md).
 
 This is a release-gated plan to make Universal Desktop Bridge usable by people
 outside the developer's own Windows machine. It is **not** authorization to
@@ -59,8 +62,7 @@ network. Disclose this clearly before the user authorizes a connection.
 - Common Room source GUI, Edge/Chrome fallback, browser workflow and
   snapshot improvements are merged; source compatibility does not guarantee
   that a user's installed executable or plugin reflects every merge.
-- Public policy/docs missing in repository root on this review:
-  `SECURITY.md`, `CONTRIBUTING.md`, dedicated `PRIVACY.md`.
+- **Historical gap at the 0.11.0 baseline:** root `SECURITY.md`, `CONTRIBUTING.md`, and dedicated `PRIVACY.md` were missing at the time. These files now exist, but their existence does not constitute an independent security assessment or finalized public privacy policy.
 - Windows CLI startup was measured around 8–10 seconds on one machine;
   track independently in [issue #89](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/89).
   Root cause and target speed remain unverified.

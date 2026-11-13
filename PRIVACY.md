@@ -1,5 +1,7 @@
 # UDB data-flow and privacy disclosure
 
+> **UDB 0.12.0 documentation review (2026-11-13):** Current source targets UDB 0.12.0; installed Windows releases and deployed Cloudflare services must be verified independently. See [version/status](docs/current-version.md).
+
 **Status: draft for developer and private-beta review, 2026-11-06.**
 This is a technical disclosure of source capabilities, **not** a finalized
 public privacy notice, a promise of retention periods or authorization to

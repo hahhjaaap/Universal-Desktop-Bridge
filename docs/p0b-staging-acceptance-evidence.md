@@ -1,5 +1,7 @@
 # P0-B owner-attended staging acceptance checklist
 
+> **UDB 0.12.0 docs review (2026-11-13):** **Opt-in/staging evidence.** Code, tests and staging results do not imply production access, current grants or end-to-end ChatGPT connectivity. See [version/status](current-version.md).
+
 This gate is a **local schema checker for a redacted, manually reviewed
 acceptance checklist**. It does not perform OAuth, verify signatures, deploy
 a Worker, inspect live Windows project files or independently authenticate

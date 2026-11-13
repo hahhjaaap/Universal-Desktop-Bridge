@@ -80,7 +80,7 @@ def main():
     for item in manifest["components"]:
         name = item["name"]
         if (
-            name not in {"tunnel-client", "ffmpeg", "ffprobe"}
+            name not in {"ffmpeg", "ffprobe"}
             or item["binary"] != "bin/" + name + ".exe"
         ):
             raise ValueError("Unknown helper")

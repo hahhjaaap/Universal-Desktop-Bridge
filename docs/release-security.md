@@ -1,7 +1,9 @@
 # Windows release trust and signing
 
-**Status (2026-11-01):** UDB's published v0.10.0 standalone installer is
-SHA-256 checked, but **not Authenticode-signed**. A SHA256SUMS file generated
+> **UDB 0.12.0 docs review (2026-11-13):** **Current UDB 0.12.0 source guidance.** Verify the installed executable, Cloudflare Worker, OAuth and owner grants separately; source changes do not update them. See [version/status](current-version.md).
+
+**Published v0.12.0 release status (2026-11-13):** UDB's latest published v0.12.0 standalone installer is
+SHA-256 checked, but **not Authenticode-signed**, as confirmed by its release notes. A SHA256SUMS file generated
 by the same release workflow detects accidental corruption but does not, on
 its own, authenticate the publisher against a compromised release workflow.
 

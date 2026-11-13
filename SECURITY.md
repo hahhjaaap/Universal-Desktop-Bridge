@@ -1,5 +1,7 @@
 # Security policy and private vulnerability reporting
 
+> **UDB 0.12.0 documentation review (2026-11-13):** Current source targets UDB 0.12.0; installed Windows releases and deployed Cloudflare services must be verified independently. See [version/status](docs/current-version.md).
+
 **Status:** Private-beta preparation, 2026-11-06. This file does not certify that
 UDB has passed an independent security audit or that any hosted public service
 is ready. Source `main`, released Windows installers and deployed Workers can

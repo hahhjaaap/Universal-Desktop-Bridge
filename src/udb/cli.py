@@ -202,7 +202,6 @@ def _everyday_help() -> str:
     return "\n".join(lines)
 
 
-
 def _everyday_help_vi() -> str:
     """Optional Vietnamese help without changing the machine-readable CLI."""
     lines = [
@@ -550,7 +549,6 @@ def _run_gui(args: argparse.Namespace, settings: Settings) -> int:
             ),
             shell=False,
         ).returncode
-
 
 
 def _confirm_attended_maintenance(

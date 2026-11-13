@@ -31,6 +31,7 @@ python -m ruff check src tools tests
 python -m ruff format --check .
 python tools/audit_repository.py --strict
 python tools/check_import_boundaries.py
+python -m pytest tests/test_documentation_consistency.py
 python -m pytest
 node --test cloudflare/tests/*.test.js render/tests/*.test.mjs
 ```
@@ -40,13 +41,23 @@ without `.git`. Windows-native UI, PyInstaller/standalone packaging,
 installer update/rollback, browser and OS-specific tests require their
 matching Windows CI runner. Linux-only green results are insufficient for a
 Windows release. The normal `main` CI matrix and build identity must be
-checked for the exact commit being merged.
+checked for the exact commit being merged. Windows CI runs the test-only
+`tools/run_windows_pytest.py` helper to dispose native Qt resources after
+pytest; it propagates failures and must never be modified to ignore a
+nonzero exit. Keep README's Qt version aligned with `pyproject.toml`, and
+run the documentation consistency tests when changing Markdown links.
 
 For performance changes, record p50/p95 and machine/test configuration before
 and after; do not claim general improvement based on one warm run. For
 authentication or approvals, add denied-path and revocation tests, including
 no fallback to older credentials or different devices. Unknown-outcome
 mutations must not be retried automatically.
+
+**Release protection is still outstanding (issue #147):** the source release
+gate prevents publication from an unprotected `main`, but actual GitHub
+ruleset enforcement and negative push/review tests require repository admin
+configuration. Do not treat passing CI as permission to bypass review or
+publish unsigned Windows binaries.
 
 ## Pull request checklist
 

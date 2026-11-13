@@ -16,8 +16,8 @@ jobs:
   cloudflare-and-observer:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
       # No credentials, deployment, external npm dependencies or private device.
@@ -30,7 +30,7 @@ jobs:
         python: ['3.11', '3.12']
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
@@ -58,7 +58,7 @@ jobs:
       - name: Upload regression scenario report
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: scenarios-${{ matrix.os }}-${{ matrix.python }}
           path: |
@@ -71,7 +71,7 @@ jobs:
       - name: Upload native pointer preview
         if: runner.os == 'Windows'
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: native-pointer-${{ matrix.os }}-${{ matrix.python }}
           path: ${{ runner.temp }}/udb-ui/native-pointer.png
@@ -92,7 +92,7 @@ jobs:
           assert not any("/tests/" in name for name in names), "Tests were packaged into sdist"
           print("Source archive contains no regression suite")
           PY
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         id: artifact_upload
         continue-on-error: true
         with:
@@ -104,7 +104,7 @@ jobs:
   windows-exe:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
@@ -114,7 +114,7 @@ jobs:
       - name: Restore pinned helper binaries
         id: helper_cache
         continue-on-error: true
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: build-assets/bin
           key: udb-public-helpers-${{ runner.os }}-${{ hashFiles('build-assets/components.json') }}
@@ -122,7 +122,7 @@ jobs:
       - name: Save verified helper binaries
         if: steps.helper_cache.outputs.cache-hit != 'true'
         continue-on-error: true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: build-assets/bin
           key: udb-public-helpers-${{ runner.os }}-${{ hashFiles('build-assets/components.json') }}
@@ -134,14 +134,14 @@ jobs:
         run: .\dist\udb.exe _worker core --gui-check --gui-qa-dir "${{ runner.temp }}/udb-quick-ui"
       - name: Upload compact GUI previews
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: compact-gui-previews
           path: ${{ runner.temp }}/udb-quick-ui/*.png
           retention-days: 3
       - name: Exercise managed update and rollback on Windows
         run: python tools/check_installer.py install.ps1 (Get-ChildItem dist/udb-*-windows-standalone.zip | Select-Object -First 1).FullName
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         id: artifact_upload
         continue-on-error: true
         with:

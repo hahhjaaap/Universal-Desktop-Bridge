@@ -19,7 +19,7 @@ jobs:
       UDB_STAGING_RELAY: ${{ vars.UDB_STAGING_RELAY }}
       UDB_STAGING_DEVICE_ID: ${{ vars.UDB_STAGING_DEVICE_ID }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"

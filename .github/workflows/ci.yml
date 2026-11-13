@@ -43,7 +43,11 @@ jobs:
         if: runner.os != 'Linux'
         env:
           UDB_RUN_INTERACTIVE_WINDOWS_TESTS: '1'
-        run: python -m pytest --junitxml="${{ runner.temp }}/udb-tests.xml"
+          PYTHONFAULTHANDLER: '1'
+        # Expose pytest's own return code. Windows has intermittently exited
+        # 1 after reporting all tests green; this diagnoses the discrepancy
+        # without overriding pytest or the Python process exit status.
+        run: python -c "import sys, pytest; code = int(pytest.main(['--junitxml=' + sys.argv[1]])); print('UDB_PYTEST_RETURN=' + str(code), flush=True); sys.exit(code)" "${{ runner.temp }}/udb-tests.xml"
       - name: Run Linux regressions with a session bus
         if: runner.os == 'Linux'
         # Chrome needs a live session bus, even with headless rendering.

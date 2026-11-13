@@ -46,6 +46,26 @@ class Desktop:
             ctypes.POINTER(w.DWORD),
         ]
         self.u.CloseDesktop.argtypes = [w.HANDLE]
+        self.dwm = ctypes.WinDLL("dwmapi", use_last_error=True)
+        self.dwm.DwmGetWindowAttribute.argtypes = [
+            w.HWND,
+            w.DWORD,
+            ctypes.c_void_p,
+            w.DWORD,
+        ]
+        self.dwm.DwmGetWindowAttribute.restype = ctypes.c_long
+
+    def is_cloaked(self, hwnd):
+        """WS_VISIBLE alone also includes hidden UWP/virtual-desktop shells."""
+        value = w.DWORD()
+        if (
+            self.dwm.DwmGetWindowAttribute(
+                hwnd, 14, ctypes.byref(value), ctypes.sizeof(value)
+            )
+            != 0
+        ):
+            raise PolicyError("Window visibility could not be verified; list again")
+        return bool(value.value)
 
     def interactive(self):
         if self.guard is not None and not self.guard():
@@ -74,6 +94,11 @@ class Desktop:
         def visit(hwnd, _):
             if not self.gui.IsWindowVisible(hwnd) or not self.gui.GetWindowText(hwnd):
                 return
+            try:
+                if self.is_cloaked(hwnd):
+                    return
+            except PolicyError:
+                return  # A window may disappear while EnumWindows is running.
             pid = self.process.GetWindowThreadProcessId(hwnd)[1]
             wid = uuid.uuid4().hex
             observed[wid] = (
@@ -89,13 +114,18 @@ class Desktop:
                     pid=pid,
                     bounds=list(self.gui.GetWindowRect(hwnd)),
                     foreground=hwnd == self.gui.GetForegroundWindow(),
+                    minimized=bool(self.gui.IsIconic(hwnd)),
+                    class_name=self.gui.GetClassName(hwnd),
                 )
             )
 
         self.gui.EnumWindows(visit, None)
         self.windows = observed
         return dict(
-            windows=rows, expires_in_seconds=60, coordinates="physical screen pixels"
+            windows=rows,
+            expires_in_seconds=60,
+            coordinates="physical screen pixels",
+            cloaked_windows_hidden=True,
         )
 
     @staticmethod
@@ -224,6 +254,7 @@ class Desktop:
             or not self.gui.IsWindowVisible(hwnd)
             or self.process.GetWindowThreadProcessId(hwnd)[1] != pid
             or self.gui.GetClassName(hwnd) != kind
+            or self.is_cloaked(hwnd)
         ):
             raise PolicyError("Window observation expired or changed; list again")
         if focus and self.gui.GetForegroundWindow() != hwnd:
@@ -859,7 +890,80 @@ class Desktop:
         return self.capture(displays[index]["bounds"])
 
     def screenshot(self, hwnd):
-        return self.capture(self.gui.GetWindowRect(hwnd))
+        # This backend captures screen pixels, not an isolated compositor frame.
+        # Never silently return an occluding application's pixels as this window.
+        identity = (
+            self.process.GetWindowThreadProcessId(hwnd)[1],
+            self.gui.GetClassName(hwnd),
+        )
+        box = self.visible_window_box(hwnd)
+        result = self.capture(box)
+        if self.visible_window_box(hwnd) != box or identity != (
+            self.process.GetWindowThreadProcessId(hwnd)[1],
+            self.gui.GetClassName(hwnd),
+        ):
+            raise PolicyError("Window changed during capture; screenshot discarded")
+        return dict(
+            result,
+            source="visible_window_region",
+            window_content_isolated=False,
+            occlusion_checked=True,
+        )
+
+    def visible_window_box(self, hwnd):
+        self.interactive()
+        if (
+            not self.gui.IsWindow(hwnd)
+            or not self.gui.IsWindowVisible(hwnd)
+            or self.gui.IsIconic(hwnd)
+            or self.is_cloaked(hwnd)
+            or self.gui.GetForegroundWindow() != hwnd
+        ):
+            raise PolicyError(
+                "Window screenshot requires a visible, restored foreground window; "
+                "no focus or screen-capture fallback was used"
+            )
+        left, top, right, bottom = self.gui.GetWindowRect(hwnd)
+        displays = self.display_inventory()["displays"]
+        if not displays:
+            raise PolicyError("No active display for window screenshot")
+        # Maximized windows can have invisible resize borders outside a monitor.
+        box = (
+            max(left, min(m["bounds"][0] for m in displays)),
+            max(top, min(m["bounds"][1] for m in displays)),
+            min(right, max(m["bounds"][2] for m in displays)),
+            min(bottom, max(m["bounds"][3] for m in displays)),
+        )
+        if box[0] >= box[2] or box[1] >= box[3]:
+            raise PolicyError("Window has no visible screen area")
+        reached = False
+        covered = False
+
+        def above(other, _):
+            nonlocal reached, covered
+            if reached:
+                return
+            if other == hwnd:
+                reached = True
+                return
+            if (
+                not self.gui.IsWindowVisible(other)
+                or self.gui.IsIconic(other)
+                or self.is_cloaked(other)
+            ):
+                return
+            bounds = self.gui.GetWindowRect(other)
+            if min(box[2], bounds[2]) > max(box[0], bounds[0]) and min(
+                box[3], bounds[3]
+            ) > max(box[1], bounds[1]):
+                covered = True
+
+        self.gui.EnumWindows(above, None)  # Z-order, including untitled overlays.
+        if not reached or covered:
+            raise PolicyError(
+                "Another window covers the screenshot target; no screen pixels returned"
+            )
+        return box
 
     def capture(self, box):
         import win32con

@@ -32,7 +32,8 @@ async function untilFrames(h, count) {
   assert.equal(h.frames.length, count, "Expected concurrent requests to reach Windows");
 }
 
-for (const name of ["list_files", "read_file", "search_files", "check_python_syntax"]) {
+for (const name of ["list_files", "read_file", "search_files", "check_python_syntax",
+  "host_status", "computer_status"]) {
   test(name + " executes concurrently instead of waiting behind a read", async () => {
     const h = harness();
     const first = h.send(1, "tools/list");
@@ -52,6 +53,18 @@ for (const name of ["list_files", "read_file", "search_files", "check_python_syn
     assert.equal(h.relay.pending.size, 0);
   });
 }
+
+test("owner status scheduling does not grant udb:read access or parallel desktop actions", async () => {
+  const { isReadTool, isParallelReadTool } = await import("../src/read-tools.js");
+  for (const name of ["host_status", "computer_status"]) {
+    assert.equal(isReadTool(name), false);
+    assert.equal(isParallelReadTool(name), true);
+  }
+  for (const name of ["computer_desktop", "computer_process", "host_browser",
+    "host_start_session", "host_close_session", "file_write", "unknown_status"]) {
+    assert.equal(isParallelReadTool(name), false);
+  }
+});
 
 test("ten concurrent reads dispatch before any response; eleventh is refused", async () => {
   const h = harness();

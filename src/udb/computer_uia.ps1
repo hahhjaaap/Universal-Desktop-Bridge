@@ -25,8 +25,13 @@ try {
     # fail to expose ValuePattern/InvokePattern in this short-lived client.
     $providers=[Reflection.Assembly]::Load('UIAutomationClientsideProviders, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35')
     [Windows.Automation.ClientSettings]::RegisterClientSideProviderAssembly($providers.GetName())
+    # Reacquire after provider registration; do not retain a generic wrapper
+    # created before the standard Win32 proxies were available.
+    $root=[Windows.Automation.AutomationElement]::FromHandle([IntPtr][long]$r.hwnd)
+    if(!$root -or $root.Current.ProcessId -ne [int]$r.pid){throw 'Observed window changed'}
     if($r.mode -eq 'snapshot') {
-        $walker=[Windows.Automation.TreeWalker]::ControlViewWalker
+      $view='control'
+      foreach($walker in @([Windows.Automation.TreeWalker]::ControlViewWalker,[Windows.Automation.TreeWalker]::RawViewWalker)) {
         $queue=[Collections.Generic.Queue[object]]::new();$queue.Enqueue($root)
         $rows=[Collections.Generic.List[object]]::new()
         while($queue.Count -gt 0 -and $rows.Count -lt 200) {
@@ -57,7 +62,14 @@ try {
                 }
             }
         }
-        @{ok=$true;elements=$rows.ToArray();truncated=($queue.Count -gt 0)}|ConvertTo-Json -Depth 7 -Compress
+        if($rows.Count -gt 1 -or $view -eq 'raw'){break}
+        # Some providers expose children only in Raw View. Stay below the
+        # same verified HWND; never search the desktop or match another app.
+        $view='raw'
+      }
+        $hasChildren=$rows.Count -gt 1
+        $next=if($hasChildren){''}else{'No accessible child controls exposed. List windows again and select the application frame; do not assume a generic Pane is actionable.'}
+        @{ok=$true;elements=$rows.ToArray();truncated=($queue.Count -gt 0);tree_view=$view;children_exposed=$hasChildren;next_action=$next}|ConvertTo-Json -Depth 7 -Compress
         exit 0
     }
     $conditions=[Collections.Generic.List[Windows.Automation.Condition]]::new()

@@ -43,6 +43,9 @@ _REMOTE_READ_TOOLS = frozenset(
         "read_file",
         "search_files",
         "check_python_syntax",
+        # Scheduling only. These retain their separate owner grants.
+        "host_status",
+        "computer_status",
     }
 )
 

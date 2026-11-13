@@ -3,7 +3,7 @@
 import { HASH, bearer, adminAuthorized, digest, readJson, validRpc, fixedEqual } from "./auth.js";
 import { newPairing, PAIRING_TTL_MS } from "./pairing.js";
 import { handleMcp, protectedResource } from "./mcp.js";
-import { isReadTool } from "./read-tools.js";
+import { isParallelReadTool } from "./read-tools.js";
 
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store",
@@ -17,7 +17,7 @@ const MAX_PENDING_PER_DEVICE = 10;
 const isReadRpc = (rpc) => (
   ["initialize", "tools/list", "ping"].includes(rpc.method) ||
   (rpc.method === "tools/call" &&
-    isReadTool(rpc.params?.name))
+    isParallelReadTool(rpc.params?.name))
 );
 const MAX_REPLY_BYTES = 1024 * 1024;
 const encoder = new TextEncoder();

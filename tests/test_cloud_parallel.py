@@ -12,6 +12,23 @@ import websocket
 from udb import cloud_agent
 
 
+@pytest.mark.parametrize("name", ["host_status", "computer_status"])
+def test_owner_status_is_scheduled_as_a_read_without_changing_authorization(name):
+    assert cloud_agent.is_parallel_read_rpc(
+        {"method": "tools/call", "params": {"name": name}}
+    )
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["computer_desktop", "computer_process", "host_browser", "unknown_status"],
+)
+def test_other_owner_actions_remain_exclusive(name):
+    assert not cloud_agent.is_parallel_read_rpc(
+        {"method": "tools/call", "params": {"name": name}}
+    )
+
+
 def test_pool_lazily_runs_ten_read_rpcs_at_the_same_time(monkeypatch):
     barrier = threading.Barrier(10)
     lock = threading.Lock()

@@ -100,7 +100,23 @@ def test_native_control_patterns_on_one_owned_window(tmp_path, monkeypatch):
 
         cursor, foreground = win32gui.GetCursorPos(), win32gui.GetForegroundWindow()
         last_input = _last_input_tick()
-        tree = action("snapshot")["elements"]
+        snapshot = action("snapshot")
+        assert snapshot["children_exposed"] and snapshot["tree_view"] in {
+            "control",
+            "raw",
+        }
+        tree = snapshot["elements"]
+        listed = desktop.listing()
+        assert listed["cloaked_windows_hidden"] is True
+        assert any(
+            row["pid"] == pid and row["class_name"] == win32gui.GetClassName(hwnd)
+            for row in listed["windows"]
+        )
+        # This fixture never activates itself. A window screenshot must refuse
+        # another foreground app rather than return that app's screen pixels.
+        if win32gui.GetForegroundWindow() != hwnd:
+            with pytest.raises(PolicyError, match="foreground window"):
+                action("screenshot")
         assert any(
             e.get("automation_id") == "Choice" and "Toggle" in e.get("patterns", [])
             for e in tree

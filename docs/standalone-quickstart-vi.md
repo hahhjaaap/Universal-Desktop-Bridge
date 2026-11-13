@@ -46,6 +46,8 @@ trong trợ giúp mặc định. Gõ `udb help advanced` để xem danh sách đ
 `udb logs` vẫn chạy như cũ nhưng nên dùng `udb live` khi theo dõi nhật ký.
 Các thay đổi này chỉ có trong mã nguồn/phiên bản có bổ sung lệnh `help`;
 bản cài v0.12.0 đã phát hành ngày 11/11/2026 không tự được cập nhật.
+Xem [kế hoạch tương thích, nâng cấp và rollback](cli-migration.md) trước khi
+thay lệnh trong script hoặc cập nhật bản cài Windows.
 
 ## Xem Live
 

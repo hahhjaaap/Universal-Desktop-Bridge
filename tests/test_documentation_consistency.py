@@ -73,8 +73,6 @@ def test_local_document_links_resolve_to_checked_in_files():
 
 
 def test_staging_docs_do_not_confuse_local_catalog_with_cloud_grants():
-    staging = (ROOT / "cloudflare/STAGING-OPERATIONS.md").read_text(
-        encoding="utf-8"
-    )
+    staging = (ROOT / "cloudflare/STAGING-OPERATIONS.md").read_text(encoding="utf-8")
     assert "only the explicitly granted" in staging
     assert "not\nauthorization" in staging

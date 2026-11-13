@@ -25,8 +25,12 @@ def run(**overrides):
 
 def test_release_gate_skips_existing_version_and_superseded_commit():
     assert decide(REPOSITORY, SHA, SHA, [run()], False, main_protected=True)["publish"]
-    assert not decide(REPOSITORY, SHA, SHA, [run()], True, main_protected=True)["publish"]
-    assert not decide(REPOSITORY, SHA, "b" * 40, [run()], False, main_protected=True)["publish"]
+    assert not decide(REPOSITORY, SHA, SHA, [run()], True, main_protected=True)[
+        "publish"
+    ]
+    assert not decide(REPOSITORY, SHA, "b" * 40, [run()], False, main_protected=True)[
+        "publish"
+    ]
 
 
 @pytest.mark.parametrize(
@@ -54,6 +58,7 @@ def test_release_gate_blocks_automatic_publication_on_unprotected_main():
 
 def test_release_gate_requires_explicit_protection_before_publication():
     assert decide(REPOSITORY, SHA, SHA, [run()], False)["publish"] is False
-    assert decide(REPOSITORY, SHA, SHA, [run()], False, main_protected=True)[
-        "publish"
-    ] is True
+    assert (
+        decide(REPOSITORY, SHA, SHA, [run()], False, main_protected=True)["publish"]
+        is True
+    )

@@ -118,3 +118,20 @@ separate steps. Before updating, check the released tag, verify signatures
 and hashes using a trusted publisher identity, read the security advisories,
 and keep a safe rollback path. A successful CI matrix alone does not
 establish a signed or independently audited product.
+
+## Source mitigation: fail-closed publication without protected main (2026-11-13)
+
+The `one-command-windows-release` workflow evaluates `tools/release_gate.py`
+for the exact main SHA and successful CI. The source now also checks GitHub's
+`branches/main.protected` flag **for that same main SHA**. When the flag is
+false, unreadable or stale, a new Windows release is **not** published; no
+branch-protection setting or credential is changed by this check.
+
+This is a defense-in-depth publication gate, **not branch protection itself**.
+A repository administrator must still configure effective required PR reviews,
+Linux/Windows/Cloudflare/installer checks, stale-review dismissal, force-push
+restrictions, protected tags and staging environment approval in GitHub Settings
+(see [issue #147](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/147)).
+Verify enforcement as a non-bypass actor before closing the issue. Public
+GitHub metadata and a passing source test do not prove the repository is
+protected or that a particular Windows binary is a signed public release.

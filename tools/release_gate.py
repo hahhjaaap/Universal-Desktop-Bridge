@@ -23,9 +23,14 @@ def qualifying_run(run, repository, sha):
     )
 
 
-def decide(repository, sha, main_sha, runs, release_exists):
+def decide(repository, sha, main_sha, runs, release_exists, *, main_protected=False):
     if sha != main_sha:
         return {"publish": False, "reason": "A newer main revision exists"}
+    if not main_protected:
+        return {
+            "publish": False,
+            "reason": "Main branch is not protected; release publication blocked",
+        }
     if not any(qualifying_run(run, repository, sha) for run in runs):
         raise ValueError(
             "The exact main revision has no successful complete push CI run"
@@ -73,6 +78,14 @@ def main():
             ) from None
 
     main_sha = api("git/ref/heads/main")["object"]["sha"]
+    # Fail closed if the public branch metadata does not prove that the same
+    # main revision is protected. Required reviews/checks still need separate
+    # administrator verification; this is only the publication safety gate.
+    branch = api("branches/main")
+    main_protected = (
+        branch.get("protected") is True
+        and branch.get("commit", {}).get("sha") == main_sha
+    )
     if args.run_id:
         runs = [api(f"actions/runs/{args.run_id}")]
     else:
@@ -80,7 +93,14 @@ def main():
             f"actions/workflows/ci.yml/runs?head_sha={args.sha}&branch=main&event=push&per_page=100"
         )["workflow_runs"]
     release = api("releases/tags/v" + version, missing_ok=True)
-    result = decide(args.repository, args.sha, main_sha, runs, release is not None)
+    result = decide(
+        args.repository,
+        args.sha,
+        main_sha,
+        runs,
+        release is not None,
+        main_protected=main_protected,
+    )
     result.update(version=version, sha=args.sha)
     print(json.dumps(result))
     if output := os.environ.get("GITHUB_OUTPUT"):

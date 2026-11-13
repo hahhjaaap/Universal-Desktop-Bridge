@@ -82,11 +82,14 @@ def worker(role: str, args: Sequence[str]) -> int:
     raise ValueError("Unknown worker role")
 
 
-def add_settings(parser: argparse.ArgumentParser, suppress: bool = False) -> None:
+def add_settings(
+    parser: argparse.ArgumentParser, suppress: bool = False, hide_help: bool = False
+) -> None:
     """Register common path and terminal settings on a CLI parser."""
     default = argparse.SUPPRESS if suppress else None
+    help_text = argparse.SUPPRESS if hide_help else None
     for name in ("home", "config", "root", "core-exe"):
-        parser.add_argument(f"--{name}", default=default)
+        parser.add_argument(f"--{name}", default=default, help=help_text)
 
     terminal = parser.add_mutually_exclusive_group()
     terminal.add_argument(
@@ -94,12 +97,14 @@ def add_settings(parser: argparse.ArgumentParser, suppress: bool = False) -> Non
         dest="enable_terminal",
         action="store_true",
         default=default,
+        help=help_text,
     )
     terminal.add_argument(
         "--disable-terminal",
         dest="enable_terminal",
         action="store_false",
         default=default,
+        help=help_text,
     )
 
 
@@ -132,7 +137,7 @@ Connection and recovery:
   udb quickstart         Start/check local support components
 
 Permissions (owner-attended):
-  udb revoke-access      Revoke broad Windows computer access
+  udb --access computer   Attended opt-in to broad Windows access\n  udb revoke-access      Revoke broad Windows computer access
   udb allow-source       Grant source access (--path required)
   udb revoke-source      Revoke source access (--path required)
 
@@ -147,7 +152,7 @@ Diagnostics and development:
   udb init               Create a new local configuration
   udb build              Build a release from source
 
-Legacy internal worker launchers remain private. Use udb <command> --help
+The obsolete `udb setup --edit` flag is accepted for compatibility only.\nLegacy internal worker launchers remain private. Use udb <command> --help
 for command-specific options. Existing commands remain supported;
 nothing here grants permissions or changes the Cloudflare connection.
 """
@@ -468,16 +473,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         description="Universal Desktop Bridge: one package, one command",
     )
     parser.add_argument("--version", action="version", version=VERSION)
-    add_settings(parser)
-    parser.add_argument("--json", action="store_true")
+    add_settings(parser, hide_help=True)
+    parser.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
     view = parser.add_mutually_exclusive_group()
     view.add_argument(
-        "--detach", action="store_true", help="Do not attach live logs after startup"
+        "--detach", action="store_true", help=argparse.SUPPRESS
     )
     view.add_argument(
-        "--follow", action="store_true", help="Force live logs after startup"
+        "--follow", action="store_true", help=argparse.SUPPRESS
     )
-    parser.add_argument("--wait", type=int, default=30)
+    parser.add_argument("--wait", type=int, default=30, help=argparse.SUPPRESS)
     connection_mode = parser.add_mutually_exclusive_group()
     connection_mode.add_argument(
         "--offline", action="store_true", help=argparse.SUPPRESS
@@ -489,7 +494,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     _add_subcommands(parser)
     parser.add_argument(
-        "--access", choices=("computer",), help="Attended local owner opt-in only"
+        "--access", choices=("computer",), help=argparse.SUPPRESS
     )
 
     args = parser.parse_args(argv)

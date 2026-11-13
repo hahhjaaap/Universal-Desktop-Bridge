@@ -24,6 +24,8 @@ def test_everyday_help_has_only_memorable_commands(argv, capsys, monkeypatch):
     displayed = set(re.findall(r"^    ([a-z][a-z-]*)\s+", output, re.MULTILINE))
     assert displayed == set(cli.SIMPLE_COMMAND_HELP)
     assert "udb help advanced" in output
+    for advanced_option in ("--root", "--core-exe", "--enable-terminal", "--access"):
+        assert advanced_option not in output
 
 
 def test_advanced_help_describes_old_commands_without_running_them(capsys, monkeypatch):
@@ -37,6 +39,7 @@ def test_advanced_help_describes_old_commands_without_running_them(capsys, monke
         "udb mcp-config",
         "udb rollback",
         "udb cloud-pair",
+        "udb --access computer",
         "udb revoke-access",
         "udb runtime",
         "udb build",

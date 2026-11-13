@@ -389,7 +389,7 @@ def _run_setup(args: argparse.Namespace, settings: Settings) -> int:
         raise ValueError(
             "Use udb setup directly in your own terminal without --json/--access/--offline"
         )
-    if args.edit:
+    if getattr(args, "edit", False):
         print(
             "UDB: --edit is obsolete; using the normal Cloudflare setup.",
             file=sys.stderr,

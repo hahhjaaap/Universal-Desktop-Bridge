@@ -6,7 +6,17 @@
 
 **Tiếng Việt:** UDB kết nối trợ lý AI với máy tính Windows theo quyền do chủ máy cấp. Hỗ trợ thao tác tệp, terminal, ứng dụng, trình duyệt riêng biệt và rà soát hóa đơn Excel. **Không tự cấp quyền, không tự kê khai thuế, không tự sửa dữ liệu kế toán gốc.**
 
-> **UDB 0.12.0 (2026-11-11):** Cloudflare is the remote MCP transport for paired Windows devices, and UDB Live adds terminal and read-only GUI activity views (`udb live`, `udb live --gui`). The new build removes the public local stdio MCP command and legacy OpenAI Tunnel compatibility; pair with `udb setup`, then use `udb mcp-config` for the device-specific HTTPS endpoint. Check [GitHub Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases), [release notes](docs/release-notes.md), and your installed `udb --version` separately. Worker deployment, Access/OAuth, device grants, and ChatGPT catalog discovery are still configured and verified separately.
+> **UDB 0.12.0 (2026-11-11):** Cloudflare is the remote MCP transport for paired Windows devices, and UDB Live adds terminal and read-only GUI activity views (`udb live`, `udb live --gui`). The public MCP connection no longer supports local stdio or OpenAI Tunnel; pair with `udb setup`, then use `udb mcp-config` for the device-specific HTTPS endpoint. Historical compatibility readers may still exist internally for older installations. Check [GitHub Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases), [release notes](docs/release-notes.md), and your installed `udb --version` separately. Worker deployment, Access/OAuth, device grants, and ChatGPT catalog discovery are still configured and verified separately.
+
+**Current source maintenance (2026-11-13):** The `main` source also contains the
+PySide6-Essentials 6.12.0 dependency, Chrome Aura retirement, retired Tunnel
+onboarding wizard, and a Windows CI-only Qt teardown safeguard. These
+post-release commits do **not** change the v0.12.0 installer published on
+2026-11-11. GitHub `main` is not yet branch-protected; the release gate fails
+closed rather than publishing from an unprotected branch. See
+[version/status](docs/current-version.md), [release security](docs/release-security.md),
+[issue #147](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/147)
+and [issue #162](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/162).
 
 ## What UDB does
 
@@ -96,7 +106,7 @@ remote MCP. An unpaired profile prints an empty server list.
 
 ## Windows x64: install and start
 
-Review the installer and [published release](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases/latest) before executing downloaded code. In your own PowerShell terminal:
+Review the installer and [published release](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases/latest) before executing downloaded code. The latest verified published Windows tag on 2026-11-13 is **v0.12.0**, which may not contain the newer `main` cleanup and Windows CI changes; a source merge does not trigger an owner installation. In your own PowerShell terminal:
 
 ```powershell
 irm https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases/latest/download/install.ps1 | iex
@@ -376,7 +386,8 @@ python -c "from udb.manager import self_test; self_test('ui-previews')"
 
 The GUI self-test captures six existing pages under light/dark palettes and
 does not approve any file mutations. For headless Linux install
-`PySide6-Essentials==6.10.2` and set `QT_QPA_PLATFORM=offscreen`.
+`PySide6-Essentials==6.12.0` (the Windows source pin in `pyproject.toml`)
+and set `QT_QPA_PLATFORM=offscreen`.
 For native Windows pointer preview use
 `python tools/check_windows_workflows.py --pointer-preview PATH.png`.
 Passing CI and screenshots does not replace real Windows accessibility or

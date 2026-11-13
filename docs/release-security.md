@@ -135,3 +135,12 @@ restrictions, protected tags and staging environment approval in GitHub Settings
 Verify enforcement as a non-bypass actor before closing the issue. Public
 GitHub metadata and a passing source test do not prove the repository is
 protected or that a particular Windows binary is a signed public release.
+
+**Verified fail-closed execution (2026-11-13):** GitHub Actions
+[run 43423698471](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/43423698471)
+reported `publish: false` with reason `Main branch is not protected; release
+publication blocked`, and skipped subsequent Windows build/publish steps.
+The API still showed `main.protected=false` and no repository rulesets on
+2026-11-13. This is evidence that the publication guard works, **not** that
+branch protection, review requirements, Authenticode signing or a new
+Windows release has been completed.

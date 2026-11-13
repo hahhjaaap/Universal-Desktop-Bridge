@@ -2,13 +2,17 @@
 
 > **UDB 0.12.0 documentation review (2026-11-13):** Staging/opt-in instructions do not change live Worker, OAuth, owner permissions or secrets. See [version/status](../docs/current-version.md).
 
-The single active UDB Worker is `udb-private-relay-staging`. The earlier
-`udb-private-relay` Worker was deleted. Do not redeploy that legacy Worker.
+This staging runbook targets the historical Worker named
+`udb-private-relay-staging`; the earlier `udb-private-relay` Worker was
+reported deleted in the 2026-11-11 recovery record. **Verify live Worker
+identity, route and deployed version in Cloudflare before using this runbook**;
+source history does not establish what is currently deployed. Never recreate
+the deleted legacy Worker as a troubleshooting shortcut.
 
 ## Recovered source
 
-The six changed `cloudflare/src` modules in this branch were recovered from
-**deployed staging Worker v31**, version
+At the 2026-11-11 recovery point, six `cloudflare/src` modules were recovered
+from **staging Worker v31**, version
 `d14f6259-03d0-4df5-8869-0768624b6646` (2026-11-11 08:09 UTC).
 The other seven JS modules matched `main` exactly. The deployment may evolve:
 recheck Cloudflare before making another release. This snapshot does not include
@@ -39,7 +43,11 @@ reviewed command includes `--keep-vars --strict` to protect remote settings.
 
 ## Security boundaries
 
-The UDB catalog contains 59 tools, but catalog visibility is not authorization.
+The local source catalog currently enumerates 59 public names, as verified
+by source registry tests; check `udb tools` for the installed build. A
+Cloudflare connection normally discovers **only the explicitly granted
+subset**, never the full catalog by default. Catalog visibility is not
+authorization.
 Cloudflare Access and per-device grants are required; Windows permissions,
 local approvals, and scoped projects remain independent enforcement layers.
 In particular, enabling `computer` access exposes current-user file,

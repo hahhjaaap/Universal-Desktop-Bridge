@@ -137,7 +137,8 @@ Connection and recovery:
   udb quickstart         Start/check local support components
 
 Permissions (owner-attended):
-  udb --access computer   Attended opt-in to broad Windows access\n  udb revoke-access      Revoke broad Windows computer access
+  udb --access computer   Attended opt-in to broad Windows access
+  udb revoke-access      Revoke broad Windows computer access
   udb allow-source       Grant source access (--path required)
   udb revoke-source      Revoke source access (--path required)
 
@@ -476,12 +477,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     add_settings(parser, hide_help=True)
     parser.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
     view = parser.add_mutually_exclusive_group()
-    view.add_argument(
-        "--detach", action="store_true", help=argparse.SUPPRESS
-    )
-    view.add_argument(
-        "--follow", action="store_true", help=argparse.SUPPRESS
-    )
+    view.add_argument("--detach", action="store_true", help=argparse.SUPPRESS)
+    view.add_argument("--follow", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--wait", type=int, default=30, help=argparse.SUPPRESS)
     connection_mode = parser.add_mutually_exclusive_group()
     connection_mode.add_argument(
@@ -493,9 +490,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         help=argparse.SUPPRESS,
     )
     _add_subcommands(parser)
-    parser.add_argument(
-        "--access", choices=("computer",), help=argparse.SUPPRESS
-    )
+    parser.add_argument("--access", choices=("computer",), help=argparse.SUPPRESS)
 
     args = parser.parse_args(argv)
     action = args.action or "start"

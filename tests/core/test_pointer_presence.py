@@ -1,76 +1,10 @@
-"""Chrome Aura opt-in and automatic owner-granted AI cursor presence."""
+"""Virtual pointer presence and its independent owner-grant lifecycle."""
 
-import base64
-import hashlib
-import json
-import shutil
-import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
-
-from udb.chrome_aura import EXTENSION_ID, launch_target
 from udb.companion.virtual_pointer import VirtualPointer
 from udb.proxy import UnifiedProxy
-
-
-def test_chrome_aura_is_disabled_by_default(tmp_path):
-    assert launch_target("https://example.org/", tmp_path) == (
-        "https://example.org/",
-        False,
-    )
-
-
-def test_chrome_aura_requires_exact_local_opt_in(tmp_path):
-    marker = tmp_path / "UniversalDesktopBridge" / "chrome-aura-enabled"
-    marker.parent.mkdir()
-    marker.write_text("untrusted-extension-id\n", encoding="ascii")
-    assert not launch_target("https://example.org/", tmp_path)[1]
-    marker.write_text(EXTENSION_ID + "\n", encoding="ascii")
-    target, enabled = launch_target("https://example.org/a?x=1#part", tmp_path)
-    assert enabled
-    assert target.startswith(f"chrome-extension://{EXTENSION_ID}/launch.html#")
-    assert "https%3A%2F%2Fexample.org%2Fa%3Fx%3D1%23part" in target
-    marker.write_text("a" * 1024, encoding="ascii")
-    assert not launch_target("https://example.org/", tmp_path)[1]
-
-
-def test_chrome_aura_manifest_has_stable_id_and_scoped_injection():
-    root = Path(__file__).resolve().parents[2] / "chrome-extension" / "udb-aura"
-    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-    public_key = base64.b64decode(manifest["key"])
-    digest = hashlib.sha256(public_key).hexdigest()[:32]
-    expected = "".join(chr(ord("a") + int(ch, 16)) for ch in digest)
-    assert expected == EXTENSION_ID
-    assert manifest["manifest_version"] == 3
-    assert "web_accessible_resources" not in manifest
-    assert "nativeMessaging" not in manifest["permissions"]
-    for file in (
-        "launch.html",
-        "launch.js",
-        "background.js",
-        "aura.js",
-        "popup.html",
-        "popup.js",
-    ):
-        assert (root / file).is_file()
-    for size in (16, 32, 48, 128):
-        assert (root / "icons" / f"icon{size}.png").is_file()
-
-
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js unavailable")
-def test_chrome_aura_javascript_syntax():
-    root = Path(__file__).resolve().parents[2] / "chrome-extension" / "udb-aura"
-    node = shutil.which("node")
-    assert node is not None
-    for filename in ("background.js", "launch.js", "popup.js", "aura.js"):
-        subprocess.run(
-            [node, "--check", str(root / filename)],
-            check=True,
-            capture_output=True,
-            timeout=45,
-        )
 
 
 def test_virtual_pointer_presence_uses_virtual_screen_not_system_cursor(monkeypatch):
@@ -182,7 +116,7 @@ def test_optional_pointer_failure_does_not_close_existing_work():
     assert not proxy._pointer_presence_started
 
 
-def test_standalone_package_includes_opt_in_chrome_aura(tmp_path, monkeypatch):
+def test_standalone_package_does_not_ship_retired_chrome_aura(tmp_path, monkeypatch):
     import zipfile
 
     from udb import build
@@ -193,10 +127,8 @@ def test_standalone_package_includes_opt_in_chrome_aura(tmp_path, monkeypatch):
     archive = build.standalone_package(root, tmp_path, tmp_path, [])
     with zipfile.ZipFile(archive) as package:
         names = set(package.namelist())
-    assert "UDB/chrome-extension/udb-aura/manifest.json" in names
-    assert "UDB/chrome-extension/udb-aura/background.js" in names
-    assert "UDB/chrome-extension/udb-aura/icons/icon128.png" in names
-    assert "UDB/tools/enable_chrome_aura.ps1" in names
+    assert not any("/chrome-extension/" in name for name in names)
+    assert "UDB/tools/enable_chrome_aura.ps1" not in names
     assert "UDB/STANDALONE-SHA256SUMS" in names
 
 

@@ -12,6 +12,56 @@ from ._version import VERSION
 from .config import Settings, activate, checked, load
 
 
+# Commands promoted in the standard help. Keep all other commands callable for
+# existing shortcuts, installers, scripts and unattended recovery workflows.
+# A command missing from this table is intentionally *not* advertised in -h.
+SIMPLE_COMMAND_HELP = {
+    "setup": "Pair this Windows device with Cloudflare",
+    "start": "Start UDB (also the default: udb)",
+    "stop": "Stop the UDB headless agent",
+    "gui": "Open the UDB Manager",
+    "status": "Show current UDB status",
+    "doctor": "Diagnose UDB and Cloudflare readiness",
+    "live": "Watch UDB tool activity (--gui for a window)",
+    "update": "Check or install a reviewed UDB update",
+    "help": "Show easy commands (or: udb help advanced)",
+}
+
+ADVANCED_COMMAND_HELP = """Advanced UDB commands (kept for compatibility)
+
+Connection and recovery:
+  udb mcp-config         Show the paired HTTPS MCP endpoint
+  udb reconnect          Reconnect the existing Cloud Agent
+  udb cloud-pair         Attended device pairing (alternative to setup)
+  udb cloud-agent        Run the Cloud Agent directly
+  udb autostart status   Check Windows sign-in startup
+  udb autostart enable   Enable Windows sign-in startup (owner only)
+  udb autostart disable  Disable Windows sign-in startup
+  udb rollback           Restore the previous managed release
+  udb quickstart         Start/check local support components
+
+Permissions (owner-attended):
+  udb revoke-access      Revoke broad Windows computer access
+  udb allow-source       Grant source access (--path required)
+  udb revoke-source      Revoke source access (--path required)
+
+Diagnostics and development:
+  udb tools              Show the actual MCP tool catalog
+  udb logs               Older name for the terminal Live viewer
+  udb test               Run the installed-agent test
+  udb runtime --probe    Inspect bundled runtime components
+  udb version --json     Show the exact installed build identity
+  udb build-info         Show build metadata
+  udb manifest           Show package manifest
+  udb init               Create a new local configuration
+  udb build              Build a release from source
+
+Legacy internal worker launchers remain private. Use udb <command> --help
+for command-specific options. Existing commands remain supported;
+nothing here grants permissions or changes the Cloudflare connection.
+"""
+
+
 @contextmanager
 def _settings_scope(settings: Settings):
     """Restore the previous runtime settings even on cancellation or failure."""
@@ -104,7 +154,7 @@ def add_settings(parser: argparse.ArgumentParser, suppress: bool = False) -> Non
 
 
 def _add_subcommands(parser: argparse.ArgumentParser) -> None:
-    subcommands = parser.add_subparsers(dest="action")
+    subcommands = parser.add_subparsers(dest="action", metavar="COMMAND")
     command_names = (
         "start",
         "quickstart",
@@ -133,10 +183,13 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         "version",
         "manifest",
         "mcp-config",
+        "help",
     )
     for name in command_names:
-        command = subcommands.add_parser(name)
+        command = subcommands.add_parser(name, help=SIMPLE_COMMAND_HELP.get(name))
         add_settings(command, suppress=True)
+        if name == "help":
+            command.add_argument("topic", nargs="?", choices=("advanced",))
         if name in ("autostart", "update", "rollback", "version"):
             command.add_argument(
                 "--json", action="store_true", default=argparse.SUPPRESS
@@ -441,6 +494,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     action = args.action or "start"
+    if action == "help":
+        if args.topic == "advanced":
+            print(ADVANCED_COMMAND_HELP)
+        else:
+            parser.print_help()
+        return 0
     try:
         if args.offline and args.online:
             raise ValueError("Choose either --offline or --online")

@@ -160,7 +160,9 @@ Verify the Cloud Agent process and a read-only invocation in ChatGPT.
 
 Run `udb --help` or `udb help` to see only the everyday commands. `udb`
 starts UDB by default. Use `udb help advanced` for the full list of
-compatibility, permission, recovery, and developer commands.
+compatibility, permission, recovery, and developer commands. See the
+[CLI migration and rollback checklist](docs/cli-migration.md) before retiring
+or replacing any existing script or Windows shortcut.
 
 | Everyday command | Purpose |
 | --- | --- |

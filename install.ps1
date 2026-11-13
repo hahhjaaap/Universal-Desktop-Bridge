@@ -103,14 +103,17 @@ function Get-AgentState([string]$Image) {
     if ($state.PSObject.Properties.Name -notcontains 'manager_running') { throw 'Cannot inspect the existing agent.' }
     return $state
 }
+function Test-CloudflareOnlyHelp([string]$HelpText) {
+    # v0.12.0 advertised live inside argparse command choices; subsequent
+    # releases advertise a small set of indented "udb live" commands.
+    return (($HelpText -match '(?:[,{])live(?=[,}])') -or
+            ($HelpText -match '(?m)^[ \t]+udb live(?:[ \t]|$)'))
+}
 function Test-CloudflareOnlyRelease([string]$Image) {
-    # v0.12.0 originally listed subcommands in argparse braces; newer CLIs
-    # show only everyday commands. Recognize both help formats during upgrade
-    # and rollback without starting a Windows agent or inspecting owner state.
+    # Pure CLI help inspection: never starts the agent or reads owner secrets.
     $helpText = (@(& $Image --help) -join "`n")
     if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect candidate UDB CLI.' }
-    return (($helpText -match '(?:[,{])live(?=[,}])') -or
-            ($helpText -match '(?m)^[ \t]+udb live(?:[ \t]|$)'))
+    return (Test-CloudflareOnlyHelp $helpText)
 }
 function Start-Agent([string]$Image,[string]$Mode) {
     $options = @('--home',$DataHome,'start','--detach','--json','--wait','60')

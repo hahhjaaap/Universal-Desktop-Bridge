@@ -88,6 +88,14 @@ def exercise(session, tmp_path):
     return report
 
 
+def test_probe_accepts_mcp_v2_snake_case_result_fields():
+    value = NS(is_error=False, structured_content={"ok": True}, content=[])
+    assert probe.payload(value, "fixture") == {"ok": True}
+    denied = NS(is_error=True, structured_content=None, content=[])
+    with pytest.raises(probe.ProbeFailure, match="was refused"):
+        probe.payload(denied, "fixture")
+
+
 def test_probe_real_protocol_shape_and_exact_owned_window(tmp_path):
     session = Session()
     report = exercise(session, tmp_path)

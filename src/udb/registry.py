@@ -22,7 +22,7 @@ def catalog() -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="udb-catalog-") as temporary_root:
         server = make_server(Agent(Path(temporary_root)))
         native_tools = [
-            tool.model_dump(mode="json", exclude_none=True)
+            tool.model_dump(mode="json", by_alias=True, exclude_none=True)
             for tool in asyncio.run(server.list_tools())
         ]
 

@@ -1,5 +1,7 @@
 # Dedicated Cloudflare staging deployment for TD-02 (#94)
 
+> **UDB 0.12.0 docs review (2026-11-13):** **Historical design/evidence, not a current runbook.** Earlier experiments, metrics and version-specific status do not establish current v0.12.0 behavior; never execute obsolete deployment/transport instructions. See [version/status](current-version.md).
+
 > **Current single-gateway setup (11/11/2026):** The former production
 > `udb-private-relay` Worker and its Access application have been removed.
 > Both `cloudflare/wrangler.jsonc` and `wrangler.staging.jsonc` now target

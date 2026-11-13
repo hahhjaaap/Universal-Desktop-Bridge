@@ -1,5 +1,7 @@
 # Compact local controls
 
+> **UDB 0.12.0 docs review (2026-11-13):** **Current UDB 0.12.0 source guidance.** Verify the installed executable, Cloudflare Worker, OAuth and owner grants separately; source changes do not update them. See [version/status](current-version.md).
+
 Launch with `udb gui`. When Windows provides a system tray, the GUI opens a small
 control panel and registers a UDB tray icon. Click that icon to reopen controls;
 its menu also offers pause, background-session closure and **Thoát UDB**.

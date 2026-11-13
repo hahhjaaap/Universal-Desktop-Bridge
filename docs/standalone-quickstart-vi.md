@@ -27,24 +27,24 @@ hoặc Tunnel ID vào trình thiết lập mới.
 
 ## Bộ lệnh ngắn, dễ nhớ
 
-Gõ \`udb --help\` hoặc \`udb help\` để chỉ xem các lệnh thường dùng:
+Gõ `udb --help` hoặc `udb help` để chỉ xem các lệnh thường dùng:
 
 | Lệnh | Khi nào dùng |
 | --- | --- |
-| \`udb\` (hoặc \`udb start\`) | Bắt đầu sử dụng UDB |
-| \`udb setup\` | Ghép nối thiết bị qua Cloudflare |
-| \`udb stop\` | Dừng UDB headless |
-| \`udb gui\` | Mở ứng dụng quản lý |
-| \`udb status\` | Xem trạng thái |
-| \`udb doctor\` | Kiểm tra nguyên nhân lỗi |
-| \`udb live\` | Xem hoạt động đang diễn ra |
-| \`udb update --check\` | Xem có phiên bản mới hay không |
+| `udb` (hoặc `udb start`) | Bắt đầu sử dụng UDB |
+| `udb setup` | Ghép nối thiết bị qua Cloudflare |
+| `udb stop` | Dừng UDB headless |
+| `udb gui` | Mở ứng dụng quản lý |
+| `udb status` | Xem trạng thái |
+| `udb doctor` | Kiểm tra nguyên nhân lỗi |
+| `udb live` | Xem hoạt động đang diễn ra |
+| `udb update --check` | Xem có phiên bản mới hay không |
 
 Những lệnh kỹ thuật và khôi phục vẫn dùng được, nhưng không chiếm chỗ
-trong trợ giúp mặc định. Gõ \`udb help advanced\` để xem danh sách đầy đủ
-(\`udb rollback\`, \`udb reconnect\`, \`udb tools\`, \`udb mcp-config\`, v.v.).
-\`udb logs\` vẫn chạy như cũ nhưng nên dùng \`udb live\` khi theo dõi nhật ký.
-Các thay đổi này chỉ có trong mã nguồn/phiên bản có bổ sung lệnh \`help\`;
+trong trợ giúp mặc định. Gõ `udb help advanced` để xem danh sách đầy đủ
+(`udb rollback`, `udb reconnect`, `udb tools`, `udb mcp-config`, v.v.).
+`udb logs` vẫn chạy như cũ nhưng nên dùng `udb live` khi theo dõi nhật ký.
+Các thay đổi này chỉ có trong mã nguồn/phiên bản có bổ sung lệnh `help`;
 bản cài v0.12.0 đã phát hành ngày 11/11/2026 không tự được cập nhật.
 
 ## Xem Live

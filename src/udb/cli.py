@@ -119,7 +119,7 @@ SIMPLE_COMMAND_HELP = {
     "status": "Show current UDB status",
     "doctor": "Diagnose UDB and Cloudflare readiness",
     "live": "Watch UDB tool activity (--gui for a window)",
-    "update": "Check or install a reviewed UDB update",
+    "update": "Check for a reviewed update with --check",
     "help": "Show easy commands (or: udb help advanced)",
 }
 
@@ -153,10 +153,44 @@ Diagnostics and development:
   udb init               Create a new local configuration
   udb build              Build a release from source
 
-The obsolete `udb setup --edit` flag is accepted for compatibility only.\nLegacy internal worker launchers remain private. Use udb <command> --help
+The obsolete `udb setup --edit` flag is accepted for compatibility only.
+Legacy internal worker launchers remain private. Use udb <command> --help
 for command-specific options. Existing commands remain supported;
 nothing here grants permissions or changes the Cloudflare connection.
 """
+
+
+
+def _everyday_help() -> str:
+    """Keep the human-facing CLI compact; legacy dispatch remains available."""
+    lines = [
+        "UDB - everyday commands",
+        "Usage: udb [command] [options]",
+        "",
+        "  udb                      Start UDB (same as udb start)",
+    ]
+    for name, description in SIMPLE_COMMAND_HELP.items():
+        display = "update --check" if name == "update" else name
+        lines.append(f"  udb {display:<22} {description}")
+    lines.extend(
+        [
+            "",
+            "  udb --version            Show installed UDB version",
+            "",
+            "For uncommon commands: udb help advanced",
+            "For command options: udb help <command> or udb <command> --help",
+            "Help does not start UDB, grant access, or change owner state.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+class _EverydayHelpAction(argparse.Action):
+    """Print concise root help without altering internal/legacy CLI parsers."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print(_everyday_help())
+        parser.exit(0)
 
 
 def _add_subcommands(parser: argparse.ArgumentParser) -> None:
@@ -198,7 +232,9 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
             command = subcommands.add_parser(name)
         add_settings(command, suppress=True)
         if name == "help":
-            command.add_argument("topic", nargs="?", choices=("advanced",))
+            command.add_argument(
+                "topic", nargs="?", choices=("advanced", *command_names)
+            )
         if name in ("autostart", "update", "rollback", "version"):
             command.add_argument(
                 "--json", action="store_true", default=argparse.SUPPRESS
@@ -354,6 +390,11 @@ def _run_setup(args: argparse.Namespace, settings: Settings) -> int:
         raise ValueError(
             "Use udb setup directly in your own terminal without --json/--access/--offline"
         )
+    if args.edit:
+        print(
+            "UDB: --edit is obsolete; using the normal Cloudflare setup.",
+            file=sys.stderr,
+        )
     from .onboarding import setup_cloud
 
     with _settings_scope(settings):
@@ -475,6 +516,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="udb",
         description="Universal Desktop Bridge: one package, one command",
+        add_help=False,
+    )
+    parser.add_argument(
+        "-h", "--help", action=_EverydayHelpAction, nargs=0,
+        help="Show everyday UDB commands",
     )
     parser.add_argument("--version", action="version", version=VERSION)
     add_settings(parser, hide_help=True)
@@ -500,8 +546,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if action == "help":
         if args.topic == "advanced":
             print(ADVANCED_COMMAND_HELP)
+        elif args.topic:
+            return main([args.topic, "--help"])
         else:
-            parser.print_help()
+            print(_everyday_help())
         return 0
     try:
         if args.offline and args.online:

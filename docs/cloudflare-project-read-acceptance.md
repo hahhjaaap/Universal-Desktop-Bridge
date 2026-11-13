@@ -248,6 +248,17 @@ request returns HTTP 429. Mutation RPCs are **exclusive** and cannot overlap
 with reads or another mutation; this is not unrestricted parallel desktop
 control or simultaneous file writes.
 
+Owner-gated `host_status` and `computer_status` observations also share read slots.
+This is scheduling only: they still require their separate owner/device grants
+and are not added to the `udb:read` authorization scope. Other owner actions remain
+exclusive; busy or unknown-outcome mutations are never replayed.
+
+The special staging fixture grant authorizes `read_file` only for `README.md`
+with exactly `project` and `path`. Other fixture files and batch reads remain
+denied. Both edge and Windows-backed discovery advertise this narrow signature;
+a fixture denial returns static guidance for the permitted call. It does not
+broaden the owner's grants to a real project.
+
 Each RPC has a distinct correlation ID and a bounded local timeout. A
 connection timeout, poisoned local worker, or socket replacement fails
 outstanding calls without replaying them. Per-device identity grants and

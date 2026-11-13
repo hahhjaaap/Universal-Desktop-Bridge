@@ -25,7 +25,10 @@ function harness() {
     const rpc = await request.json();
     forwarded.push(rpc);
     let result = { content: [{ type: "text", text: "fixture-content" }] };
-    if (rpc.params?.name === "list_projects") {
+    if (rpc.method === "tools/list") {
+      result = { tools: [{ name: "read_file", description: "General Windows read",
+        inputSchema: { type: "object", properties: { paths: { type: "array" } } } }] };
+    } else if (rpc.params?.name === "list_projects") {
       const items = [{ id: PROJECT, writable: false },
         { id: "private-project", writable: true }];
       result = { content: [{ type: "text", text: JSON.stringify(items) }],
@@ -38,7 +41,11 @@ function harness() {
       jsonrpc: "2.0", id: 1, method: "tools/call",
       params: { name, arguments: args },
     }) }), changedEnv, DEVICE, stub, fetch, owner);
-  return { forwarded, call };
+  const list = (changedEnv = env()) => handleMcp(new Request(URL, {
+    method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 2,
+      method: "tools/list", params: {} }),
+  }), changedEnv, DEVICE, stub, fetch, identity());
+  return { forwarded, call, list };
 }
 
 test("fixture grant is exact-owner exact-device and never bypasses tenant policy", async () => {
@@ -76,6 +83,32 @@ test("fixture grant restricts read_file to the approved README and registered pr
   assert.equal(accepted.status, 200);
   assert.equal(forwarded.length, 1);
 });
+
+test("fixture denial explains the allowed README without reflecting denied arguments", async () => {
+  const { call } = harness();
+  const denied = await call("read_file", { project: PROJECT, path: "private-secret.txt" });
+  const body = await denied.json();
+  assert.equal(denied.status, 403);
+  assert.deepEqual(body.diagnostics.allowed_paths, ["README.md"]);
+  assert.equal(body.diagnostics.project, PROJECT);
+  assert.ok(!JSON.stringify(body).includes("private-secret"));
+});
+
+for (const edge of [false, true]) {
+  test("fixture discovery advertises the actual single-file permission (edge=" + edge + ")", async () => {
+    const { list, forwarded } = harness();
+    const response = await list({ ...env(), UDB_EDGE_READ_CATALOG: String(edge) });
+    assert.equal(response.status, 200);
+    const tool = (await response.json()).result.tools.find(t => t.name === "read_file");
+    assert.deepEqual(tool.inputSchema.properties.project.enum, [PROJECT]);
+    assert.deepEqual(tool.inputSchema.properties.path.enum, ["README.md"]);
+    assert.equal(tool.inputSchema.additionalProperties, false);
+    assert.deepEqual(tool.inputSchema.required, ["project", "path"]);
+    assert.equal(tool.inputSchema.properties.paths, undefined);
+    assert.match(tool.description, /only README.md/);
+    assert.equal(forwarded.length, edge ? 0 : 1);
+  });
+}
 
 test("fixture grant suppresses other project names and write permissions", async () => {
   const { forwarded, call } = harness();

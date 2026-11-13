@@ -1,5 +1,7 @@
 # Project simulation and fault injection
 
+> **Historical evidence:** Earlier run counts/benchmarks are not current UDB 0.12.0 CI results. The UDB Aura extension is retired from source. See [version/status](current-version.md).
+
 Baseline: `99ac628`. Tests use temporary owner homes, disposable files and owned
 subprocesses. No production computer-access grant, user browser profile or
 existing application is changed by these simulations.
@@ -35,13 +37,13 @@ were added alongside those regressions. The fault suite now contains 59 checks.
 | Files, source proposals and recovery | Real temporary files, optimistic hash conflicts, streaming limits, crash/restart and recovery tests |
 | Terminal and concurrent jobs | Real subprocess crash tests, UTF-8, native ConPTY, shared-capacity and cancellation tests |
 | Office/accounting/media | Disposable documents, corrupt archives, JSON serialization and worker-failure scenarios |
-| GUI and extension | Actual Qt geometry/control tests plus per-tab extension ordering/race checks |
+| GUI and virtual pointer | Qt geometry/control and owner-granted virtual pointer lifecycle checks; optional Chrome Aura has been retired |
 | Packaging | Isolated wheel, frozen Windows integration and installer update/rollback acceptance |
 
 Local Linux validation with Qt installed: **894 passed, 9 skipped**, plus
 **27 subtests passed**. Qt self-test exercises all six pages at 1220×820 and
-960×680 with motion enabled and disabled. The extension behavior test and
-isolated wheel acceptance also pass; the public catalog remains 61 tools.
+960×680 with motion enabled and disabled. The listed counts reflect the historical run only; use the latest CI and
+`udb tools` for current acceptance and catalog counts.
 
 Native Windows results are captured by the `package-and-regressions` workflow.
 Each matrix job uploads `scenarios-<os>-<python>` containing its JUnit report.
@@ -52,7 +54,6 @@ JUnit includes subtest records, so its check total includes the 27 subtests.
 ```sh
 python -m pytest tests/test_fault_scenarios.py tests/test_protocol_scenarios.py
 python -m pytest --junitxml=reports/simulation/results.xml
-node tests/browser/test_chrome_aura.cjs
 ```
 
 On headless Linux use `QT_QPA_PLATFORM=offscreen` and `dbus-run-session` for

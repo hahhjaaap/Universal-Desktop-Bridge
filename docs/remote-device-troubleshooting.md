@@ -1,5 +1,7 @@
 # Remote-device connection diagnostics
 
+> **UDB 0.12.0 docs review (2026-11-13):** **Current UDB 0.12.0 source guidance.** Verify the installed executable, Cloudflare Worker, OAuth and owner grants separately; source changes do not update them. See [version/status](current-version.md).
+
 UDB can accept requests from a connected ChatGPT workspace on a different device
 or network while the original Windows computer is online and the owner-approved
 agent remains running. **A locally running Cloud Agent does not prove that the current

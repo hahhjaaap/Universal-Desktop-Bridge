@@ -1,5 +1,7 @@
 # UDB staging – ChatGPT / Cloudflare Managed OAuth interoperability
 
+> **Docs reviewed 2026-11-13 — UDB 0.12.0:** **Historical engineering record.** The observations, tool counts, deployments and approvals below describe an earlier point in time; do not use as current v0.12.0 operational guidance. Check [current-version.md](current-version.md) and the installed `udb --version` before using commands.
+
 ## Incident
 
 ChatGPT's OAuth popup showed `invalid_target`, with Cloudflare Access reporting that no application could be found for the requested OAuth resource. The staging Access app and its two device URLs already existed. Windows Cloud Agent for the active staging device was online.

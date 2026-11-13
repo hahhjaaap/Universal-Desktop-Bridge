@@ -1,5 +1,7 @@
 # Cloudflare Access issuer-qualified principals (optional staging pilot)
 
+> **Docs reviewed 2026-11-13 — UDB 0.12.0:** **Staging/opt-in scope.** Features and grants described below are not enabled for arbitrary devices and are not proof of a live ChatGPT connection. Check [current-version.md](current-version.md) and the installed `udb --version` before using commands.
+
 **Status:** Source-level P0-A hardening only. Not enabled by default, not an
 owner-enrollment service, and not a claim of approved multi-tenant security.
 

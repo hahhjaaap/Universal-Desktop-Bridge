@@ -1,5 +1,7 @@
 # Accounting-first Work Tools (UDB spreadsheet)
 
+> **Docs reviewed 2026-11-13 — UDB 0.12.0:** **Current source guidance.** Applies to UDB 0.12.0 source; Windows installations and Cloudflare deployment may use independent revisions. Check [current-version.md](current-version.md) and the installed `udb --version` before using commands.
+
 The first accounting workflow is an **invoice workbook review**, not automated bookkeeping or tax filing. It works on locally scoped XLSX files through the existing isolated document worker.
 
 ## Operations

@@ -1,5 +1,7 @@
 # UDB 0.12.0 — Cloudflare-only connection and UDB Live
 
+> **UDB 0.12.0 docs review (2026-11-13):** **Immutable published-release record.** This file describes Windows v0.12.0 published on 2026-11-11, not later source cleanup, newly installed software or live Cloudflare deployment. See [version/status](current-version.md).
+
 Windows x64 standalone release.
 
 ## What's new

@@ -1,5 +1,7 @@
 # Optional strict validation of legacy read grants
 
+> **UDB 0.12.0 docs review (2026-11-13):** **Opt-in/staging evidence.** Code, tests and staging results do not imply production access, current grants or end-to-end ChatGPT connectivity. See [version/status](current-version.md).
+
 **Status:** Source-level staging migration feature; disabled by default.
 This does not create users, enroll a Windows device or change any running
 Cloudflare deployment, OAuth identity, local Windows owner permission or

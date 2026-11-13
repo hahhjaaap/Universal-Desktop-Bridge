@@ -1,5 +1,7 @@
 # Owner → tenant → device → read capability: security boundary (P0-A)
 
+> **UDB 0.12.0 docs review (2026-11-13):** **Opt-in/staging evidence.** Code, tests and staging results do not imply production access, current grants or end-to-end ChatGPT connectivity. See [version/status](current-version.md).
+
 **Status:** Source-level optional policy for a *controlled, invite-only pilot*.
 It is not a user registration service, automated ownership proof, complete
 Cloudflare production deployment or independent security assessment.

@@ -1,5 +1,7 @@
 # UDB Cloud optimization audit (2026-11-02)
 
+> **Docs reviewed 2026-11-13 — UDB 0.12.0:** **Historical engineering record.** The observations, tool counts, deployments and approvals below describe an earlier point in time; do not use as current v0.12.0 operational guidance. Check [current-version.md](current-version.md) and the installed `udb --version` before using commands.
+
 Scope: the experimental Cloudflare + Render + Windows cloud-agent integration
 inside draft PR #60. The original UDB core has separate CI, simulation and
 performance benchmarks; this audit does **not** claim a comprehensive review of

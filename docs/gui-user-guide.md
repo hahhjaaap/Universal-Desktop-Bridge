@@ -1,5 +1,7 @@
 # UDB desktop GUI — appearance, navigation and security
 
+> **UDB 0.12.0 docs review (2026-11-13):** **Current UDB 0.12.0 source guidance.** Verify the installed executable, Cloudflare Worker, OAuth and owner grants separately; source changes do not update them. See [version/status](current-version.md).
+
 Applies to the UDB v0.12.0 Cloudflare-connected source GUI. Check the
 [installed release](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases)
 separately: source on `main` does not update a previously installed EXE.

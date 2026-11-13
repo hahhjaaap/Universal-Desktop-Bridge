@@ -1,5 +1,7 @@
 # UDB Enterprise Desktop UI — historical design and delivery roadmap
 
+> **UDB 0.12.0 docs review (2026-11-13):** **Historical design/evidence, not a current runbook.** Earlier experiments, metrics and version-specific status do not establish current v0.12.0 behavior; never execute obsolete deployment/transport instructions. See [version/status](current-version.md).
+
 > **Historical snapshot, not current operating instructions.** The status table below
 > was recorded on 2026-11-01 against UDB 0.10.x. UDB v0.12.0 was published
 > on 2026-11-11 and uses Cloudflare-only remote MCP; OpenAI Tunnel has been
@@ -9,7 +11,7 @@
 > [Cloudflare staging operations](../cloudflare/STAGING-OPERATIONS.md).
 
 **Status (2026-11-01):** incremental implementation underway in source; the full enterprise GUI and hardening plan remain **unfinished**.
-**Baseline:** UDB `main` 0.10.1; latest published Windows installer v0.10.0. GUI changes merged after that release do **not** update the installer.
+**Historical baseline (2026-11-01):** source 0.10.1 and published installer 0.10.0. **As of 2026-11-13**, source declares 0.12.0 and v0.12.0 was published on 2026-11-11; neither updates an installed machine automatically.
 **Target:** a polished Windows desktop product with verifiable controls, not an AI-styled dashboard.
 
 ### Implementation ledger (source, not released installer)

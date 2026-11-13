@@ -1,5 +1,7 @@
 # UDB audit and staging verification — 2026-11-09
 
+> **Docs reviewed 2026-11-13 — UDB 0.12.0:** **Historical engineering record.** The observations, tool counts, deployments and approvals below describe an earlier point in time; do not use as current v0.12.0 operational guidance. Check [current-version.md](current-version.md) and the installed `udb --version` before using commands.
+
 This is an engineering verification record, **not** a claim that ChatGPT OAuth
 is complete or that all 59 tools are available remotely.
 

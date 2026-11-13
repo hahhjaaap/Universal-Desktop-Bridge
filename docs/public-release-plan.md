@@ -1,5 +1,7 @@
 # UDB public-release readiness plan (proposal)
 
+> **UDB 0.12.0 docs review (2026-11-13):** **Historical design/evidence, not a current runbook.** Earlier experiments, metrics and version-specific status do not establish current v0.12.0 behavior; never execute obsolete deployment/transport instructions. See [version/status](current-version.md).
+
 **Date:** 2026-11-04  
 **Status:** Historical proposal based on UDB 0.11.0; not an approved date or claim of production readiness  
 **Baseline (historical, 2026-11-04):** `main` at `913b338658c898df64502f307ade4ed5c65d8df3`; source package `0.11.0`  

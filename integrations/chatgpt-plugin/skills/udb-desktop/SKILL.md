@@ -5,6 +5,8 @@ description: Use when the user wants to inspect, troubleshoot, or operate the co
 
 # UDB Desktop Bridge
 
+> **UDB 0.12.0 documentation review (2026-11-13):** Staging/opt-in instructions do not change live Worker, OAuth, owner permissions or secrets. See [version/status](../../../../docs/current-version.md).
+
 Use this skill only with the authenticated UDB MCP server configured by this plugin.
 
 ## Connection verification

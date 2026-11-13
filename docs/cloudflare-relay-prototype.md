@@ -1,5 +1,7 @@
 # UDB Cloudflare relay — historical P0 prototype notes
 
+> **Docs reviewed 2026-11-13 — UDB 0.12.0:** **Historical engineering record.** The observations, tool counts, deployments and approvals below describe an earlier point in time; do not use as current v0.12.0 operational guidance. Check [current-version.md](current-version.md) and the installed `udb --version` before using commands.
+
 > **Archived design record, not the current setup runbook (updated 2026-11-04).**
 > This file describes early admin-relay and invitation experiments. It
 > deliberately preserves the original design rationale but **must not** be

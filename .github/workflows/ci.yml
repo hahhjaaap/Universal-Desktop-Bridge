@@ -43,7 +43,11 @@ jobs:
         if: runner.os != 'Linux'
         env:
           UDB_RUN_INTERACTIVE_WINDOWS_TESTS: '1'
-        run: python -m pytest --junitxml="${{ runner.temp }}/udb-tests.xml"
+          PYTHONFAULTHANDLER: '1'
+        # Windows PySide6 can abort during interpreter shutdown *after* all
+        # tests pass. Explicitly drain Qt workers and dispose QApplication
+        # while Qt modules are live; never mask a nonzero pytest/teardown exit.
+        run: python tools/run_windows_pytest.py "${{ runner.temp }}/udb-tests.xml"
       - name: Run Linux regressions with a session bus
         if: runner.os == 'Linux'
         # Chrome needs a live session bus, even with headless rendering.

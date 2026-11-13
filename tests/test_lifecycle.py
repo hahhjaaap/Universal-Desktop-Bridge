@@ -440,21 +440,21 @@ def test_diagnostic_recovery_fields_are_bounded_not_raw_state(tmp_path, monkeypa
     assert "SYNTHETIC_PRIVATE" not in json.dumps(report)
 
 
-def test_setup_checks_frozen_runtime_before_asking_for_a_key(tmp_path, monkeypatch):
+def test_cloudflare_setup_does_not_require_retired_tunnel_runtime(
+    tmp_path, monkeypatch
+):
     from udb import components
 
-    monkeypatch.setattr(onboarding, "console_input", lambda: True)
-    monkeypatch.setattr(onboarding.sys, "frozen", True, raising=False)
     monkeypatch.setattr(
-        components, "runtime_report", lambda: {"components": [], "office_modules": {}}
+        components,
+        "runtime_report",
+        lambda: pytest.fail("Cloudflare setup must not require tunnel-client"),
     )
-    monkeypatch.setattr(
-        "builtins.input",
-        lambda _: pytest.fail("Incomplete build must not request connection details"),
-    )
-    with pytest.raises(ValueError, match="Runtime check failed"):
-        onboarding.run(Settings(tmp_path / "unused", tmp_path / "work"))
-    assert not (tmp_path / "unused").exists()
+    monkeypatch.setattr(onboarding, "setup_cloud", lambda _: 0)
+    selected = Settings(tmp_path / "unused", tmp_path / "work")
+    args = SimpleNamespace(json=False, access=None, offline=False, online=False)
+    assert cli._run_setup(args, selected) == 0
+    assert not selected.home.exists()
 
 
 def test_timed_out_update_reports_unknown_outcome_without_retry(tmp_path, monkeypatch):

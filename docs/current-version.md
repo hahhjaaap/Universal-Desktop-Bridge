@@ -50,3 +50,15 @@ Older exact tool counts or CI results must not be represented as current.
 See [release security](release-security.md). Neither documentation changes
 nor a passing CI gate authorize Cloudflare deployment, secret/OAuth updates,
 Windows grants or installer execution on an owner's PC.
+
+### Additional Tunnel onboarding source cleanup
+
+The unused internal `onboarding.run()` OpenAI Tunnel setup wizard and its
+obsolete interactive-key prompts were removed after checking the call graph:
+the public `udb setup` already calls `onboarding.setup_cloud()`. Tests now
+check attended Cloudflare pairing, malformed-pairing fail-closed behavior,
+existing legacy connection bytes and startup preferences without credential
+reads or changing permissions. Legacy `saved_connection`, `saved_mode` and
+`save_mode` helpers are **retained**, as are the DesktopController
+reconnection and historic archive paths until a safe migration/rollback
+procedure exists. See [issue #162](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/162).

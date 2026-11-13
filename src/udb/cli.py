@@ -192,7 +192,10 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         "help",
     )
     for name in command_names:
-        command = subcommands.add_parser(name, help=SIMPLE_COMMAND_HELP.get(name))
+        if name in SIMPLE_COMMAND_HELP:
+            command = subcommands.add_parser(name, help=SIMPLE_COMMAND_HELP[name])
+        else:
+            command = subcommands.add_parser(name)
         add_settings(command, suppress=True)
         if name == "help":
             command.add_argument("topic", nargs="?", choices=("advanced",))

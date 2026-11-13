@@ -46,9 +46,9 @@ def test_source_version_identifies_the_current_docs():
     for relative in ("README.md", "docs/README.md", "docs/current-version.md"):
         body = (ROOT / relative).read_text(encoding="utf-8")
         assert VERSION in body, relative
-    assert VERSION == tomllib.loads(
-        (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    )["project"].get("version", VERSION)  # dynamic project version is allowed
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert "version" in project["project"]["dynamic"]
+    assert "version" not in project["project"]
 
 
 def test_local_document_links_resolve_to_checked_in_files():
@@ -67,7 +67,7 @@ def test_local_document_links_resolve_to_checked_in_files():
             if not path:
                 continue
             dest = (source.parent / path).resolve()
-            if not dest.is_file():
+            if not dest.is_relative_to(ROOT) or not dest.is_file():
                 broken.append(f"{source.relative_to(ROOT)} -> {raw}")
     assert not broken, "\n".join(broken)
 

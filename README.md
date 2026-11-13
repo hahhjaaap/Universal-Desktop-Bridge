@@ -464,7 +464,7 @@ Compatibility launchers and import aliases are intentionally retained. Generated
 - Source work, document reviews and browser pages can contain untrusted content. Review outputs before acting.
 - This project is a local bridge, **not ChatGPT Work**, a tax-compliance service or an autonomous account administrator.
 
-**Documentation:** [Desktop GUI](docs/gui-user-guide.md) · [Enterprise GUI roadmap](docs/gui-enterprise-roadmap.md) · [Architecture](ARCHITECTURE.md) · [Accounting Work Tools](docs/accounting-worktools.md) · [Example configuration](udb.example.toml) · [MCP example](MCP_CONFIGURATION.example.json) · [Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases)
+**Documentation:** [Documentation index](docs/README.md) · [Current source/release status](docs/current-version.md) · [Desktop GUI](docs/gui-user-guide.md) · [Enterprise GUI roadmap](docs/gui-enterprise-roadmap.md) · [Architecture](ARCHITECTURE.md) · [Accounting Work Tools](docs/accounting-worktools.md) · [Example configuration](udb.example.toml) · [MCP example](MCP_CONFIGURATION.example.json) · [Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases)
 
 **License:** [MIT](LICENSE). Third-party components retain their own licenses.
 

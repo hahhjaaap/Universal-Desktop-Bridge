@@ -194,6 +194,7 @@ def _everyday_help() -> str:
             "  udb --version            Show installed UDB version",
             "",
             "For uncommon commands: udb help advanced",
+            "Vietnamese commands: udb help vi",
             "For command options: udb help <command> or udb <command> --help",
             "Help does not start UDB, grant access, or change owner state.",
         ]
@@ -205,10 +206,10 @@ def _everyday_help() -> str:
 def _everyday_help_vi() -> str:
     """Optional Vietnamese help without changing the machine-readable CLI."""
     lines = [
-        "UDB - lenh thuong dung",
-        "Cach dung: udb [lenh] [tuy chon]",
+        "UDB - lệnh thường dùng",
+        "Cách dùng: udb [lệnh] [tùy chọn]",
         "",
-        "  udb                      Khoi dong UDB (nhu udb start)",
+        "  udb                      Khởi động UDB (như udb start)",
     ]
     for name, description in SIMPLE_COMMAND_HELP_VI.items():
         display = "update --check" if name == "update" else name
@@ -216,11 +217,11 @@ def _everyday_help_vi() -> str:
     lines.extend(
         [
             "",
-            "  udb --version            Xem phien ban hien tai",
+            "  udb --version            Xem phiên bản hiện tại",
             "",
-            "Lenh nang cao: udb help advanced",
-            "Huong dan tung lenh: udb help <command>",
-            "Cac lenh tro giup khong khoi dong UDB hay cap them quyen.",
+            "Lệnh nâng cao: udb help advanced",
+            "Hướng dẫn từng lệnh: udb help <command>",
+            "Các lệnh trợ giúp không khởi động UDB hay cấp thêm quyền.",
         ]
     )
     return "\n".join(lines)

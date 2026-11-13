@@ -1,12 +1,14 @@
 # ChatGPT UDB Desktop Bridge setup
 
-## Current integration target
+> **Docs reviewed 2026-11-13 — UDB 0.12.0:** **Staging/opt-in scope.** Features and grants described below are not enabled for arbitrary devices and are not proof of a live ChatGPT connection. Check [current-version.md](current-version.md) and the installed `udb --version` before using commands.
 
-The private ChatGPT plugin package is maintained in `integrations/chatgpt-plugin/`.
+## Staging example — obtain your own current device endpoint
+
+The ChatGPT plugin package is maintained in `integrations/chatgpt-plugin/`. The following staging configuration is an example, not a universal current endpoint. Obtain the real device-scoped URL with `udb mcp-config` after attended pairing and confirm the actual Worker/Access configuration separately.
 
 - **Plugin name:** UDB Desktop Bridge
 - **MCP transport:** Streamable HTTP
-- **MCP endpoint:** `https://udb-private-relay-staging.hkhoinguyen72.workers.dev/v1/devices/54841a965bb6405c9408137a1e2eb650/mcp`
+- **MCP endpoint:** the reviewed, device-specific URL from `udb mcp-config`
 - **OAuth:** Cloudflare Access Managed OAuth with Dynamic Client Registration
 - **Requested resource scope:** `udb:read`
 - **Environment:** staging only
@@ -38,7 +40,7 @@ Public metadata checks, DCR registration, and an HTTP 302 to the Access login pa
 Run the read-only preflight from a machine with Python and network access:
 
 ```powershell
-python tools/check_chatgpt_oauth.py --relay https://udb-private-relay-staging.hkhoinguyen72.workers.dev --device-id 54841a965bb6405c9408137a1e2eb650
+python tools/check_chatgpt_oauth.py --relay https://YOUR-REVIEWED-STAGING-RELAY.workers.dev --device-id YOUR-DEVICE-ID
 ```
 
 To test DCR callback compatibility explicitly, add:

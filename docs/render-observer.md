@@ -1,5 +1,7 @@
 # Render: optional independent read-only UDB observer
 
+> **UDB 0.12.0 docs review (2026-11-13):** **Opt-in/staging evidence.** Code, tests and staging results do not imply production access, current grants or end-to-end ChatGPT connectivity. See [version/status](current-version.md).
+
 Render does not run device commands, identify individual PCs, authenticate
 end users, or proxy MCP traffic. Cloudflare remains the main connection path.
 

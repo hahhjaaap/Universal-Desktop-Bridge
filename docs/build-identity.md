@@ -1,13 +1,15 @@
 # Identify the running UDB build
 
+> **Docs reviewed 2026-11-13 — UDB 0.12.0:** **Current source guidance.** Applies to UDB 0.12.0 source; Windows installations and Cloudflare deployment may use independent revisions. Check [current-version.md](current-version.md) and the installed `udb --version` before using commands.
+
 `udb --version` remains the plain semantic version for compatibility with
 installers and existing scripts. Use `udb version --json` for the build identity,
 or inspect `build` in `udb status --json`, `udb doctor --json` and `bridge_status`.
 The native GUI title and version tooltip show the same build ID.
 
 A frozen build records the exact source Git SHA, whether the build checkout was
-dirty, and its packaging layout. For example, `0.11.0+abcdef123456` identifies
-a different artifact from another build reporting the same `0.11.0` version.
+dirty, and its packaging layout. For example, `0.12.0+abcdef123456` identifies
+a different artifact from another build reporting the same `0.12.0` version.
 The complete SHA is available in JSON. A `.dirty` suffix marks a modified
 checkout; CI acceptance requires a clean checkout and the expected full SHA.
 

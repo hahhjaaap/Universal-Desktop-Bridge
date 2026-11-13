@@ -1,4 +1,6 @@
-# Unified UDB MCP — 59 public tools
+# Unified UDB MCP — historical 59-tool milestone
+
+> **UDB 0.12.0 docs review (2026-11-13):** **Historical design/evidence, not a current runbook.** Earlier experiments, metrics and version-specific status do not establish current v0.12.0 behavior; never execute obsolete deployment/transport instructions. See [version/status](current-version.md).
 
 UDB has two local backends: 36 Core FastMCP tools and 31 Companion
 implementations. The local proxy consolidates eight legacy operations into

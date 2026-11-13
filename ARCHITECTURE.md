@@ -1,37 +1,43 @@
 # UDB architecture and module ownership
 
+> **Version baseline (2026-11-13):** Source targets **UDB 0.12.0**; the published Windows v0.12.0 release is immutable and may use an earlier commit. The installed EXE, Cloudflare deployment and GitHub source are separate. See [version matrix](docs/current-version.md).
+
 UDB has **one canonical Python implementation** under `src/udb/`.
 The source checkout, installed wheel and frozen Windows executable use the
 same code. The root-level `bridge.py` and `udb_*.py` files are
 **compatibility launchers**, not independent backends. Do not duplicate logic
 inside them.
 
-## Request path
+## Request path — UDB 0.12.0
 
 ```text
 ChatGPT / MCP client
-        |
-        v
-udb.cli / udb.proxy (single client-facing MCP transport)
-        |
-        +--> udb.server (registered-project permissions, proposals, Sandbox)
-        |
-        +--> udb.companion.runtime (worker lifecycle and sessions)
-                    |
-                    v
-              companion.dispatch (single companion tool router)
-                    |
-                    +--> companion.files + terminal (bounded local operations)
-                    +--> companion.extensions (optional file/terminal helpers)
-                    +--> companion.features (jobs, documents, processes)
-                                |
-                                +--> companion.background (job coordinator)
-                                |       +--> companion.jobs (task state/cancellation)
-                                |       +--> companion.search (bounded worker)
-                                |       +--> companion.journal (durable checkpoints)
-                                +--> companion.documents
-                                +--> companion.system_processes
+       |
+       v
+Cloudflare HTTPS MCP endpoint (OAuth + subject/device grants)
+       |
+       v
+Cloudflare Worker -> authenticated device WebSocket -> Windows Cloud Agent
+                                                      |
+                                                      v
+                                                  udb.proxy
+                                                      |
+                    +---------------------------------+--------------+
+                    |                                                |
+                    v                                                v
+          udb.server (Core)                           companion.runtime
+                                                                     |
+                                                                     v
+                                                           companion.dispatch
+                                                           files/jobs/browser/
+                                                           desktop/documents
 ```
+
+The local stdio proxy/workers are internal to the Cloud Agent; public local
+stdio MCP registration is not the supported v0.12.0 client transport.
+`companion.extensions` is a Python **tool registry**, not a browser extension.
+Deployed Cloudflare Worker, OAuth, grants and ChatGPT discovery require
+separate verification.
 
 `udb.catalog` translates/consolidates public tool schemas and `udb.registry`
 publishes them. The companion's `dispatch.validate_catalog()` rejects schema
@@ -41,20 +47,16 @@ Keep this separate from file permissions and owner approvals.
 
 ## Connection identity and Multi-PC status
 
-The released source's `udb.desktop` starts a tunnel client using one locally
-configured `tunnel_id`. That identifies an MCP endpoint, **not** an arbitrary
-set of Windows agents. `udb.proxy` routes tool calls to its own machine's
-core and companion workers; it has no built-in per-call `computer_id` router
-on `main`. A ChatGPT account using two computers does not by itself alter
-that routing boundary.
+Attended `udb setup` pairs each Windows device with a distinct Cloudflare
+MCP endpoint; the Cloud Agent opens an outbound WebSocket to the relay.
+The verified OAuth subject and device grants still gate every remote tool.
+The local proxy dispatches only to that device's Core and Companion workers.
+Multiple computers require separate pairing and grants; a shared account
+cannot silently redirect one machine's commands to another.
 
-The independent [draft Multi-PC PR #34](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/34)
-prototypes a hub, explicit device IDs, loopback-only agents and private
-Tailscale transport. It must remain a separate, opt-in review item until
-Windows CI, secure deployment and a two-network end-to-end test are verified.
-Do not claim that a feature on a draft branch is installed with the latest
-published release. Preserve existing per-host owner grants and protected-path
-checks; never route an unavailable remote command to the local machine.
+The Tailscale fleet prototype and old OpenAI Tunnel experiments are historical
+research paths, not supported UDB 0.12.0 remote setup or a fallback for a
+failed authorization.
 
 ## Core policy and approval queues
 
@@ -83,8 +85,8 @@ checks; never route an unavailable remote command to the local machine.
 - `udb.ui_jobs`: bounded, purely local task metadata filtering and
   fail-closed status grouping. Search excludes scripts, logs and document text;
   filtering never changes stored jobs or permissions.
-- `udb.ui_connection`: pure fail-closed read-only Agent/Tunnel/ChatGPT health
-  viewmodels. Only explicit local and tunnel signals can be marked ready;
+- `udb.ui_connection`: fail-closed Agent/Cloud Agent/ChatGPT status
+  viewmodels. Local process observations cannot prove remote discovery;
   the GUI cannot assert ChatGPT tool discovery without a real invocation.
 - `udb.manager_refresh`: status polling, project list refresh, real
   permission count updates and accessibility text for compact navigation.
@@ -187,8 +189,7 @@ The GUI **observes and presents** backend state. Its Qt paint, sidebar,
 appearance and focus components do not authorize file writes, launch arbitrary
 programs or enable full-computer access. Owner approvals and protected-path
 checks remain in the core/host policy layer; backend authorization is required
-even if a GUI button is enabled. Conversely, a visual **Tunnel đã kết nối**
-indicator is not end-to-end proof that ChatGPT has discovered UDB's tools.
+even if a GUI button is enabled. Conversely, a running **Cloud Agent** indicator is not end-to-end proof that ChatGPT has discovered UDB's tools.
 
 The 200 px/72 px navigation preference is per window and not persisted.
 The theme preference is persisted to bounded local `gui.json`, applying

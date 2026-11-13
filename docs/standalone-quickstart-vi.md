@@ -1,5 +1,7 @@
 # Khởi động UDB qua Cloudflare
 
+> **UDB 0.12.0 documentation review (2026-11-13):** Current source targets UDB 0.12.0; installed Windows releases and deployed Cloudflare services must be verified independently. See [version/status](current-version.md).
+
 Chạy trên Windows bằng tài khoản đã ghép nối thiết bị:
 
 ```powershell

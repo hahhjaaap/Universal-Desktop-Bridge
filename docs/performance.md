@@ -1,5 +1,7 @@
 # Runtime costs and maintenance
 
+> **Historical evidence:** Earlier run counts/benchmarks are not current UDB 0.12.0 CI results. The UDB Aura extension is retired from source. See [version/status](current-version.md).
+
 Run from a developer checkout installed with `python -m pip install -e ".[office,dev]"`:
 
 ```sh
@@ -43,12 +45,10 @@ GUI polling avoids a write transaction when approvals need no expiry. Its
 trees update when grants, protected paths or request payloads change and
 preserve the current selection. Refresh failures in one section do not stop
 the other sections from updating. Large job logs use one bounded tail read.
-Browser-extension mark/unmark and navigation decorations run in order per
-tab, preventing a late decoration from restoring an already removed badge.
 
 Regression tests check memory bounds, copy conflicts, oversized/growing files,
 idle polling counts, SQLite reader/writer contention, GUI state updates and
-extension operation ordering. Time measurements are informational; CI does
+owner-grant cursor handling. Time measurements are informational; CI does
 not enforce machine-dependent speed ratios.
 
 ## MCP startup and idle mailbox optimization (experimental PR)

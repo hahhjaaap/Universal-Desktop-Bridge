@@ -1,5 +1,7 @@
 # Staging-only authenticated MCP discovery while Windows is offline
 
+> **Docs reviewed 2026-11-13 — UDB 0.12.0:** **Staging/opt-in scope.** Features and grants described below are not enabled for arbitrary devices and are not proof of a live ChatGPT connection. Check [current-version.md](current-version.md) and the installed `udb --version` before using commands.
+
 This proposal addresses one failure mode of a direct ChatGPT → UDB connector:
 in the original Cloudflare Worker, both `initialize` and `tools/list`
 required the Windows Cloud Agent to be connected. When the laptop was offline,

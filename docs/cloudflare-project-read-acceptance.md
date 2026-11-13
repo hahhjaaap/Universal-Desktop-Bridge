@@ -1,5 +1,7 @@
 # Project reads through Cloudflare: deployment and acceptance
 
+> **Docs reviewed 2026-11-13 — UDB 0.12.0:** **Staging/opt-in scope.** Features and grants described below are not enabled for arbitrary devices and are not proof of a live ChatGPT connection. Check [current-version.md](current-version.md) and the installed `udb --version` before using commands.
+
 This runbook is for the account/device owner. A merged PR, public health response,
 local stdio test or simulated Worker test does not establish ChatGPT end-to-end access.
 The Windows stable installation, existing SQLite data and owner grants remain in place.

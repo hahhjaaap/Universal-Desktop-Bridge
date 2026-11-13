@@ -1,8 +1,8 @@
 # Cloudflare owner-gated tool catalog (opt-in)
 
-UDB's Windows Core MCP server defines 36 tools; the consolidated public UDB
-catalog advertises 59 tools across Core and Companion. The original
-Cloudflare `udb:read` gateway intentionally exposed only six read tools. The extra tools include file changes, sandbox jobs, UDB-owned browser
+> **Docs reviewed 2026-11-13 — UDB 0.12.0:** **Staging/opt-in scope.** Features and grants described below are not enabled for arbitrary devices and are not proof of a live ChatGPT connection. Check [current-version.md](current-version.md) and the installed `udb --version` before using commands.
+
+The local UDB tool catalog is generated from Core and Companion definitions; verify the current count with `udb tools`. The original Cloudflare `udb:read` gateway exposed a deliberately restricted read-only subset. The extra tools include file changes, sandbox jobs, UDB-owned browser
 sessions and optional Windows host/desktop operations. **Discoverability is
 not authorization and authorizing a cloud identity is not local desktop
 consent.**

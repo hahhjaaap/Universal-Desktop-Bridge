@@ -1,5 +1,7 @@
 # UDB Cloudflare OAuth MCP gateway (read-only P0 foundation)
 
+> **Docs reviewed 2026-11-13 — UDB 0.12.0:** **Staging/opt-in scope.** Features and grants described below are not enabled for arbitrary devices and are not proof of a live ChatGPT connection. Check [current-version.md](current-version.md) and the installed `udb --version` before using commands.
+
 This is an **opt-in remote resource-server** layer for the private Cloudflare
 relay. It does not implement an OAuth authorization server or perform a live
 Cloudflare deployment. ChatGPT registration is **not** automatic.

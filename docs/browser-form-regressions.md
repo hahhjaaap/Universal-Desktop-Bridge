@@ -1,5 +1,7 @@
 # Browser form and link regressions
 
+> **Docs reviewed 2026-11-13 — UDB 0.12.0:** **Historical engineering record.** The observations, tool counts, deployments and approvals below describe an earlier point in time; do not use as current v0.12.0 operational guidance. Check [current-version.md](current-version.md) and the installed `udb --version` before using commands.
+
 Baseline: `9ec663c` on `main` (PR #23). A user report identified native dropdown
 failures, disabled-field timeouts, repeated form-submit timeouts and an
 intermittent failure following an external link.

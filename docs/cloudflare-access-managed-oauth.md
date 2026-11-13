@@ -1,11 +1,13 @@
 # Cloudflare Access Managed OAuth (UDB read-only experimental MCP)
 
+> **Docs reviewed 2026-11-13 — UDB 0.12.0:** **Staging/opt-in scope.** Features and grants described below are not enabled for arbitrary devices and are not proof of a live ChatGPT connection. Check [current-version.md](current-version.md) and the installed `udb --version` before using commands.
+
 ## Scope and safety
 
 Optional alternative to a manually integrated RS256 JWT OAuth identity provider.
 Use **Cloudflare Access Managed OAuth**, configured as a **hostname/path scoped
 Access MCP application** for a single device MCP endpoint. Do not select Worker-
-level Access on `udb-private-relay`: Cloudflare documents that Worker-level
+level Access on a UDB relay: Cloudflare documents that Worker-level
 Access blocks WebSocket upgrades, which would disconnect the UDB Cloud Agent.
 
 The code remains **off by default**. The Windows device is not remotely

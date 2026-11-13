@@ -547,7 +547,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.topic == "advanced":
             print(ADVANCED_COMMAND_HELP)
         elif args.topic:
-            return main([args.topic, "--help"])
+            # Reuse argparse subcommand help without loading runtime settings.
+            try:
+                return main([args.topic, "--help"])
+            except SystemExit as exc:
+                return exc.code if isinstance(exc.code, int) else 2
         else:
             print(_everyday_help())
         return 0

@@ -160,7 +160,6 @@ nothing here grants permissions or changes the Cloudflare connection.
 """
 
 
-
 def _everyday_help() -> str:
     """Keep the human-facing CLI compact; legacy dispatch remains available."""
     lines = [
@@ -519,7 +518,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         add_help=False,
     )
     parser.add_argument(
-        "-h", "--help", action=_EverydayHelpAction, nargs=0,
+        "-h",
+        "--help",
+        action=_EverydayHelpAction,
+        nargs=0,
         help="Show everyday UDB commands",
     )
     parser.add_argument("--version", action="version", version=VERSION)

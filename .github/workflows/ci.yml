@@ -44,10 +44,10 @@ jobs:
         env:
           UDB_RUN_INTERACTIVE_WINDOWS_TESTS: '1'
           PYTHONFAULTHANDLER: '1'
-        # Expose pytest's own return code. Windows has intermittently exited
-        # 1 after reporting all tests green; this diagnoses the discrepancy
-        # without overriding pytest or the Python process exit status.
-        run: python -c "import sys, pytest; code = int(pytest.main(['--junitxml=' + sys.argv[1]])); print('UDB_PYTEST_RETURN=' + str(code), flush=True); sys.exit(code)" "${{ runner.temp }}/udb-tests.xml"
+        # Windows PySide6 can abort during interpreter shutdown *after* all
+        # tests pass. Explicitly drain Qt workers and dispose QApplication
+        # while Qt modules are live; never mask a nonzero pytest/teardown exit.
+        run: python tools/run_windows_pytest.py "${{ runner.temp }}/udb-tests.xml"
       - name: Run Linux regressions with a session bus
         if: runner.os == 'Linux'
         # Chrome needs a live session bus, even with headless rendering.

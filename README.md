@@ -156,27 +156,44 @@ in order, without resetting credentials or loosening permissions:
 Verify the Cloud Agent process and a read-only invocation in ChatGPT.
 
 
-### Common commands
+### Commands: a small everyday set
 
-| Command | Purpose |
+Run `udb --help` or `udb help` to see only the everyday commands. `udb`
+starts UDB by default. Use `udb help advanced` for the full list of
+compatibility, permission, recovery, and developer commands. See the
+[CLI migration and rollback checklist](docs/cli-migration.md) before retiring
+or replacing any existing script or Windows shortcut.
+
+| Everyday command | Purpose |
 | --- | --- |
-| `udb tools` | Show the actual public tool catalog |
-| `udb start` / `udb stop` | Start or stop the local agent |
-| `udb status` / `udb doctor --json` | Inspect health, runtime and setup |
-| `udb logs --details` | Follow redacted tool activity |
-| `udb setup` | Pair a Cloudflare device or display its existing endpoints |
-| `udb live` / `udb live --gui` | Follow tool activity in the terminal or read-only activity window |
-| `udb update --check` | Check the latest published stable release |
-| `udb update` / `udb rollback` | Managed installation update / previous-release rollback |
-| `udb autostart enable` / `udb autostart disable` | Opt in/out of startup at Windows sign-in |
+| `udb` / `udb start` | Start the Windows UDB agent |
+| `udb setup` | Pair with Cloudflare using an attended owner console |
+| `udb stop` | Stop the headless agent |
+| `udb gui` | Open the local owner Manager |
+| `udb status --json` | Inspect local agent and transport status |
+| `udb doctor --cloud --json` | Check local configuration and public Cloudflare readiness |
+| `udb live` / `udb live --gui` | Follow metadata-only UDB activity |
+| `udb update --check` | Check whether a reviewed release is available, without installing |
 
-Cloudflare-paired users can opt in to start Cloud Agent **after Windows sign-in** with `udb autostart enable --home PATH`. This must be run once from an attended local Windows terminal, with terminal access disabled; it does not grant new device permissions. `udb autostart status --json --home PATH` reports `cloud_agent_enabled`, and `udb autostart disable --home PATH` removes this user's logon entry. Auto-start is at user sign-in, not before login or under SYSTEM.
+**Compatibility is preserved:** `udb logs` still works (prefer `udb live`
+for new instructions). `udb tools`, `udb mcp-config`, `udb reconnect`,
+`udb rollback`, `udb autostart`, `udb cloud-pair`, source grants and developer
+commands remain callable; they are only removed from the default help view.
+Do not remove them from existing scripts or automation without migration tests.
 
+Cloudflare-paired users may explicitly enable sign-in startup using
+`udb autostart enable --home PATH` from an attended Windows terminal
+with terminal access disabled. `udb autostart status --json --home PATH`
+reads its state; `udb autostart disable --home PATH` disables startup.
+Auto-start runs after user sign-in, never as SYSTEM.
 
-| `udb mcp-config --home PATH` | Print the paired remote MCP configuration |
-| `udb --access computer` | Attended local owner opt-in to broader computer access |
+Managed updates and rollback must be started **outside UDB's own running tool job**.
+They preserve owner state but do not provide an independent backup; inspect
+`udb --version` and `udb status` before retrying a timed-out update.
 
-Updates and rollback must be started **outside UDB's own running tool job**. They preserve the owner's state, not a snapshot of that state. Keep independent backups. Never assume a timed-out update failed; inspect `udb --version` and `udb status` first.
+This simplified help applies to the updated source until it is included in
+a separately reviewed and published release. The existing v0.12.0 download
+does not change merely because source documentation or CLI code changed.
 
 ## Accounting-first workflow: Vietnamese invoice XLSX
 

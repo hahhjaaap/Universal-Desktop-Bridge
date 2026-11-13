@@ -82,11 +82,14 @@ def worker(role: str, args: Sequence[str]) -> int:
     raise ValueError("Unknown worker role")
 
 
-def add_settings(parser: argparse.ArgumentParser, suppress: bool = False) -> None:
+def add_settings(
+    parser: argparse.ArgumentParser, suppress: bool = False, hide_help: bool = False
+) -> None:
     """Register common path and terminal settings on a CLI parser."""
     default = argparse.SUPPRESS if suppress else None
+    help_text = argparse.SUPPRESS if hide_help else None
     for name in ("home", "config", "root", "core-exe"):
-        parser.add_argument(f"--{name}", default=default)
+        parser.add_argument(f"--{name}", default=default, help=help_text)
 
     terminal = parser.add_mutually_exclusive_group()
     terminal.add_argument(
@@ -94,17 +97,103 @@ def add_settings(parser: argparse.ArgumentParser, suppress: bool = False) -> Non
         dest="enable_terminal",
         action="store_true",
         default=default,
+        help=help_text,
     )
     terminal.add_argument(
         "--disable-terminal",
         dest="enable_terminal",
         action="store_false",
         default=default,
+        help=help_text,
     )
 
 
+# Commands promoted in the standard help. Keep all other commands callable for
+# existing shortcuts, installers, scripts and unattended recovery workflows.
+# A command missing from this table is intentionally *not* advertised in -h.
+SIMPLE_COMMAND_HELP = {
+    "setup": "Pair this Windows device with Cloudflare",
+    "start": "Start UDB (also the default: udb)",
+    "stop": "Stop the UDB headless agent",
+    "gui": "Open the UDB Manager",
+    "status": "Show current UDB status",
+    "doctor": "Diagnose UDB and Cloudflare readiness",
+    "live": "Watch UDB tool activity (--gui for a window)",
+    "update": "Check for a reviewed update with --check",
+    "help": "Show easy commands (or: udb help advanced)",
+}
+
+ADVANCED_COMMAND_HELP = """Advanced UDB commands (kept for compatibility)
+
+Connection and recovery:
+  udb mcp-config         Show the paired HTTPS MCP endpoint
+  udb reconnect          Reconnect the existing Cloud Agent
+  udb cloud-pair         Attended device pairing (alternative to setup)
+  udb cloud-agent        Run the Cloud Agent directly
+  udb autostart status   Check Windows sign-in startup
+  udb autostart enable   Enable Windows sign-in startup (owner only)
+  udb autostart disable  Disable Windows sign-in startup
+  udb rollback           Restore the previous managed release
+  udb quickstart         Start/check local support components
+
+Permissions (owner-attended):
+  udb --access computer   Attended opt-in to broad Windows access
+  udb revoke-access      Revoke broad Windows computer access
+  udb allow-source       Grant source access (--path required)
+  udb revoke-source      Revoke source access (--path required)
+
+Diagnostics and development:
+  udb tools              Show the actual MCP tool catalog
+  udb logs               Older name for the terminal Live viewer
+  udb test               Run the installed-agent test
+  udb runtime --probe    Inspect bundled runtime components
+  udb version --json     Show the exact installed build identity
+  udb build-info         Show build metadata
+  udb manifest           Show package manifest
+  udb init               Create a new local configuration
+  udb build              Build a release from source
+
+The obsolete `udb setup --edit` flag is accepted for compatibility only.
+Legacy internal worker launchers remain private. Use udb <command> --help
+for command-specific options. Existing commands remain supported;
+nothing here grants permissions or changes the Cloudflare connection.
+"""
+
+
+def _everyday_help() -> str:
+    """Keep the human-facing CLI compact; legacy dispatch remains available."""
+    lines = [
+        "UDB - everyday commands",
+        "Usage: udb [command] [options]",
+        "",
+        "  udb                      Start UDB (same as udb start)",
+    ]
+    for name, description in SIMPLE_COMMAND_HELP.items():
+        display = "update --check" if name == "update" else name
+        lines.append(f"  udb {display:<22} {description}")
+    lines.extend(
+        [
+            "",
+            "  udb --version            Show installed UDB version",
+            "",
+            "For uncommon commands: udb help advanced",
+            "For command options: udb help <command> or udb <command> --help",
+            "Help does not start UDB, grant access, or change owner state.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+class _EverydayHelpAction(argparse.Action):
+    """Print concise root help without altering internal/legacy CLI parsers."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print(_everyday_help())
+        parser.exit(0)
+
+
 def _add_subcommands(parser: argparse.ArgumentParser) -> None:
-    subcommands = parser.add_subparsers(dest="action")
+    subcommands = parser.add_subparsers(dest="action", metavar="COMMAND")
     command_names = (
         "start",
         "quickstart",
@@ -133,10 +222,18 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         "version",
         "manifest",
         "mcp-config",
+        "help",
     )
     for name in command_names:
-        command = subcommands.add_parser(name)
+        if name in SIMPLE_COMMAND_HELP:
+            command = subcommands.add_parser(name, help=SIMPLE_COMMAND_HELP[name])
+        else:
+            command = subcommands.add_parser(name)
         add_settings(command, suppress=True)
+        if name == "help":
+            command.add_argument(
+                "topic", nargs="?", choices=("advanced", *command_names)
+            )
         if name in ("autostart", "update", "rollback", "version"):
             command.add_argument(
                 "--json", action="store_true", default=argparse.SUPPRESS
@@ -292,6 +389,11 @@ def _run_setup(args: argparse.Namespace, settings: Settings) -> int:
         raise ValueError(
             "Use udb setup directly in your own terminal without --json/--access/--offline"
         )
+    if getattr(args, "edit", False):
+        print(
+            "UDB: --edit is obsolete; using the normal Cloudflare setup.",
+            file=sys.stderr,
+        )
     from .onboarding import setup_cloud
 
     with _settings_scope(settings):
@@ -413,18 +515,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="udb",
         description="Universal Desktop Bridge: one package, one command",
+        add_help=False,
+    )
+    parser.add_argument(
+        "-h",
+        "--help",
+        action=_EverydayHelpAction,
+        nargs=0,
+        help="Show everyday UDB commands",
     )
     parser.add_argument("--version", action="version", version=VERSION)
-    add_settings(parser)
-    parser.add_argument("--json", action="store_true")
+    add_settings(parser, hide_help=True)
+    parser.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
     view = parser.add_mutually_exclusive_group()
-    view.add_argument(
-        "--detach", action="store_true", help="Do not attach live logs after startup"
-    )
-    view.add_argument(
-        "--follow", action="store_true", help="Force live logs after startup"
-    )
-    parser.add_argument("--wait", type=int, default=30)
+    view.add_argument("--detach", action="store_true", help=argparse.SUPPRESS)
+    view.add_argument("--follow", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--wait", type=int, default=30, help=argparse.SUPPRESS)
     connection_mode = parser.add_mutually_exclusive_group()
     connection_mode.add_argument(
         "--offline", action="store_true", help=argparse.SUPPRESS
@@ -435,12 +541,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         help=argparse.SUPPRESS,
     )
     _add_subcommands(parser)
-    parser.add_argument(
-        "--access", choices=("computer",), help="Attended local owner opt-in only"
-    )
+    parser.add_argument("--access", choices=("computer",), help=argparse.SUPPRESS)
 
     args = parser.parse_args(argv)
     action = args.action or "start"
+    if action == "help":
+        if args.topic == "advanced":
+            print(ADVANCED_COMMAND_HELP)
+        elif args.topic:
+            # Reuse argparse subcommand help without loading runtime settings.
+            try:
+                return main([args.topic, "--help"])
+            except SystemExit as exc:
+                return exc.code if isinstance(exc.code, int) else 2
+        else:
+            print(_everyday_help())
+        return 0
     try:
         if args.offline and args.online:
             raise ValueError("Choose either --offline or --online")

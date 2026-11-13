@@ -1,6 +1,5 @@
 """Cloudflare-only attended setup and read-only legacy state regressions."""
 
-import io
 import json
 import os
 from types import SimpleNamespace
@@ -72,7 +71,11 @@ def test_existing_cloud_pairing_preserves_legacy_state_without_key_prompt(
     legacy_bytes = b'{"tunnel_id":"tunnel_' + b"b" * 32 + b'"}'
     legacy.write_bytes(legacy_bytes)
     pairing = selected.home / "cloud-pairing.json"
-    pairing_bytes = b'{"relay":"https://example.workers.dev","device_id":"' + b"a" * 32 + b'"}'
+    pairing_bytes = (
+        b'{"relay":"https://example.workers.dev","device_id":"'
+        + b"a" * 32
+        + b'"}'
+    )
     pairing.write_bytes(pairing_bytes)
     monkeypatch.setattr(onboarding, "console_input", lambda: True)
     monkeypatch.setattr(

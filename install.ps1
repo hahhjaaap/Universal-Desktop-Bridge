@@ -104,7 +104,13 @@ function Get-AgentState([string]$Image) {
     return $state
 }
 function Test-CloudflareOnlyRelease([string]$Image) {
-    return ((@(& $Image --help) -join ' ') -match '(?:[,{])live(?=[,}])')
+    # v0.12.0 originally listed subcommands in argparse braces; newer CLIs
+    # show only everyday commands. Recognize both help formats during upgrade
+    # and rollback without starting a Windows agent or inspecting owner state.
+    $helpText = (@(& $Image --help) -join "`n")
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect candidate UDB CLI.' }
+    return (($helpText -match '(?:[,{])live(?=[,}])') -or
+            ($helpText -match '(?m)^[ \t]+udb live(?:[ \t]|$)'))
 }
 function Start-Agent([string]$Image,[string]$Mode) {
     $options = @('--home',$DataHome,'start','--detach','--json','--wait','60')

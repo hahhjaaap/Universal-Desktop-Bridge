@@ -352,7 +352,9 @@ def run(exe=False, output=None, assets=None, layout="onefile"):
 
     (destination / "plugin.json").write_text(json.dumps(manifest(), indent=2) + "\n")
     for template in ("udb.example.toml", "MCP_CONFIGURATION.example.json"):
-        (destination / template).write_bytes((base / template).read_bytes())
+        (destination / template).write_bytes(
+            (base / "examples" / "config" / template).read_bytes()
+        )
     if exe:
         standalone_package(base, destination, asset_root, components, layout=layout)
     files = [

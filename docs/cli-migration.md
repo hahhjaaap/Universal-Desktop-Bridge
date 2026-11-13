@@ -1,7 +1,7 @@
 # UDB command-line simplification and safe migration
 
-> Status: proposed source change on PR #167, **not** an installed or published
-> Windows release. Check `udb version --json` before relying on new commands.
+> Status: merged into `main` via PR #167 on 2026-11-13. This is **not** an
+> installed or published Windows release. Check `udb version --json` before relying on new commands.
 > This document does not authorize updating Windows, pairing devices, deploying
 > Cloudflare Workers, merging into main, or changing any owner permission.
 

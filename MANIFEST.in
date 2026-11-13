@@ -1,4 +1,5 @@
-include LICENSE README.md udb.example.toml MCP_CONFIGURATION.example.json
+include LICENSE README.md
+include examples/config/udb.example.toml examples/config/MCP_CONFIGURATION.example.json
 recursive-include src/udb *.ps1
 recursive-include tools *.py *.spec
 prune state

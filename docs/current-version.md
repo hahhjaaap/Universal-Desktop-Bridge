@@ -10,7 +10,9 @@ The latest published tag was independently checked again on **2026-11-13**.
 updates (PR #160), Windows PySide6-Essentials **6.12.0** (PR #155),
 Chrome Aura removal (PR #163), Windows release gating on a protected `main`
 (PR #164), and the unreachable OpenAI Tunnel onboarding removal / Windows Qt
-CI teardown fix (PR #165). Each source merge was separately validated; none
+CI teardown fix (PR #165), desktop capture/UIA and parallel read fixes
+(PR #168), and concise CLI help with installer compatibility (PR #167).
+Each source merge was separately validated; none
 is evidence that the published v0.12.0 ZIP or deployed Cloudflare Worker was
 updated.
 
@@ -46,8 +48,10 @@ separate controls and must not be inferred from green local process status.
 - The released v0.12.0 ZIP is immutable. A merged source PR is not proof of
   any new signed/released installer or of a Windows upgrade.
 
-## Outstanding safety and migration work
+## Remaining safety and migration work
 
+- Issues #147 and #162 were closed on 2026-11-13 at the owner's request as
+  **not planned**. Closing them does not complete the work described below.
 - [Issue #147](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/147):
   GitHub still reports `main.protected=false` and no enforced ruleset as of
   2026-11-13. The automated Windows release gate refuses publication while

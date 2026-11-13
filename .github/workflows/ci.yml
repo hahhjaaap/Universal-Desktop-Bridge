@@ -83,7 +83,7 @@ jobs:
       - run: udb build
       - shell: bash
         run: python tools/check_wheel.py dist/*.whl
-      - name: Verify source archive excludes regression-only files
+      - name: Verify source archive includes templates and excludes regression-only files
         shell: bash
         run: |
           python - <<'PY'
@@ -94,7 +94,10 @@ jobs:
           with tarfile.open(archives[0], "r:gz") as archive:
               names = archive.getnames()
           assert not any("/tests/" in name for name in names), "Tests were packaged into sdist"
-          print("Source archive contains no regression suite")
+          required = {"examples/config/udb.example.toml", "examples/config/MCP_CONFIGURATION.example.json"}
+          relative = {name.split("/", 1)[1] for name in names if "/" in name}
+          assert required <= relative, f"Source archive misses templates: {required - relative}"
+          print("Source archive includes configuration templates and no regression suite")
           PY
       - uses: actions/upload-artifact@v7
         id: artifact_upload

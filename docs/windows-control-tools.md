@@ -25,6 +25,10 @@ names would obscure ownership, permissions or input semantics.
 
 List windows, retain a fresh `window_id`, then inspect `snapshot`. Snapshot reports
 supported UIA patterns, toggle/selection/expansion state and readonly flags.
+Listing omits DWM-cloaked shell windows and reports `minimized` and `class_name`,
+so hidden UWP content hosts are not mistaken for the visible application frame.
+Snapshot retries a root-only Control View using Raw View under the same verified
+window; `children_exposed=false` means the provider still exposes no child controls.
 Use an exact `automation_id` or `name`; add a supported `control_type` to narrow
 the match. Both `Edit` and the observed `ControlType.Edit` notation work.
 
@@ -53,6 +57,17 @@ handlers. Mutations retain cooperative input yielding, local pause and grant
 checks; inspection remains available under the existing light-memory budget.
 Unsupported patterns, changed controls and uncertain outcomes require inspection,
 not automatic replay. The short postcondition polls repeat observations only.
+
+## Window screenshots
+
+The default `screenshot` captures the **visible screen region** of the selected
+window, not an isolated compositor frame. It requires a restored foreground
+window and rejects overlapping windows, including untitled overlays. It neither
+focuses the target nor falls back to a display capture. Visibility and identity
+are checked again after capture; a changed target causes the image to be discarded.
+The result reports `source=visible_window_region`, `occlusion_checked=true` and
+`window_content_isolated=false`. These are best-effort observations, not exclusive
+desktop ownership. Explicit `display_index` or `region` captures retain screen scope.
 
 ## Utilities and jobs
 

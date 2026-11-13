@@ -78,8 +78,30 @@ function toolDescriptor(tool) {
 
 function authorizedToolCatalog(tools, user) {
   return tools.filter((tool) => tool && user.allowTools.includes(tool.name))
-    .map(toolDescriptor);
+    .map(tool => fixtureToolDescriptor(toolDescriptor(tool), user));
 }
+
+function fixtureToolDescriptor(tool, user) {
+  if (!user.stagingFixtureProject || tool.name !== "read_file") return tool;
+  // Advertise the existing narrow fixture permission, not the Windows
+  // backend's broader batch signature. Discovery must not promise denied reads.
+  return { ...tool,
+    description: "Staging fixture read: only README.md in udb-staging-fixture. " +
+      "Supply exactly project and path; batch reads and other files are not authorized.",
+    inputSchema: { type: "object", properties: {
+      project: { type: "string", enum: [user.stagingFixtureProject] },
+      path: { type: "string", enum: ["README.md"] },
+    }, required: ["project", "path"], additionalProperties: false },
+  };
+}
+
+const fixtureReadDenied = () => json({
+  error: "staging_fixture_read_not_authorized",
+  diagnostics: { reason: "staging_fixture_read_not_authorized",
+    project: "udb-staging-fixture", allowed_paths: ["README.md"],
+    next_action: "Use read_file with exactly project=udb-staging-fixture and path=README.md. " +
+      "Other files and batch reads require a separately approved grant." },
+}, 403);
 
 function catalogGrantCounts(user) {
   const aliases = new Set([
@@ -303,7 +325,8 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
     } });
   }
   if (useEdgeCatalog && rpc.method === "tools/list") {
-    const result = { tools: edgeCatalog(user.allowTools) };
+    const result = { tools: edgeCatalog(user.allowTools)
+      .map(tool => fixtureToolDescriptor(tool, user)) };
     console.info(JSON.stringify({ event: "udb_mcp_tools_discovered",
       source: "edge", count: result.tools.length }));
     return json({ jsonrpc: "2.0", id: rpc.id, result:
@@ -343,10 +366,10 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
     const { name, arguments: args } = rpc.params;
     if (name !== "bridge_status" && name !== "list_projects" &&
         args.project !== user.stagingFixtureProject)
-      return error(403, "staging_fixture_read_not_authorized");
+      return fixtureReadDenied();
     if (name === "read_file" && (args.path !== "README.md" ||
         Object.keys(args).length !== 2))
-      return error(403, "staging_fixture_read_not_authorized");
+      return fixtureReadDenied();
   }
   const response = await relay(stub, rpc);
   if (!response.ok) {

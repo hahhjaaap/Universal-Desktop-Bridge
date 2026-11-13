@@ -12,8 +12,10 @@ ChatGPT plugin session can call its tools.**
 UDB v0.12.0 uses Cloudflare for remote MCP connections and removed the public
 OpenAI Tunnel compatibility route. On the Windows computer, run `udb setup`
 to pair the intended device if needed, then `udb start`. For an existing
-`cloud-pairing.json`, use `udb setup --edit` only for attended configuration;
-do not paste a workers.dev URL into an old Tunnel prompt. Use `udb mcp-config`
+`cloud-pairing.json`, run `udb setup` in the attended owner terminal to
+inspect the existing pairing. The deprecated `--edit` flag does not provide
+an independent Tunnel editing or recovery flow. Never paste a workers.dev
+URL into an old Tunnel prompt. Use `udb mcp-config`
 to inspect the device-specific HTTPS MCP endpoint. Verify Worker deployment,
 Cloudflare Access OAuth, the subject/device grant, Cloud Agent status and the
 actual MCP catalog independently. See

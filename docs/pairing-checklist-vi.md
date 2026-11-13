@@ -10,8 +10,9 @@
 > thiết bị mới phải ghép Cloudflare bằng `udb setup`. Không dùng các hướng
 > dẫn Tunnel ID trong tài liệu/phần mềm cũ để thay cho ghép nối Cloudflare.
 > Máy có `cloud-pairing.json` hợp lệ sẽ ưu tiên Cloudflare trong
-> `udb setup`, `udb setup --edit`, GUI và `udb doctor`. **Không nhập URL
-> workers.dev vào ô Tunnel ID**. Kết nối Cloudflare vẫn chỉ được xác nhận
+> `udb setup`, GUI và `udb doctor`. Cờ tương thích `udb setup --edit`
+> hiện không kích hoạt luồng chỉnh sửa Tunnel riêng và không khôi phục
+> dữ liệu cũ. **Không nhập URL workers.dev vào ô Tunnel ID**. Kết nối Cloudflare vẫn chỉ được xác nhận
 > hoàn chỉnh khi Worker đã triển khai phiên bản đúng, Access/OAuth và
 > `UDB_DEVICE_GRANTS` đã cấp riêng cho thiết bị, ChatGPT đã khám phá và
 > gọi thành công công cụ được phép. Xem

@@ -181,8 +181,9 @@ UDB tool in ChatGPT.
 
 For an already paired device, the main **Kết nối** action starts/stops the
 **Cloud Agent** flow rather than asking for an OpenAI Tunnel ID. The attended
-`udb setup --edit` command recognizes the pairing; **do not paste a
-workers.dev URL into a legacy Tunnel prompt**. The pairing and device token
+`udb setup` command recognizes the pairing. The old `--edit` flag is only
+accepted for compatibility, not as a separate Tunnel-editing workflow;
+**do not paste a workers.dev URL into a legacy Tunnel prompt**. The pairing and device token
 are not erased when the GUI changes transport. A missing or invalid pairing
 must not silently be treated as authorized. The Cloudflare `udb:read`
 gateway only exposes explicitly granted metadata/project read tools; no

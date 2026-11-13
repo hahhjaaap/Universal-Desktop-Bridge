@@ -222,6 +222,17 @@ remain separate development tasks, **not current release guarantees**.
    The import check guards all canonical modules against eager import cycles;
    it intentionally does not treat deferred function-local imports as cycles.
 
+## Source and distribution compatibility (2026-11-13)
+
+The local version remains **0.12.0** even after PRs updating PySide6-Essentials
+(6.12.0), removing the unreachable OpenAI Tunnel enrollment wizard and
+stabilizing the Windows Qt CI test-process teardown. These changes are
+**source-only** until an approved Windows release is built and installed.
+The published v0.12.0 ZIP predates them. GitHub currently has no enforced
+`main` ruleset; the release workflow refuses to publish until protection is
+configured and verified (issue #147). Remaining old-installation Tunnel
+migration and rollback acceptance is tracked in issue #162.
+
 ## Compatibility and safety
 
 Do not remove root or `src/` shim modules solely because their text is

@@ -4,6 +4,15 @@
 **0.12.0**. The Windows **v0.12.0** release was published on
 **2026-11-11**. Later `main` commits keep the same semantic version but do
 not retroactively change that published ZIP or any installed Windows EXE.
+The latest published tag was independently checked again on **2026-11-13**.
+
+**Current source status:** GitHub `main` includes Actions Node-24-compatible
+updates (PR #160), Windows PySide6-Essentials **6.12.0** (PR #155),
+Chrome Aura removal (PR #163), Windows release gating on a protected `main`
+(PR #164), and the unreachable OpenAI Tunnel onboarding removal / Windows Qt
+CI teardown fix (PR #165). Each source merge was separately validated; none
+is evidence that the published v0.12.0 ZIP or deployed Cloudflare Worker was
+updated.
 
 | Surface | Verify with | Meaning |
 | --- | --- | --- |
@@ -36,6 +45,22 @@ separate controls and must not be inferred from green local process status.
   remotely.
 - The released v0.12.0 ZIP is immutable. A merged source PR is not proof of
   any new signed/released installer or of a Windows upgrade.
+
+## Outstanding safety and migration work
+
+- [Issue #147](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/147):
+  GitHub still reports `main.protected=false` and no enforced ruleset as of
+  2026-11-13. The automated Windows release gate refuses publication while
+  this is true; administrators must enable and negatively test branch
+  protection, required reviews/checks and release controls.
+- [Issue #162](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/162):
+  Removal of the abandoned Tunnel setup wizard is complete, but the older
+  DesktopController/connection/release compatibility paths and existing-owner
+  migration/rollback still require acceptance. Preserve historic user state,
+  legal notices, credentials and recovery options until explicitly reviewed.
+- The Windows CI helper `tools/run_windows_pytest.py` disposes test-only
+  PySide6/Qt resources before process shutdown; it does **not** install UDB,
+  change the owner's Windows session or waive any nonzero test exit.
 
 ## Which documentation to use
 

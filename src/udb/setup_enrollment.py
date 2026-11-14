@@ -9,7 +9,6 @@ import os
 import secrets
 import time
 import uuid
-from pathlib import Path
 from urllib.request import build_opener
 
 from . import cloud_secrets, credentials

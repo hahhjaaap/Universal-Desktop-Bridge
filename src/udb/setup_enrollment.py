@@ -216,11 +216,15 @@ class FleetLinkStore:
             raise
         try:
             value = json.loads(base64.urlsafe_b64decode(encoded).decode("ascii"))
-            if not isinstance(value, dict) or set(value) != {
-                "id", "proof", "device_id", "relay"
-            } or len(value["id"]) != 32 or len(value["proof"]) != 64 or any(
-                char not in "0123456789abcdef"
-                for char in value["id"] + value["proof"]
+            if (
+                not isinstance(value, dict)
+                or set(value) != {"id", "proof", "device_id", "relay"}
+                or len(value["id"]) != 32
+                or len(value["proof"]) != 64
+                or any(
+                    char not in "0123456789abcdef"
+                    for char in value["id"] + value["proof"]
+                )
             ):
                 raise ValueError()
             validate_origin(value["relay"], value["device_id"])
@@ -271,7 +275,9 @@ def link_existing(
         }
         store.save_new(pending)
     if pending["relay"] != relay or pending["device_id"] != device_id:
-        raise EnrollmentError("Saved fleet link belongs to another device; owner repair required")
+        raise EnrollmentError(
+            "Saved fleet link belongs to another device; owner repair required"
+        )
     fingerprint = hashlib.sha256(pending["proof"].encode("ascii")).hexdigest()
     _, result = _request_json(
         opener,
@@ -287,12 +293,18 @@ def link_existing(
         },
     )
     if result.get("device_id") != pending["id"] or result.get("state") not in {
-        "pending", "registering", "approved", "rejected"
+        "pending",
+        "registering",
+        "approved",
+        "rejected",
     }:
         raise EnrollmentError("Fleet link response did not match saved challenge")
     approval_url = (
-        relay + "/v1/setup/enrollments/" + pending["id"] +
-        "/approval?code=" + fingerprint[:10].upper()
+        relay
+        + "/v1/setup/enrollments/"
+        + pending["id"]
+        + "/approval?code="
+        + fingerprint[:10].upper()
     )
     if result["state"] == "pending":
         print("Approve linking this existing Windows pairing to your fleet.")
@@ -311,7 +323,9 @@ def link_existing(
         if state.get("state") == "approved":
             return device_id
         if state.get("state") == "rejected":
-            raise EnrollmentError("Owner rejected fleet linking; existing pairing retained")
+            raise EnrollmentError(
+                "Owner rejected fleet linking; existing pairing retained"
+            )
         if state.get("state") not in {"pending", "registering"}:
             raise EnrollmentError("Unexpected fleet link state; recovery retained")
         pause(min(4, max(0, deadline - clock())))

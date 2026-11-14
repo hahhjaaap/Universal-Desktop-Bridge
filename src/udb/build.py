@@ -15,6 +15,16 @@ from pathlib import Path
 from ._version import VERSION
 
 
+def stream_sha256(path):
+    """Hash a packaged file without allocating its entire contents in RAM.
+
+    This is an integrity digest, not a publisher signature. The caller owns
+    link/path checks and handles the file as an immutable build artifact.
+    """
+    with Path(path).open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
 def source_stamp(base):
     """Build-time Git inspection only; runtime status never executes Git."""
     try:
@@ -59,9 +69,7 @@ def runtime_manifest(package=None):
             continue
         if p.is_symlink() or getattr(p.lstat(), "st_file_attributes", 0) & 0x400:
             raise ValueError("Linked source component refused")
-        result["udb/" + p.relative_to(package).as_posix()] = hashlib.sha256(
-            p.read_bytes()
-        ).hexdigest()
+        result["udb/" + p.relative_to(package).as_posix()] = stream_sha256(p)
     return result
 
 
@@ -258,10 +266,7 @@ def standalone_package(base, destination, asset_root, components, *, layout="one
     checksums = destination / "STANDALONE-SHA256SUMS"
     checksums.write_text(
         "".join(
-            hashlib.sha256(p.read_bytes()).hexdigest()
-            + "  "
-            + p.relative_to(destination).as_posix()
-            + "\n"
+            stream_sha256(p) + "  " + p.relative_to(destination).as_posix() + "\n"
             for p in sorted(set(files))
         ),
         encoding="ascii",
@@ -363,10 +368,7 @@ def run(exe=False, output=None, assets=None, layout="onefile"):
         if p.is_file() and p.suffix in (".exe", ".whl", ".gz", ".toml", ".json", ".zip")
     ]
     (destination / "SHA256SUMS").write_text(
-        "".join(
-            hashlib.sha256(p.read_bytes()).hexdigest() + "  " + p.name + "\n"
-            for p in sorted(set(files))
-        ),
+        "".join(stream_sha256(p) + "  " + p.name + "\n" for p in sorted(set(files))),
         encoding="ascii",
     )
     return 0

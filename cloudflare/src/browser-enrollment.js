@@ -72,7 +72,9 @@ export async function routeBrowserEnrollment(request, env, forward, fetchImpl = 
       catch (error) {
         const reason = ["owner_config_invalid", "owner_runtime_audience", "owner_runtime_unavailable",
           "owner_assertion_invalid", "owner_identity_conflict", "owner_identity_missing",
-          "owner_not_allowed"].includes(error?.message) ? error.message : "owner_auth_failed";
+          "owner_not_allowed", "owner_keys_unavailable", ...["malformed", "algorithm", "issuer",
+            "audience", "time", "identity", "key", "signature"].map(value => "owner_assertion_" + value)]
+          .includes(error?.message) ? error.message : "owner_auth_failed";
         // Static diagnostics only: never log assertions, cookies, identity or URL.
         console.warn(JSON.stringify({ event: "udb_owner_auth_denied", reason,
           runtime_present: Boolean(access), assertion_present: request.headers.has("Cf-Access-Jwt-Assertion") }));

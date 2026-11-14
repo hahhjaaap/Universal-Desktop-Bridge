@@ -74,7 +74,7 @@ async function getKeys(url, fetchImpl) {
     if (!Array.isArray(parsed?.keys) || parsed.keys.length > 16) throw new Error();
     cachedJwks = { url, until: Date.now() + 30000, keys: parsed.keys };
     return parsed.keys;
-  } catch { throw new AuthError(); }
+  } catch { throw new AuthError("access_keys_unavailable"); }
 }
 
 function emailSubject(subject) {
@@ -89,37 +89,41 @@ export async function verifiedAccessIdentity(request, env, fetchImpl = fetch) {
   if (!config?.team) throw new AuthError();
   const token = request?.headers?.get("Cf-Access-Jwt-Assertion") || "";
   if (token.length > MAX_ASSERTION || token.split(".").length !== 3)
-    throw new AuthError();
+    throw new AuthError("access_assertion_malformed");
   const parts = token.split(".");
-  const head = claims(parts[0]);
-  const payload = claims(parts[1]);
+  let head, payload;
+  try { head = claims(parts[0]); payload = claims(parts[1]); }
+  catch { throw new AuthError("access_assertion_malformed"); }
   const now = Math.floor(Date.now() / 1000);
   if (head.alg !== "RS256" || !head.kid || typeof head.kid !== "string" ||
-      head.kid.length > 128 || head.crit !== undefined ||
-      payload.iss !== config.team ||
-      !(payload.aud === config.aud ||
-        (Array.isArray(payload.aud) && payload.aud.includes(config.aud))) ||
-      !Number.isSafeInteger(payload.exp) || payload.exp <= now ||
+      head.kid.length > 128 || head.crit !== undefined)
+    throw new AuthError("access_assertion_algorithm");
+  if (payload.iss !== config.team) throw new AuthError("access_assertion_issuer");
+  if (!(payload.aud === config.aud ||
+      (Array.isArray(payload.aud) && payload.aud.includes(config.aud))))
+    throw new AuthError("access_assertion_audience");
+  if (!Number.isSafeInteger(payload.exp) || payload.exp <= now ||
       (payload.nbf !== undefined &&
         (!Number.isSafeInteger(payload.nbf) || payload.nbf > now + 60)) ||
       (payload.iat !== undefined &&
-        (!Number.isSafeInteger(payload.iat) || payload.iat > now + 60)) ||
-      !emailSubject(payload.email)) throw new AuthError();
+        (!Number.isSafeInteger(payload.iat) || payload.iat > now + 60)))
+    throw new AuthError("access_assertion_time");
+  if (!emailSubject(payload.email)) throw new AuthError("access_assertion_identity");
   const url = config.team + "/cdn-cgi/access/certs";
   const keys = await getKeys(url, fetchImpl);
   const match = keys.filter((key) => key && key.kid === head.kid &&
     key.kty === "RSA" && (key.alg === undefined || key.alg === "RS256") &&
     (key.use === undefined || key.use === "sig") &&
     typeof key.n === "string" && typeof key.e === "string");
-  if (match.length !== 1) throw new AuthError();
+  if (match.length !== 1) throw new AuthError("access_assertion_key");
   let valid = false;
   try {
     const key = await crypto.subtle.importKey("jwk", match[0],
       { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
     valid = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, decode(parts[2]),
       new TextEncoder().encode(parts[0] + "." + parts[1]));
-  } catch { throw new AuthError(); }
-  if (!valid) throw new AuthError();
+  } catch { throw new AuthError("access_assertion_signature"); }
+  if (!valid) throw new AuthError("access_assertion_signature");
   return { email: payload.email, sub: payload.sub };
 }
 

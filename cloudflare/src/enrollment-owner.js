@@ -39,7 +39,12 @@ export async function authorizeEnrollmentOwner(request, env, fetchImpl = fetch, 
       identity = await verifiedAccessIdentity(request, {
         ...env, UDB_ACCESS_AUD: config.aud,
       }, fetchImpl);
-    } catch { throw new AuthError("owner_assertion_invalid"); }
+    } catch (error) {
+      const reason = ["malformed", "algorithm", "issuer", "audience", "time", "identity", "key", "signature"]
+        .map(value => "access_assertion_" + value).concat("access_keys_unavailable")
+        .includes(error?.message) ? error.message.slice(7) : "assertion_invalid";
+      throw new AuthError("owner_" + reason);
+    }
     if (observed && ((typeof observed.email === "string" && observed.email !== identity.email) ||
         (typeof observed.user_uuid === "string" &&
           observed.user_uuid.toLowerCase() !== identity.sub?.toLowerCase())))

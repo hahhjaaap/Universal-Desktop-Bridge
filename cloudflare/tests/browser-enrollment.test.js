@@ -177,6 +177,23 @@ test("owner approval rejects missing, forged, expired, other-account and MCP-aud
   assert.equal(f.objects.has(p.id), false);
 });
 
+test("approval diagnostics identify the failing verification step without echoing credentials", async () => {
+  const f = fixture(), p = await begin(f);
+  for (const [assertion, reason] of [
+    ["private-invalid-token", "owner_assertion_malformed"],
+    [await jwt(MCP), "owner_assertion_audience"],
+    [await jwt(APP, OWNER, { iss: "https://other.cloudflareaccess.com" }), "owner_assertion_issuer"],
+    [await jwt(APP, OWNER, { exp: 1 }), "owner_assertion_time"],
+  ]) {
+    const r = await review(f, p, assertion);
+    assert.equal(r.response.status, 403);
+    assert.ok(r.html.includes(reason));
+    assert.ok(!r.html.includes(assertion));
+    assert.ok(!r.html.includes("synthetic-owner@example.test"));
+  }
+  assert.equal(f.objects.has(p.id), false);
+});
+
 const runtimeOwner = (user_uuid = OWNER, aud = APP) => ({ aud,
   async getIdentity() { return { user_uuid, email: "synthetic-owner@example.test" }; } });
 

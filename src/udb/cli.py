@@ -145,6 +145,7 @@ ADVANCED_COMMAND_HELP = """Advanced UDB commands (kept for compatibility)
 Connection and recovery:
   udb mcp-config         Show the paired HTTPS MCP endpoint
   udb connect            Open ChatGPT for an owner-enrolled device
+  udb connect --enroll   Request private, owner-approved device pairing
   udb reconnect          Reconnect the existing Cloud Agent
   udb cloud-pair         Attended device pairing (alternative to setup)
   udb cloud-agent        Run the Cloud Agent directly
@@ -318,6 +319,15 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
             command = subcommands.add_parser(name)
         add_settings(command, suppress=True)
         if name == "connect":
+            command.add_argument(
+                "--enroll",
+                action="store_true",
+                help="Request owner-approved private pairing without an invite",
+            )
+            command.add_argument(
+                "--relay",
+                help="Private Cloudflare workers.dev HTTPS origin (with --enroll)",
+            )
             command.add_argument(
                 "--setup",
                 action="store_true",
@@ -738,6 +748,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 open_browser=not args.no_browser,
                 setup=args.setup,
                 autostart=args.autostart,
+                enroll=args.enroll,
+                relay=args.relay,
             )
         if action == "quickstart":
             if args.access or args.offline or args.online:

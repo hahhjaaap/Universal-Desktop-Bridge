@@ -174,7 +174,7 @@ def test_autostart_is_explicit_and_reuses_owner_guard(tmp_path, monkeypatch, cap
 
 def test_autostart_without_setup_or_in_json_mode_denied(tmp_path, capsys):
     assert connect_chatgpt.run(settings(tmp_path), autostart=True) == 2
-    assert "Use --setup --autostart" in capsys.readouterr().err
+    assert "not yet enrolled" in capsys.readouterr().out
     assert connect_chatgpt.run(settings(tmp_path), setup=True, as_json=True) == 2
     assert "cannot run in JSON" in capsys.readouterr().err
 
@@ -196,3 +196,113 @@ def test_private_setup_cannot_enable_terminal_at_logon(tmp_path, monkeypatch, ca
         == 2
     )
     assert "not enabled" in capsys.readouterr().err
+
+
+def test_existing_paired_device_enables_autostart_without_reenrollment(
+    tmp_path, monkeypatch, paired, capsys
+):
+    from udb import autostart, onboarding
+
+    calls = []
+    monkeypatch.setattr(onboarding, "attended_console", lambda: True)
+    monkeypatch.setattr(
+        autostart,
+        "run",
+        lambda config, operation, *, cloud_agent: (
+            calls.append((config, operation, cloud_agent)) or 0
+        ),
+    )
+    assert (
+        connect_chatgpt.run(settings(tmp_path), autostart=True, open_browser=False)
+        == 0
+    )
+    assert len(calls) == 1
+    assert calls[0][1:] == ("enable", True)
+    assert "NOT verified" in capsys.readouterr().out
+    assert not (tmp_path / "owner").exists()
+
+
+def test_existing_pairing_autostart_requires_attended_console(
+    tmp_path, paired, monkeypatch, capsys
+):
+    from udb import autostart, onboarding
+
+    monkeypatch.setattr(onboarding, "attended_console", lambda: False)
+    monkeypatch.setattr(
+        autostart,
+        "run",
+        lambda *a, **k: pytest.fail("Unattended invocation enabled autostart"),
+    )
+    assert connect_chatgpt.run(settings(tmp_path), autostart=True) == 2
+    assert "attended local Windows terminal" in capsys.readouterr().err
+
+
+def test_invalid_or_unpaired_device_never_enables_autostart(
+    tmp_path, monkeypatch, capsys
+):
+    from udb import autostart
+
+    monkeypatch.setattr(
+        autostart, "run", lambda *a, **k: pytest.fail("Invalid device enabled autostart")
+    )
+    monkeypatch.setattr(connect_chatgpt, "paired_cloud", lambda home: None)
+    assert connect_chatgpt.run(settings(tmp_path), autostart=True) == 2
+    assert "not yet enrolled" in capsys.readouterr().out
+    monkeypatch.setattr(
+        connect_chatgpt,
+        "paired_cloud",
+        lambda home: ("https://unit.workers.dev", "a" * 32),
+    )
+    monkeypatch.setattr(
+        connect_chatgpt,
+        "cloud_mcp_url",
+        lambda home: (_ for _ in ()).throw(ValueError("invalid endpoint")),
+    )
+    assert connect_chatgpt.run(settings(tmp_path), autostart=True) == 2
+    assert "invalid pairing" in capsys.readouterr().out.lower()
+
+
+def test_existing_pairing_autostart_cannot_enable_terminal(
+    tmp_path, monkeypatch, paired, capsys
+):
+    from udb import autostart, onboarding
+
+    monkeypatch.setattr(onboarding, "attended_console", lambda: True)
+    monkeypatch.setattr(
+        autostart, "run", lambda *a, **k: pytest.fail("Terminal access enabled")
+    )
+    config = settings(tmp_path)
+    config.enable_terminal = True
+    assert connect_chatgpt.run(config, autostart=True) == 2
+    assert "not enabled" in capsys.readouterr().err
+
+
+def test_existing_pairing_autostart_error_is_redacted(
+    tmp_path, monkeypatch, paired, capsys
+):
+    from udb import autostart, onboarding
+    from udb.owner_command import CommandError
+
+    monkeypatch.setattr(onboarding, "attended_console", lambda: True)
+
+    def blocked(*a, **k):
+        raise CommandError("secret-not-for-output")
+
+    monkeypatch.setattr(autostart, "run", blocked)
+    assert connect_chatgpt.run(settings(tmp_path), autostart=True) == 2
+    output = capsys.readouterr()
+    assert "not enabled" in output.err
+    assert "secret-not-for-output" not in str(output)
+    assert "NOT verified" not in output.out
+
+
+def test_existing_pairing_autostart_cannot_run_in_json_mode(
+    tmp_path, monkeypatch, paired, capsys
+):
+    from udb import autostart
+
+    monkeypatch.setattr(
+        autostart, "run", lambda *a, **k: pytest.fail("JSON mode wrote startup")
+    )
+    assert connect_chatgpt.run(settings(tmp_path), autostart=True, as_json=True) == 2
+    assert "cannot run in JSON mode" in capsys.readouterr().err

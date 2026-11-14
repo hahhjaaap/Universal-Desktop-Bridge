@@ -44,6 +44,24 @@ xác nhận **riêng**, không thể tự động thực hiện thay chủ tài 
 Nếu đã ghép máy bằng mã mời cũ, tiếp tục dùng `udb connect`; không
 cần/không được tự ghi đè danh tính đã tạo.
 
+### Máy đã ghép: tự kết nối khi đăng nhập Windows
+
+Đối với máy đã ghép và giữ token trong Windows Credential Manager,
+mở terminal Windows có chủ máy, chạy:
+
+```powershell
+udb connect --autostart --no-browser
+udb autostart status --json
+udb start
+```
+
+Không đăng ký lại hoặc tạo token mới. Khi chủ máy đăng nhập Windows lần
+sau, Cloud Agent dùng token đã lưu để kết nối lại; mất mạng sẽ thử lại có
+giới hạn, không lặp các thao tác ghi có kết quả chưa xác định.
+Tắt bằng `udb autostart disable`. Bước cấp quyền OAuth trong ChatGPT
+vẫn phải do người dùng xác nhận; tự chạy Cloud Agent **không** phải
+tự động đăng nhập vào tài khoản ChatGPT.
+
 ## Trên máy quản trị UDB (máy đáng tin cậy)
 
 Mở terminal có người dùng trong source checkout và cài Python environment

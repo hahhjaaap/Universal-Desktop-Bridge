@@ -336,7 +336,7 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
             command.add_argument(
                 "--autostart",
                 action="store_true",
-                help="With --setup, opt in to Cloud Agent startup at Windows logon",
+                help="Opt in Cloud Agent startup for an already paired device at Windows logon",
             )
             command.add_argument(
                 "--no-browser",

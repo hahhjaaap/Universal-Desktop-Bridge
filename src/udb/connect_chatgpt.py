@@ -47,6 +47,33 @@ def _print_status(status: dict, *, as_json: bool) -> None:
         print("Browser was not opened; use the ChatGPT Plugins link above.")
 
 
+def _enable_paired_autostart(settings) -> bool:
+    """Reuse an approved device at Windows logon; never enroll or grant access."""
+    from .autostart import run as autostart_run
+    from .onboarding import attended_console
+    from .owner_command import CommandError
+
+    if not attended_console():
+        print(
+            "UDB: Cloud Agent autostart requires an attended local Windows terminal.",
+            file=sys.stderr,
+        )
+        return False
+    try:
+        if settings.enable_terminal:
+            raise CommandError("Cloud Agent autostart requires terminal access off")
+        if autostart_run(settings, "enable", cloud_agent=True):
+            return False
+    except (CommandError, OSError, ValueError):
+        print(
+            "UDB: Pairing kept; automatic Cloud Agent startup was not enabled. "
+            "Run udb autostart status and retry from a local console.",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
 def run(
     settings,
     *,
@@ -72,12 +99,6 @@ def run(
         return 2
     if relay and not enroll:
         print("UDB: --relay requires --enroll.", file=sys.stderr)
-        return 2
-    if autostart and not (setup or enroll):
-        print(
-            "UDB: Use --setup --autostart, or --enroll --autostart, from Windows.",
-            file=sys.stderr,
-        )
         return 2
     if setup or enroll:
         from .onboarding import attended_console
@@ -106,25 +127,6 @@ def run(
                 file=sys.stderr,
             )
             return 2
-        if autostart:
-            try:
-                from .autostart import run as autostart_run
-                from .owner_command import CommandError
-
-                if settings.enable_terminal:
-                    raise CommandError(
-                        "Cloud Agent autostart requires terminal access off"
-                    )
-                if autostart_run(settings, "enable", cloud_agent=True):
-                    return 2
-            except (CommandError, OSError, ValueError):
-                print(
-                    "UDB: Pairing kept; automatic Cloud Agent startup was not enabled. "
-                    "Run udb autostart status and retry from a local console.",
-                    file=sys.stderr,
-                )
-                return 2
-
     try:
         paired = paired_cloud(settings.home)
     except (OSError, ValueError, KeyError, TypeError):
@@ -148,6 +150,11 @@ def run(
             {"state": "invalid_pairing", "paired": False, "chatgpt_verified": False},
             as_json=as_json,
         )
+        return 2
+
+    # Existing device identity and public endpoint are validated first.
+    # Auto-start only the transport; ChatGPT OAuth consent stays separate.
+    if autostart and not _enable_paired_autostart(settings):
         return 2
 
     opened = False

@@ -56,7 +56,9 @@ def enroll_device(home: Path, relay=PRIVATE_RELAY, *, opener=None, pause=None):
     if paired_cloud(home) or (home / "cloud-pairing.json").exists():
         raise ValueError("This Windows profile is already paired; do not overwrite it")
     if (home / "cloud-device-token").exists():
-        raise ValueError("Existing device credential detected; revoke/repair before retry")
+        raise ValueError(
+            "Existing device credential detected; revoke/repair before retry"
+        )
     relay = validate_origin(relay, "0" * 32)
     opener = opener or build_opener(NoRedirect())
     pause = pause or time.sleep
@@ -76,7 +78,11 @@ def enroll_device(home: Path, relay=PRIVATE_RELAY, *, opener=None, pause=None):
             "device_name": "Windows UDB",
         },
     )
-    if status != 201 or not isinstance(result, dict) or result.get("state") != "pending":
+    if (
+        status != 201
+        or not isinstance(result, dict)
+        or result.get("state") != "pending"
+    ):
         raise ValueError("Relay did not accept a new enrollment request")
     device_id = result.get("device_id")
     if not isinstance(device_id, str):
@@ -101,10 +107,18 @@ def enroll_device(home: Path, relay=PRIVATE_RELAY, *, opener=None, pause=None):
         except HTTPError as exc:
             if exc.code in (403, 404, 410):
                 raise ValueError("Enrollment rejected, disabled or expired") from None
-            raise RuntimeError("Enrollment status unknown; verify with administrator") from None
+            raise RuntimeError(
+                "Enrollment status unknown; verify with administrator"
+            ) from None
         except (OSError, ValueError, URLError):
-            raise RuntimeError("Enrollment status unknown; check the device before retrying") from None
-        if status != 200 or not isinstance(state, dict) or state.get("device_id") != device_id:
+            raise RuntimeError(
+                "Enrollment status unknown; check the device before retrying"
+            ) from None
+        if (
+            status != 200
+            or not isinstance(state, dict)
+            or state.get("device_id") != device_id
+        ):
             raise RuntimeError("Invalid enrollment state")
         if state.get("state") == "pending":
             continue
@@ -122,7 +136,9 @@ def enroll_device(home: Path, relay=PRIVATE_RELAY, *, opener=None, pause=None):
                 raise RuntimeError(
                     "Local credential save failed; ask the administrator to revoke the device"
                 ) from None
-            print("Device approved and locally paired. ChatGPT OAuth is still required.")
+            print(
+                "Device approved and locally paired. ChatGPT OAuth is still required."
+            )
             return device_id
         if state.get("state") == "registering":
             continue

@@ -80,23 +80,13 @@ thực thi chúng và không tự đưa vào quy trình không kiểm soát.
 Đây là thay đổi mã nguồn mới, **không tự cập nhật bản UDB đang cài**;
 chỉ có hiệu lực sau một bản phát hành và cài đặt được phê duyệt.
 
-## Đăng ký máy mới không cần mã mời
+## Luồng enrollment tương thích cũ
 
-Trên bản UDB chứa tính năng mới, từ Terminal Windows trực tiếp:
-
-```powershell
-udb connect --enroll
-```
-
-Máy tự tạo yêu cầu ghép nối, chủ hệ thống xác minh và phê duyệt qua công cụ
-quản trị riêng. Không nhập admin key, mã mời dùng một lần hoặc token từ
-máy khác. Muốn bật Cloud Agent tự chạy khi đăng nhập Windows, dùng
-`udb connect --enroll --autostart` rồi `udb start` cho phiên hiện tại.
-
-**Chưa có hiệu lực trên máy đang cài** cho tới khi có bản phát hành được
-nghiệm thu và Worker bật tính năng riêng tư một cách có kiểm soát.
-Hướng dẫn đầy đủ và điều kiện bảo mật:
-[đăng ký thiết bị riêng tư](private-device-enrollment-vi.md).
+`udb connect --enroll` là lối enrollment legacy dành cho hệ thống còn dùng
+quy trình quản trị cũ. Không dùng nó thay cho luồng thiết lập mới.
+Trên máy mới, ưu tiên `udb setup` như phần trên; quy trình hiện hành dùng
+trang Access approval và Credential Manager recovery. Hướng dẫn về lệnh
+legacy được giữ tại [đăng ký thiết bị riêng tư](private-device-enrollment-vi.md).
 
 ## Kết nối ChatGPT
 

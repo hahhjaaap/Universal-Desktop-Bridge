@@ -12,13 +12,15 @@ ChatGPT OAuth consent are not provided by this legacy command.
 
 ## Private deployment alternative (without public directory listing)
 
-For a single owner or invite-only group, ChatGPT's **Add custom MCP server**
-flow can connect directly to the existing per-device HTTPS MCP endpoint.
-A published public UDB app and a stable cross-device `/mcp` router are **not
-required** for this small private mode. The Cloudflare Worker must still
-provide valid user OAuth/Access and device-specific grants; a working Agent
-alone does not establish authorization. The one-time device invitation is
-still administrator-issued (not public self-service).
+For legacy per-device mode, ChatGPT's **Add custom MCP server** flow can
+connect directly to one device's HTTPS MCP endpoint; each device then needs its
+own connection. This is not the one-plugin Fleet mode. The opt-in Fleet
+candidate adds a shared `/v1/account/mcp` resource; see
+[account Fleet MCP](account-fleet-mcp.md) for its separate flags and rollout
+gates. The Cloudflare Worker must still provide valid user OAuth/Access and
+device-specific grants; a working Agent alone does not establish authorization.
+The old invitation flow below remains for compatibility, not as the normal
+`udb setup` path.
 
 Use `udb connect --setup` from a trusted attended Windows terminal to reuse
 existing hidden one-time invitation input and Credential Manager enrollment.

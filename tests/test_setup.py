@@ -195,6 +195,50 @@ def test_readonly_setup_requires_authenticated_mcp_verification(
     assert not selected.home.exists()
 
 
+def test_readonly_setup_requires_fleet_link(selected, monkeypatch, capsys):
+    report = {
+        "credential_valid": True,
+        "cloud_agent_online": True,
+        "authenticated_mcp_verified": True,
+        "account_fleet": True,
+        "fleet_linked": False,
+        "chatgpt_connected": False,
+    }
+    monkeypatch.setattr(setup, "inspect", lambda *_: report)
+    assert setup.run(selected, readonly=True, json_output=True) == 2
+    assert json.loads(capsys.readouterr().out)["fleet_linked"] is False
+
+    report["fleet_linked"] = True
+    assert setup.run(selected, readonly=True, json_output=True) == 0
+    assert json.loads(capsys.readouterr().out)["fleet_linked"] is True
+    assert not selected.home.exists()
+
+
+def test_inspect_fleet_uses_account_url_and_checks_registry_link(
+    selected, monkeypatch
+):
+    pair(selected)
+    report = {**remote(verified=True), "account_fleet": True}
+    monkeypatch.setattr(setup, "device_status", lambda *a: report)
+    calls = []
+
+    def relay(opener, url, **kwargs):
+        calls.append((url, kwargs))
+        return 200, {"linked": True}
+
+    monkeypatch.setattr(setup, "_request_json", relay)
+    result = setup.inspect(selected, opener=object())
+    assert result["account_fleet"] is True
+    assert result["fleet_linked"] is True
+    assert result["mcp_url"] == RELAY + "/v1/account/mcp"
+    assert calls == [
+        (
+            RELAY + "/v1/devices/" + DEVICE + "/fleet/status",
+            {"proof": TOKEN},
+        )
+    ]
+
+
 def test_existing_autostart_is_never_rewritten(selected, monkeypatch):
     monkeypatch.setattr(
         setup.autostart,
@@ -493,11 +537,14 @@ def test_account_fleet_setup_links_existing_device_and_uses_single_mcp_url(
     report = {**remote(verified=False), "account_fleet": True}
     monkeypatch.setattr(setup, "device_status", lambda *a: report)
     calls = []
+    fleet_status_calls = 0
 
     def relay(opener, url, **kw):
+        nonlocal fleet_status_calls
         if url.endswith("/fleet/status"):
             assert kw["proof"] == TOKEN
-            return 200, {"linked": False}
+            fleet_status_calls += 1
+            return 200, {"linked": fleet_status_calls > 1}
         if url.endswith("/setup/challenge"):
             return 200, {"challenge_ready": True}
         pytest.fail("Unexpected relay request " + url)

@@ -1,130 +1,136 @@
-# Checklist ghép nối UDB ↔ Cloudflare ↔ ChatGPT (owner-attended)
+# Checklist thiết lập UDB ↔ Cloudflare ↔ ChatGPT
 
-> **UDB 0.12.0 docs review (2026-11-13):** **Current UDB 0.12.0 source guidance.** Verify the installed executable, Cloudflare Worker, OAuth and owner grants separately; source changes do not update them. See [version/status](current-version.md).
+> **Hướng dẫn cho source hiện tại, không phải bằng chứng đã kết nối.** Kiểm tra riêng
+> phiên bản UDB trên Windows, Worker đang triển khai, Cloudflare Access/OAuth,
+> quyền thiết bị và lời gọi MCP thực tế. PR/code merge không tự cập nhật EXE hoặc Worker.
 
-> **Trạng thái:** hướng dẫn chuẩn bị, **không** phải bằng chứng đã kết nối.
-> Mọi thao tác cấp quyền/đăng nhập đều cần chủ máy tự xác nhận.
+## 1. Phân biệt các lớp và endpoint
 
-> **Mốc lịch sử (04/11/2026):** PR #85–#88 đã vào `main`.
-> **Đối chiếu 13/11/2026:** UDB v0.12.0 đã bỏ kết nối OpenAI Tunnel công khai;
-> thiết bị mới phải ghép Cloudflare bằng `udb setup`. Không dùng các hướng
-> dẫn Tunnel ID trong tài liệu/phần mềm cũ để thay cho ghép nối Cloudflare.
-> Máy có `cloud-pairing.json` hợp lệ sẽ ưu tiên Cloudflare trong
-> `udb setup`, GUI và `udb doctor`. Cờ tương thích `udb setup --edit`
-> hiện không kích hoạt luồng chỉnh sửa Tunnel riêng và không khôi phục
-> dữ liệu cũ. **Không nhập URL workers.dev vào ô Tunnel ID**. Kết nối Cloudflare vẫn chỉ được xác nhận
-> hoàn chỉnh khi Worker đã triển khai phiên bản đúng, Access/OAuth và
-> `UDB_DEVICE_GRANTS` đã cấp riêng cho thiết bị, ChatGPT đã khám phá và
-> gọi thành công công cụ được phép. Xem
-> [runbook đọc project](cloudflare-project-read-acceptance.md).
-> Việc merge code hoặc cài EXE không tự triển khai Worker hay cấp quyền.
+1. **Windows device:** mỗi máy có một `device_id`, pairing credential riêng và
+   Cloud Agent riêng. Không sao chép token hoặc pairing file giữa các máy.
+2. **Cloudflare relay:** Windows Cloud Agent mở WebSocket outbound tới
+   `/v1/devices/DEVICE_ID/connect`. Không áp dụng Access policy toàn Worker
+   làm chặn WebSocket này.
+3. **MCP per-device:** `/v1/devices/DEVICE_ID/mcp`, dùng cho chế độ từng máy
+   hoặc tương thích cũ.
+4. **MCP account Fleet:** `/v1/account/mcp`, một endpoint OAuth cho một tài khoản
+   quản lý nhiều máy đã liên kết. `list_devices` liệt kê máy; mọi công cụ thao
+   tác trên máy phải nhận `device_id` tường minh. Không tự failover sang máy khác.
+5. **Windows permissions:** catalog hiện công cụ không có nghĩa máy đã cấp quyền.
+   Quyền project, files, terminal, desktop và background vẫn được chủ máy cấp
+   riêng trên Windows.
 
-## 1. Tách ba lớp kết nối
+`udb mcp-config` luôn in URL per-device để giữ tương thích. Khi Fleet bật và máy
+đã liên kết, dùng URL `/v1/account/mcp` do `udb setup` hiển thị; chỉ thêm URL
+này một lần vào ChatGPT.
 
-1. **Windows UDB:** đúng bản có Cloud Pair/Cloud Agent; người dùng xác nhận quyền cục bộ.
-2. **Cloudflare Relay:** thiết bị đăng ký qua mã mời một lần, agent mở kết nối
-   WebSocket outbound trên `/v1/devices/DEVICE_ID/connect`. Đường WebSocket
-   không được buộc đăng nhập Cloudflare Access kiểu Worker-wide.
-3. **ChatGPT MCP:** Cloudflare Access Managed OAuth bảo vệ **chính xác** URL
-   `https://WORKER.workers.dev/v1/devices/DEVICE_ID/mcp`; Worker kiểm
-   `ctx.access`, audience và grant thiết bị. Không tạo quyền shell, ghi tệp,
-   thao tác GUI hoặc bypass quyền cục bộ.
+**Không được coi** `/health = 200`, Cloud Agent đang chạy, pairing hợp lệ hoặc
+nhãn Connected của ChatGPT là bằng chứng end-to-end.
 
-**Nhầm lẫn thường gặp:** `/health = 200`, nút "Cloud Agent đã bật", một
-thiết bị có trong Relay, hoặc ChatGPT báo "Connected" **đều không đủ**
-để kết luận thao tác MCP end-to-end thành công.
+## 2. Chuẩn bị môi trường staging
 
-## 2. Có thể chuẩn bị trước khi chủ máy đăng nhập
+- Xác nhận đúng bản bằng `udb --version`, `udb version --json`; đối chiếu source
+  commit, Windows EXE và Worker revision riêng biệt.
+- Dùng Worker, Durable Object namespace, secrets, Access applications và thiết
+  bị thử riêng. Không dùng Worker staging đang phục vụ máy thật để thử deployment
+  hoặc thay đổi namespace.
+- Access MCP phải bảo vệ chính xác resource đang dùng: per-device MCP hoặc
+  `/v1/account/mcp`. Browser approval dùng Access application riêng cho
+  `/v1/setup/enrollments/*/approval`, audience riêng.
+- Cấu hình `UDB_AUTH_MODE=cloudflare-access`, Access team/audience đã xác minh,
+  `UDB_ENROLLMENT_ACCESS_AUD` riêng và danh sách chủ sở hữu theo immutable
+  subject `https://TEAM.cloudflareaccess.com#USER-UUID`. Email header không phải
+  bằng chứng chủ sở hữu.
+- Enrollment/Fleet chỉ hoạt động khi operator chủ động cấu hình các cờ phù hợp:
+  `UDB_ENABLE_PRIVATE_ENROLLMENT=true`,
+  `UDB_ENABLE_BROWSER_ENROLLMENT=true`,
+  `UDB_ENABLE_LOCAL_TOOL_SYNC=true`; riêng account Fleet cần thêm
+  `UDB_ENABLE_ACCOUNT_FLEET=true`. Fleet yêu cầu Cloudflare Access mode và
+  `UDB_TENANT_POLICY` không được cấu hình.
+- Giữ nguyên các relay-wide owner/companion gates, per-device grants và quyền
+  Windows hiện hữu. Không mở rộng Access policy, không bật production, không
+  thay credential hay Durable Object namespace nếu chưa được phê duyệt riêng.
 
-- Chạy CI Windows, Ubuntu, Node Cloudflare; chỉ dùng commit đã qua kiểm thử.
-- Kiểm tra UDB hiện cài qua `udb.cmd --version` nếu PowerShell không cho
-  chạy `udb.ps1`. Không hạ ExecutionPolicy; không tự thay thế bản đang chạy.
-- Đặt source/bản build kiểm thử vào thư mục **staging** riêng. Phân biệt
-  source trên `main`, artifact từ CI và bản stable đã phát hành.
-- Kiểm tra tài khoản Cloudflare có Zero Trust và quyền quản lý Access app.
-- Chuẩn bị hostname Worker, thiết bị đích và email đăng nhập của chủ máy
-  **trong cấu hình riêng tư**, không đẩy lên repo/issue/chat.
-- Không tạo mã mời quá sớm: thời hạn chỉ 600 giây.
-- Không tự triển khai Worker, bật Managed OAuth, tạo grant hay bật Cloud Agent
-  trên máy khác mà chưa có xác nhận tương ứng.
+Xem thêm [automatic setup và recovery](automatic-setup.md) và
+[account Fleet MCP](account-fleet-mcp.md).
 
-## 3. Lúc chủ máy có mặt — trình tự tối thiểu
+## 3. Trình tự trên từng máy Windows
 
-1. Xác nhận cài đúng bản UDB chứa mục **Kết nối → Nhập mã mời Cloud**
-   và nút **Bật Cloud Agent**. Bản stable cũ có thể chưa có.
-2. Trên Cloudflare Relay **đã triển khai có kiểm soát**, tạo lời mời từ
-   `POST /v1/admin/pairings` bằng admin key bí mật trong terminal tin cậy.
-   Chỉ nhập admin key tại chỗ. Lời mời gồm device ID và pairing code một lần,
-   hạn 10 phút; **không đưa vào lịch sử chat hoặc git**.
-3. Trong UDB Manager trên Windows, chọn **Nhập mã mời Cloud** và nhập
-   HTTPS Worker origin, device ID, mã mời qua ô bí mật; chủ máy xác nhận.
-   Nếu dùng CLI mới, `udb cloud-pair` hỏi thông tin tương đương trong
-   terminal trực tiếp. Không đưa mã mời vào tham số dòng lệnh.
-4. Sau khi `claim` xác nhận, bấm **Bật Cloud Agent** theo phiên. Kiểm tra
-   trạng thái remote của đúng device ID; không đánh đồng với ChatGPT.
-5. Trong Cloudflare Zero Trust, tạo **self-hosted Access application giới
-   hạn chính xác đường dẫn MCP của thiết bị** và policy chỉ cho danh tính
-   chủ máy, sau đó bật **Managed OAuth** trên app. **Không** bật Worker-level
-   Access cho toàn bộ Worker hoặc `/connect` WebSocket.
-6. Dùng thiết lập riêng tư, không commit: `UDB_AUTH_MODE=cloudflare-access`,
-   `UDB_ACCESS_AUD` bằng audience thật của Access app,
-   `UDB_ACCESS_TEAM_DOMAIN=https://TEN_TEAM.cloudflareaccess.com` để xác minh
-   chữ ký JWT Access nếu `ctx.access` không có danh tính, và
-   `UDB_DEVICE_GRANTS` cấp đúng chủ máy/thiết bị. Quyền mặc định tối thiểu
-   chỉ gồm `bridge_status`, `list_projects`. Sau khi triển khai Worker
-   hỗ trợ project-read, chủ máy có thể cấp **rõ ràng** thêm `list_files`,
-   `read_file`, `search_files`, `check_python_syntax` cho danh tính và
-   thiết bị phù hợp. Việc có code allowlist không tạo grant tự động.
-   Không cấp quyền ghi, terminal, desktop hay computer_* qua scope `udb:read`.
-   Admin RPC vẫn tắt.
-7. Chạy kiểm tra **không dùng token** (sau khi Worker có phiên bản mã mới
-   và Managed OAuth đã thực sự bảo vệ MCP path):
-   
+1. Cài bản UDB đã được kiểm tra. Bản stable v0.12.0 đã phát hành có thể chưa
+   chứa thay đổi source mới hơn; kiểm tra `udb --version` thay vì suy đoán.
+2. Mở PowerShell có chủ máy trực tiếp và chạy:
+
    ```powershell
-   python tools/check_cloudflare_deployment.py --relay https://WORKER.workers.dev --device-id DEVICE_ID --auth-mode cloudflare-access
+   udb setup
    ```
 
-   Kết quả đúng xác nhận HTTP health, challenge OAuth và metadata Cloudflare
-   qua các phản hồi không kèm token. Header
-   `X-UDB-Project-Read-Capable: 1` (nếu có) chỉ chứng minh **mã Worker
-   quảng bá** hỗ trợ đọc project, không chứng minh grant hoặc nội dung file.
-   Nếu header không có, kiểm tra phiên bản Worker thực tế trước khi ghép lại.
-   Preflight **không** chứng minh đã đăng nhập hay Access policy đúng
-   danh tính; bước xác minh là gọi `read_file` thực tế trong ChatGPT.
-8. Trong ChatGPT, thêm MCP server riêng bằng **chính xác URL MCP**,
-   bắt đầu đăng nhập Cloudflare và hoàn thành consent do chủ máy thực hiện.
-   Kiểm tra danh sách công cụ read-only và gọi `bridge_status` trên đúng máy.
-9. Kiểm thử trường hợp bị từ chối: thiếu đăng nhập, danh tính khác, audience
-   khác, device khác, công cụ shell/ghi tệp/GUI, admin RPC. Xác nhận tắt
-   Cloud Agent làm mất kết nối; kiểm thử thu hồi grant và rollback.
+3. Với máy mới, UDB tạo yêu cầu enrollment có thể khôi phục. So sánh
+   `device_id` và fingerprint hiện trên Windows với trang Access approval,
+   rồi chủ sở hữu tự đăng nhập và approve hoặc reject. Không nhập admin key,
+   invitation, device token hay relay URL vào PowerShell.
+4. UDB lưu token trong Windows Credential Manager, tái sử dụng hoặc khởi động
+   Cloud Agent với terminal access tắt. Tùy chọn Windows sign-in autostart chỉ
+   được bật sau khi chủ máy đồng ý; từ chối được ghi nhớ.
+5. Với máy đã ghép từ trước, `udb setup` giữ nguyên token/pairing. Nếu Fleet
+   được bật nhưng máy chưa liên kết, nó yêu cầu chủ sở hữu xác nhận link riêng;
+   không re-enroll và không xoay token.
+6. Mở handoff page. Nếu trang hiển thị `/v1/account/mcp`, thêm endpoint này
+   một lần trong ChatGPT và tự hoàn tất OAuth. Nếu hiển thị URL per-device,
+   đó là chế độ cũ; không tự đổi sang account URL khi Fleet chưa bật.
+7. Trong Fleet mode, gọi `list_devices`, chọn đúng `device_id`, rồi gọi
+   `bridge_status` trên máy đó. Sau đó chỉ dùng các công cụ được grant cho
+   đúng chủ sở hữu và máy đích.
+8. Nếu cần quyền Windows rộng, chủ máy tự mở UDB Manager hoặc chạy
+   `udb --access computer` và đọc kỹ prompt. Không có MCP tool nào được phép
+   tự cấp quyền Windows.
 
-## 4. Phân biệt ba loại sự cố
+Không cài thêm plugin hoặc endpoint riêng cho từng máy trong Fleet mode.
+Không coi tool discovery là quyền thực thi.
 
-| Dấu hiệu | Kiểm tra ở đâu | Không được suy ra |
+## 4. Kiểm tra và chẩn đoán
+
+Các lệnh sau chỉ đọc trạng thái; không enrollment, không ghi credential, không
+mở browser, không khởi động process, không đổi autostart và không cấp quyền:
+
+```powershell
+udb setup --status
+udb setup --no-browser
+udb setup --json
+udb status --json
+udb doctor --cloud --json
+```
+
+`udb setup --status` chỉ trả mã 0 khi credential hợp lệ, Cloud Agent online và
+có bằng chứng MCP xác thực mới. Điều này chứng minh lời gọi MCP đã được relay
+ghi nhận, **không** chứng minh danh tính ứng dụng ChatGPT độc lập; UDB không tự
+khai báo ChatGPT Connected từ heartbeat hoặc tên client không đáng tin.
+
+| Dấu hiệu | Kiểm tra | Không được suy ra |
 | --- | --- | --- |
-| `/health` thành công | HTTP Worker | Agent đang online |
-| Device đã đăng ký nhưng agent offline | UDB Manager, Relay status | OAuth bị lỗi |
-| Access trả 401 + OAuth challenge | Cloudflare Access path/policy | Người dùng đã đăng nhập |
-| ChatGPT Connected nhưng không có tool | Plugin/tool discovery, grant, agent | Được phép thực hiện lệnh |
+| `/health = 200` | Worker đang phản hồi | Agent online hoặc OAuth đã xác thực |
+| Device đã pair nhưng offline | Cloud Agent, WebSocket, mạng và đúng device ID | OAuth bị lỗi |
+| 401 / OAuth challenge | Access application, audience, DCR và consent | Đã đăng nhập thành công |
+| `list_devices` trả offline/unverified | Đúng device ID, agent và owner binding | Được tự chọn máy thay thế |
+| Tool hiển thị nhưng bị từ chối | Grant Windows tại máy đích, relay tool gates và project scope | Catalog đã cấp quyền |
 
-Nếu lệnh preflight báo **403** ở chế độ Access hoặc chỉ nhận **401 của
-JWT nội bộ**, **chưa được** coi là Managed OAuth đã bật. Không tự nới
-phạm vi policy để làm bài kiểm thử chuyển xanh.
+Sau thay đổi catalog, refresh/reconnect plugin theo khả năng của ChatGPT.
+Một client có fixed tool allowlist vẫn cần được cấu hình để hiển thị canonical
+tools; refresh không thể cấp quyền hoặc thay Access policy.
 
-## 5. Ranh giới và rollback
+## 5. Kiểm thử từ chối và rollback
 
-- Chỉ thực hiện đối với máy/tài khoản do chủ sở hữu đồng ý; không chia sẻ
-  admin key, mã mời, device token, OAuth token, email grant hoặc PIN trên GitHub.
-- Cloudflare là relay trung gian, **không** cung cấp mã hóa đầu-cuối cho
-  nội dung RPC; hạn chế dữ liệu nhạy cảm.
-- Nếu không đạt, giữ `UDB_AUTH_MODE` ở mặc định `jwt` chưa cấu hình
-  (MCP từ chối), hoặc tắt riêng Access app trên MCP path; không sửa WebSocket.
-- Dừng Cloud Agent trên GUI khi không dùng; thu hồi thiết bị theo quy trình
-  admin nếu thông tin đăng ký bị lộ. Không tự phát lại một claim đã timeout.
+Trong staging cô lập, kiểm tra ít nhất: hai máy một tài khoản; thêm máy thứ ba;
+hai tài khoản không truy cập chéo; máy offline; Agent dừng/khởi động lại; mất
+mạng; từ chối hoặc hết hạn approval; OAuth lỗi/hết hạn; thu hồi token; thu hồi
+quyền trên một máy không ảnh hưởng máy khác. Ghi rõ mô phỏng và nghiệm thu thật
+là hai loại bằng chứng khác nhau.
 
-Nguồn kỹ thuật:
-- https://developers.cloudflare.com/workers/configuration/cloudflare-access/
-- https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/
-- [Cloud relay prototype (ghi chú lịch sử, không phải hướng dẫn mới)](cloudflare-relay-prototype.md)
-- [Kiểm tra project reads sau deploy](cloudflare-project-read-acceptance.md)
-- [Cloudflare Access code integration](cloudflare-access-managed-oauth.md)
+Nếu rollout thất bại, rollback Worker về version đã ghi nhận hoặc tắt riêng
+Fleet/browser-enrollment flags. Giữ namespace, secrets, token, pairing files và
+thiết bị hiện hữu; không revoke thiết bị đang dùng để thử nếu chưa có xác nhận
+của chủ sở hữu. Không tự replay một lời gọi mutation có kết quả không rõ.
+
+Nguồn kỹ thuật: [Cloudflare Access](https://developers.cloudflare.com/workers/configuration/cloudflare-access/),
+[Managed OAuth](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/),
+[project-read acceptance](cloudflare-project-read-acceptance.md),
+[release security](release-security.md).

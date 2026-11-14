@@ -7,6 +7,7 @@ import { handleMcp, protectedResource } from "./mcp.js";
 import { routeBrowserEnrollment, handleBrowserEnrollment } from "./browser-enrollment.js";
 import { routeDeviceSetup, handleDeviceSetup } from "./setup-service.js";
 import { isParallelReadTool } from "./read-tools.js";
+import { fleetEnabled, fleetProtectedResource, handleAccountMcp, handleFleetRegistry } from "./account-fleet.js";
 
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store",
@@ -43,6 +44,10 @@ export default {
       response.headers.set("X-UDB-Project-Read-Capable", "1");
       return response;
     }
+    if (url.pathname === "/.well-known/oauth-protected-resource/v1/account/mcp" && request.method === "GET")
+      return fleetProtectedResource(request, env);
+    if (url.pathname === "/v1/account/mcp")
+      return handleAccountMcp(request, env, ctx?.access);
     const browserEnrollment = await routeBrowserEnrollment(request, env, forward, fetch, ctx?.access);
     if (browserEnrollment) return browserEnrollment;
     const setup = await routeDeviceSetup(request, env, forward);
@@ -144,6 +149,25 @@ export class DeviceRelay {
 
   async fetch(request) {
     const path = new URL(request.url).pathname;
+    if (path.startsWith("/fleet/")) {
+      if (path === "/fleet/verify" && request.method === "POST") {
+        const body = await readJson(request);
+        if (typeof body.owner !== "string" || body.owner.length > 500 ||
+            !/^[a-f0-9]{32}$/.test(body.request_id || ""))
+          return failure(400, "invalid_fleet_verification");
+        const [owner, requestId, token, revoked, seen] = await Promise.all([
+          this.ctx.storage.get("enrollment_owner"), this.ctx.storage.get("enrollment_request"),
+          this.ctx.storage.get("device_token_sha256"), this.ctx.storage.get("enrollment_revoked"),
+          this.ctx.storage.get("fleet_last_seen"),
+        ]);
+        const verified = Boolean(token && !revoked && owner === body.owner &&
+          requestId === body.request_id);
+        return json({ verified, online: verified &&
+          this.ctx.getWebSockets("device").some(ws => ws.readyState === 1),
+          last_seen_at: verified && Number.isSafeInteger(seen) ? seen : null });
+      }
+      return handleFleetRegistry(request, this.ctx);
+    }
     if (path.startsWith("/enroll-v2/"))
       return handleBrowserEnrollment(request, this.ctx, this.env);
     if (path.startsWith("/setup/"))
@@ -259,6 +283,7 @@ export class DeviceRelay {
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
       this.ctx.acceptWebSocket(server, ["device"]);
+      await this.ctx.storage.put("fleet_last_seen", Date.now());
       server.serializeAttachment({ role: "device" });
       for (const ws of this.ctx.getWebSockets("device")) {
         if (ws !== server) ws.close(4002, "superseded by new device connection");

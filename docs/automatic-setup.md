@@ -24,29 +24,38 @@ URL in PowerShell. Existing advanced pairing/connect commands remain supported.
    once. Declining is remembered. Existing startup configuration is preserved.
 4. A handoff page offers **Copy MCP URL** and **Open ChatGPT Plugins**. Add a custom
    MCP server once, paste that URL in ChatGPT, and personally approve OAuth.
-   If it already exists, use it to call bridge_status; do not add a duplicate.
-   Account/workspace availability is controlled by ChatGPT.
+   If account Fleet is enabled, this is the shared `/v1/account/mcp` URL; use
+   that same URL for every linked Windows device. Otherwise it is the device URL.
+   If the server already exists, use it to call `bridge_status` or `list_devices`;
+   do not add a duplicate. Account/workspace availability is controlled by ChatGPT.
 5. UDB waits for a successful authenticated MCP read from the actual agent.
    Static tool discovery, an open browser, Agent online and device-token
    diagnostics are insufficient evidence.
-6. On the opted-in staging relay, ChatGPT discovers the full 40-tool public
-   catalog as soon as the enrolled Windows agent is online. Discovery does not
-   grant execution. Tools use the owner's existing local permissions; a denied
-   call explains the required local approval without running that operation.
+6. On an opted-in Fleet staging relay, the account MCP endpoint publishes the
+   versioned 40-tool catalog even when every Windows device is offline.
+   `list_devices` remains available; a call targeting an offline device returns
+   an explicit offline error. Discovery does not grant execution. Each operation
+   still checks the selected device's ownership, online state and current Windows
+   permission; a denied call explains the required local approval without running it.
 
 ## Tool discovery and local permission synchronization
 
 `UDB_ENABLE_LOCAL_TOOL_SYNC=true` opts enrolled devices into full discovery.
+For one-plugin account Fleet, `UDB_ENABLE_ACCOUNT_FLEET=true` must also be set;
+Fleet additionally requires browser enrollment, Cloudflare Access mode and no
+`UDB_TENANT_POLICY`. All switches remain off in checked-in Wrangler configs.
 Both checked-in Wrangler entrypoints still target staging and retain the
-existing deployment configuration guard. Set this flag in the authorized
-staging deployment configuration after acceptance; the existing `--keep-vars`
-deployment path preserves it. No production configuration is changed.
+existing deployment configuration guard. Set flags only in an isolated,
+authorized staging deployment after acceptance; the existing `--keep-vars`
+deployment path preserves them. No production configuration is changed.
 Without the flag, enrollment retains its
 original status-only behavior. Explicit legacy grants, tenant policies and the
 strict issuer-sub pilot remain authoritative and are never widened.
 The existing relay-wide `UDB_ENABLE_OWNER_TOOLS` and
 `UDB_ENABLE_COMPANION_TOOLS` switches still gate their respective executions;
-full discovery does not bypass either opt-out.
+full discovery does not bypass either opt-out. `udb mcp-config` intentionally
+continues to print the legacy per-device URL; in Fleet mode, use the shared
+account URL printed by `udb setup`.
 
 Only the immutable enrolled owner can discover this device's full catalog.
 Catalog names and schemas come from the actual Windows backend and are filtered
@@ -128,7 +137,9 @@ udb setup --json
 ~~~
 
 These flags are read-only: no enrollment, credential write, browser launch,
-process start, autostart change or permission grant. A nonzero result means setup
+process start, autostart change or permission grant. Exit code 0 requires a valid
+device credential, an online Cloud Agent and fresh authenticated MCP proof; an
+online Agent without that proof remains incomplete. A nonzero result means setup
 is incomplete or requires owner repair; JSON does not include secrets.
 
 ## Operator provisioning: gated, not automatic infrastructure changes
@@ -156,9 +167,12 @@ Provision the following in an isolated staging environment before rollout:
 - A bounded JSON allowlist UDB_ENROLLMENT_OWNER_SUBJECTS of immutable
   https://TEAM.cloudflareaccess.com#USER-UUID subjects. An email header alone is
   never approval authority.
-- Explicit UDB_ENABLE_PRIVATE_ENROLLMENT=true and
-  UDB_ENABLE_BROWSER_ENROLLMENT=true only after review. Strict tenant policy
-  configurations cannot fall back to these dynamic status-only grants.
+- Explicit `UDB_ENABLE_PRIVATE_ENROLLMENT=true`,
+  `UDB_ENABLE_BROWSER_ENROLLMENT=true`, `UDB_ENABLE_LOCAL_TOOL_SYNC=true` and
+  (only for the shared account endpoint) `UDB_ENABLE_ACCOUNT_FLEET=true` after
+  review. Fleet also requires `UDB_AUTH_MODE=cloudflare-access` and no
+  `UDB_TENANT_POLICY`. Strict tenant policy configurations cannot fall back to
+  these dynamic status-only grants.
 - WAF/network controls in addition to application limits of 4 new requests per
   source/hour, 50/hour overall, 20 pending and 200 recovery records. Identical
   POST recovery does not consume a second enrollment slot.

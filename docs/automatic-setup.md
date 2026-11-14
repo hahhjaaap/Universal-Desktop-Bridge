@@ -29,6 +29,56 @@ URL in PowerShell. Existing advanced pairing/connect commands remain supported.
 5. UDB waits for a successful authenticated MCP read from the actual agent.
    Static tool discovery, an open browser, Agent online and device-token
    diagnostics are insufficient evidence.
+6. On the opted-in staging relay, ChatGPT discovers the full 40-tool public
+   catalog as soon as the enrolled Windows agent is online. Discovery does not
+   grant execution. Tools use the owner's existing local permissions; a denied
+   call explains the required local approval without running that operation.
+
+## Tool discovery and local permission synchronization
+
+`UDB_ENABLE_LOCAL_TOOL_SYNC=true` opts enrolled devices into full discovery.
+Both checked-in Wrangler entrypoints target staging and set this flag; no
+production configuration is changed. Without the flag, enrollment retains its
+original status-only behavior. Explicit legacy grants, tenant policies and the
+strict issuer-sub pilot remain authoritative and are never widened.
+The existing relay-wide `UDB_ENABLE_OWNER_TOOLS` and
+`UDB_ENABLE_COMPANION_TOOLS` switches still gate their respective executions;
+full discovery does not bypass either opt-out.
+
+Only the immutable enrolled owner can discover this device's full catalog.
+Catalog names and schemas come from the actual Windows backend and are filtered
+through UDB's existing allowlists/family map. Deprecated aliases and unknown
+tools are excluded. Credentials, identity, pairing and Windows permissions are
+not modified by discovery.
+
+Before dispatching a newly available operation, the relay reads `bridge_status`
+from that same device through its authenticated connection. It validates the
+JSON-RPC reply and the Windows permission report. No permission evidence is
+cached or persisted as an execution grant.
+
+| Local evidence | Operations admitted by the relay |
+| --- | --- |
+| No local grants | `bridge_status`; other tools remain visible but blocked |
+| Existing readable projects | Registered-project read tools; Windows still checks each requested project/path |
+| Attended current-user computer grant with files/execute/desktop capabilities | Computer and companion operations; their existing Windows scope, terminal enablement, project, consent and resource checks still apply |
+| Separately approved background access | Background browser/workspace tools; their own Windows checks still apply |
+
+To approve broad computer access locally, run `udb --access computer` and review
+the attended `ALLOW COMPUTER` prompt. Revoke with `udb revoke-access`. A local
+grant or revocation takes effect on the next call without editing Cloudflare
+secrets or re-enrolling. Broad computer consent does not enable background
+browser access. No MCP tool can set these permissions.
+
+If the permission read is busy, unavailable, malformed or fails, the requested
+operation is not dispatched. A mutating operation is never retried after an
+uncertain reply. Windows independently checks permissions again at execution.
+An already connected ChatGPT client may need its supported tool refresh or a
+reconnection to replace a previously cached one-tool catalog; the relay cannot
+force a proprietary client cache refresh or OAuth consent.
+
+Disable `UDB_ENABLE_LOCAL_TOOL_SYNC` or roll back the Worker to restore the
+status-only enrollment catalog. No data migration, device reset, token rotation
+or Windows EXE update is needed for this server-side feature.
 
 The relay currently cannot independently attest which OAuth client application
 made a call. UDB reports **Authenticated MCP: verified**, never **ChatGPT

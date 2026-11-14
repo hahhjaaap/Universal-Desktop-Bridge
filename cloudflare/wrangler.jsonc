@@ -4,6 +4,9 @@
   "main": "src/index.js",
   "compatibility_date": "2026-10-30",
   "workers_dev": true,
+  "vars": {
+    "UDB_ENABLE_LOCAL_TOOL_SYNC": "true"
+  },
   "durable_objects": {
     "bindings": [
       { "name": "DEVICES", "class_name": "DeviceRelay" }

@@ -4,6 +4,7 @@ import test from "node:test";
 import worker, { DeviceRelay } from "../src/index.js";
 import { routeBrowserEnrollment } from "../src/browser-enrollment.js";
 import { handleMcp } from "../src/mcp.js";
+import { ENROLLED_CATALOG, windowsPermissionReport } from "../src/local-permissions.js";
 
 const ROOT = "https://setup-test.workers.dev";
 const TEAM = "https://setup-test.cloudflareaccess.com";
@@ -32,7 +33,8 @@ async function keys() {
 }
 function fixture() {
   const objects = new Map();
-  const f = { objects, online: true, failAfterRegister: false, probes: 0, toolError: false };
+  const f = { objects, online: true, failAfterRegister: false, probes: 0, toolError: false,
+    calls: [], report: null, catalog: null, statusUnavailable: false, wrongStatusId: false };
   const env = f.env = {
     UDB_AUTH_MODE: "cloudflare-access", UDB_ACCESS_AUD: MCP, UDB_ACCESS_TEAM_DOMAIN: TEAM,
     UDB_ENABLE_PRIVATE_ENROLLMENT: "true", UDB_ENABLE_BROWSER_ENROLLMENT: "true",
@@ -67,10 +69,14 @@ function fixture() {
           if (path === "/rpc") {
             if (!f.online) return Response.json({ error: "device_offline" }, { status: 503 });
             const rpc = await request.json();
-            const result = rpc.method === "tools/list" ? { tools: [{ name: "bridge_status", inputSchema: { type: "object" } }] } :
-              { content: [{ type: "text", text: "synthetic Windows status" }], isError: f.toolError };
+            f.calls.push(structuredClone(rpc));
+            const isStatus = rpc.method === "tools/call" && rpc.params.name === "bridge_status";
+            if (isStatus && f.statusUnavailable) return Response.json({ error: "device_busy" }, { status: 429 });
+            const result = rpc.method === "tools/list" ? { tools: f.catalog || [{ name: "bridge_status", inputSchema: { type: "object" } }] } :
+              rpc.method === "initialize" ? { protocolVersion: "2025-11-25", capabilities: { tools: {} }, serverInfo: { name: "Synthetic" } } :
+              { content: [{ type: "text", text: isStatus && f.report ? JSON.stringify(f.report) : "synthetic Windows status" }], isError: f.toolError };
             if (rpc.method === "tools/call") f.probes++;
-            return Response.json({ jsonrpc: "2.0", id: rpc.id, result });
+            return Response.json({ jsonrpc: "2.0", id: isStatus && f.wrongStatusId ? "wrong-id" : rpc.id, result });
           }
           const response = await objects.get(id).relay.fetch(request);
           if (path === "/setup-register" && f.failAfterRegister) {
@@ -267,6 +273,185 @@ test("native MCP identity binds a newly enrolled device to its owner UUID and st
   }
   assert.equal((await mcp(f, p, "untrusted-header", "tools/call",
     { name: "computer_execute", arguments: {} }, runtimeOwner(OWNER, MCP))).status, 403);
+});
+
+function syncFixture() {
+  const f = fixture();
+  f.env.UDB_ENABLE_LOCAL_TOOL_SYNC = "true";
+  f.env.UDB_EDGE_READ_CATALOG = "true";
+  f.env.UDB_ENABLE_OWNER_TOOLS = "true";
+  f.env.UDB_ENABLE_COMPANION_TOOLS = "true";
+  f.report = { name: "Universal Desktop Bridge", platform: "nt",
+    computer_access: { enabled: false, capabilities: [], scope: "disabled" },
+    host_background: { enabled: false }, readiness: { readable_projects: 0 } };
+  f.catalog = ENROLLED_CATALOG.map(name => ({ name, description: name,
+    inputSchema: { type: "object", properties: {} } }));
+  return f;
+}
+const allowComputer = f => { f.report.computer_access = {
+  enabled: true, capabilities: ["files", "execute", "desktop"], scope: "current_windows_user" }; };
+const syncedCall = (f, p, name, args = {}, owner = OWNER) => mcp(f, p, "untrusted-header",
+  "tools/call", { name, arguments: args }, runtimeOwner(owner, MCP));
+const targetCalls = f => f.calls.filter(c => c.method === "tools/call" && c.params.name !== "bridge_status");
+
+test("fresh enrollment shows all 40 tools without granting local execution or changing credentials", async () => {
+  const f = syncFixture(), p = await begin(f); await approve(f, p);
+  const before = structuredClone([...f.objects.get(p.id).values]);
+  const init = await mcp(f, p, "", "initialize", { protocolVersion: "2025-11-25", capabilities: {} }, runtimeOwner(OWNER, MCP));
+  assert.equal(init.status, 200);
+  const r = await mcp(f, p, "", "tools/list", {}, runtimeOwner(OWNER, MCP));
+  assert.equal(r.status, 200);
+  const tools = (await r.json()).result.tools;
+  assert.equal(tools.length, 40);
+  assert.ok(tools.some(t => t.name === "computer_files"));
+  assert.ok(tools.some(t => t.name === "terminal"));
+  assert.ok(tools.some(t => t.name === "browser"));
+  assert.ok(tools.find(t => t.name === "computer_files")._meta["udb/permissionSource"]);
+  const denied = await (await syncedCall(f, p, "computer_files", { action: "list" })).json();
+  assert.equal(denied.result.isError, true);
+  assert.equal(denied.result.structuredContent.dispatched, false);
+  assert.match(denied.result.content[0].text, /udb --access computer/);
+  assert.equal(targetCalls(f).length, 0);
+  assert.deepEqual([...f.objects.get(p.id).values], before);
+});
+
+test("local consent is recognized on the next call, and revocation prevents the next dispatch", async () => {
+  const f = syncFixture(), p = await begin(f); await approve(f, p);
+  assert.equal((await (await syncedCall(f, p, "computer_files")).json()).result.isError, true);
+  allowComputer(f);
+  assert.equal((await syncedCall(f, p, "computer_files")).status, 200);
+  assert.equal(targetCalls(f).length, 1);
+  f.report.computer_access.enabled = false;
+  assert.equal((await (await syncedCall(f, p, "computer_files")).json()).result.isError, true);
+  assert.equal(targetCalls(f).length, 1, "No cached grant survives local revocation");
+});
+
+test("ambiguous and error-marked Windows status never becomes permission evidence", () => {
+  const f = syncFixture(); allowComputer(f);
+  const block = { type: "text", text: JSON.stringify(f.report) };
+  assert.equal(windowsPermissionReport({ content: [block, block] }), null);
+  assert.equal(windowsPermissionReport({ content: [block], isError: true }), null);
+  assert.equal(windowsPermissionReport({ content: [{ type: "text", text: "not JSON" }] }), null);
+});
+
+test("modern MCP discovery and owner-permission errors retain modern protocol metadata", async () => {
+  const f = syncFixture(), p = await begin(f); await approve(f, p);
+  const call = (method, params = {}) => handleMcp(new Request(ROOT + p.path.replace("/setup/enrollments/", "/devices/") + "/mcp", {
+    method: "POST", headers: { "Content-Type": "application/json", "MCP-Protocol-Version": "2026-07-28",
+      "Mcp-Method": method, ...(method === "tools/call" ? { "Mcp-Name": params.name } : {}) },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params,
+      _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities": {} } } }),
+  }), f.env, p.id, f.env.DEVICES.get(p.id), keys, runtimeOwner(OWNER, MCP));
+  const listed = await (await call("tools/list")).json();
+  assert.equal(listed.result.tools.length, 40);
+  assert.equal(listed.result.resultType, "complete");
+  assert.equal(listed.result.cacheScope, "private");
+  const denied = await (await call("tools/call", { name: "computer_files", arguments: {} })).json();
+  assert.equal(denied.result.resultType, "complete");
+  assert.equal(denied.result.isError, true);
+  assert.equal(denied.result._meta["io.modelcontextprotocol/serverInfo"].name, "udb-cloud-local-permissions");
+  assert.equal(targetCalls(f).length, 0);
+});
+
+test("a computer grant never enables background-browser access", async () => {
+  const f = syncFixture(), p = await begin(f); await approve(f, p); allowComputer(f);
+  const params = { action: "control", params: { action: "open", url: "https://example.test" } };
+  assert.equal((await (await syncedCall(f, p, "browser", params)).json()).result.isError, true);
+  assert.equal(targetCalls(f).length, 0);
+  f.report.host_background.enabled = true;
+  assert.equal((await syncedCall(f, p, "browser", params)).status, 200);
+  assert.equal(targetCalls(f)[0].params.name, "host_browser");
+});
+
+test("existing local project reads do not authorize broad computer operations", async () => {
+  const f = syncFixture(), p = await begin(f); await approve(f, p);
+  f.report.readiness.readable_projects = 1;
+  assert.equal((await syncedCall(f, p, "read_file", { project: "synthetic", path: "README.md" })).status, 200);
+  assert.equal(targetCalls(f).length, 1);
+  assert.equal((await (await syncedCall(f, p, "computer_files")).json()).result.isError, true);
+  assert.equal(targetCalls(f).length, 1);
+});
+
+test("malformed, failed, busy, offline or mismatched permission reports never dispatch a target", async () => {
+  for (const change of [
+    f => { f.report = null; }, f => { f.toolError = true; },
+    f => { f.statusUnavailable = true; }, f => { f.online = false; },
+    f => { f.wrongStatusId = true; }, f => { f.report.platform = "other"; },
+  ]) {
+    const f = syncFixture(), p = await begin(f); await approve(f, p); change(f);
+    const r = await syncedCall(f, p, "computer_files");
+    assert.equal(r.status, 503);
+    assert.equal((await r.json()).dispatched, false);
+    assert.equal(targetCalls(f).length, 0);
+  }
+});
+
+test("caller-supplied permission claims, unknown tools and partial local grants cannot unlock execution", async () => {
+  const f = syncFixture(), p = await begin(f); await approve(f, p);
+  const r = await syncedCall(f, p, "computer_files", { computer_access: { enabled: true } });
+  assert.equal((await r.json()).result.isError, true);
+  f.report.computer_access = { enabled: true, capabilities: ["files"], scope: "current_windows_user" };
+  assert.equal((await (await syncedCall(f, p, "computer_files")).json()).result.isError, true);
+  allowComputer(f); f.report.computer_access.scope = "untrusted";
+  assert.equal((await (await syncedCall(f, p, "computer_files")).json()).result.isError, true);
+  assert.equal((await syncedCall(f, p, "invented_tool")).status, 403);
+  assert.equal(targetCalls(f).length, 0);
+});
+
+test("full discovery and synchronized execution remain bound to device owner and revocation", async () => {
+  const f = syncFixture(), p = await begin(f), other = await begin(f);
+  await approve(f, p); allowComputer(f);
+  assert.equal((await mcp(f, p, "", "tools/list", {}, runtimeOwner(OTHER, MCP))).status, 403);
+  assert.equal((await syncedCall(f, p, "computer_files", {}, OTHER)).status, 403);
+  assert.equal((await mcp(f, other, "", "tools/list", {}, runtimeOwner(OWNER, MCP))).status, 403);
+  assert.equal(targetCalls(f).length, 0);
+  await f.env.DEVICES.get(p.id).fetch(new Request("https://internal/revoke", { method: "DELETE" }));
+  assert.equal((await mcp(f, p, "", "tools/list", {}, runtimeOwner(OWNER, MCP))).status, 403);
+  assert.equal((await syncedCall(f, p, "computer_files")).status, 403);
+  assert.equal(targetCalls(f).length, 0);
+});
+
+test("explicit legacy and tenant grants are never widened by local tool synchronization", async () => {
+  for (const tenant of [false, true]) {
+    const f = syncFixture(), p = await begin(f); await approve(f, p); allowComputer(f);
+    if (tenant) f.env.UDB_TENANT_POLICY = "{}";
+    else f.env.UDB_DEVICE_GRANTS = JSON.stringify({ [p.id]: { "synthetic-owner@example.test": ["bridge_status"] } });
+    const r = await mcp(f, p, "", "tools/list", {}, runtimeOwner(OWNER, MCP));
+    if (tenant) assert.equal(r.status, 403);
+    else assert.deepEqual((await r.json()).result.tools.map(t => t.name), ["bridge_status"]);
+    assert.equal((await syncedCall(f, p, "computer_files")).status, 403);
+    assert.equal(targetCalls(f).length, 0);
+  }
+});
+
+test("global relay group opt-outs remain authoritative after local computer consent", async () => {
+  const f = syncFixture(), p = await begin(f); await approve(f, p); allowComputer(f);
+  f.env.UDB_ENABLE_OWNER_TOOLS = "false";
+  assert.equal((await syncedCall(f, p, "computer_files")).status, 403);
+  f.env.UDB_ENABLE_COMPANION_TOOLS = "false";
+  assert.equal((await syncedCall(f, p, "file_write")).status, 403);
+  assert.equal(targetCalls(f).length, 0);
+  const listed = await mcp(f, p, "", "tools/list", {}, runtimeOwner(OWNER, MCP));
+  assert.equal((await listed.json()).result.tools.length, 40);
+});
+
+test("permission synchronization dispatches a mutation once and never retries uncertain outcomes", async () => {
+  const f = syncFixture(), p = await begin(f); await approve(f, p); allowComputer(f);
+  // The read succeeds; the real target's lost reply is an uncertain mutation.
+  const get = f.env.DEVICES.get;
+  let targets = 0;
+  f.env.DEVICES.get = id => { const original = get(id); return { fetch: async request => {
+    if (new URL(request.url).pathname === "/rpc") {
+      const rpc = await request.clone().json();
+      if (rpc.method === "tools/call" && rpc.params.name === "computer_files") {
+        targets++; throw new Error("Synthetic lost mutation reply");
+      }
+    }
+    return original.fetch(request);
+  } }; };
+  assert.equal((await syncedCall(f, p, "computer_files", { action: "write" })).status, 503);
+  assert.equal(targets, 1);
 });
 
 test("client headers cannot inject runtime approval identity", async () => {

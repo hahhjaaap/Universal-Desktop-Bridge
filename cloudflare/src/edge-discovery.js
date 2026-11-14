@@ -70,5 +70,6 @@ export function edgeCatalogSupported(env, user) {
   // Roll out on separately reviewed staging only. Never replace legacy
   // owner/desktop tool discovery with a read-only catalog by accident.
   return env?.UDB_EDGE_READ_CATALOG === "true" &&
+    !user.enrolledOwner &&
     (!user.ownerTools || user.ownerTools.length === 0);
 }

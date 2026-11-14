@@ -48,7 +48,8 @@ export async function routeBrowserEnrollment(request, env, forward, fetchImpl = 
   const url = new URL(request.url), path = url.pathname;
   if (path === "/v1/setup" && request.method === "GET")
     return json({ protocol: 2, browser_enrollment: enabled(env), device_diagnostics: true,
-      chatgpt_client_attribution: false });
+      chatgpt_client_attribution: false,
+      full_tool_catalog: enabled(env) && env.UDB_ENABLE_LOCAL_TOOL_SYNC === "true" });
   const connect = /^\/v1\/devices\/([a-f0-9]{32})\/connect-chatgpt$/.exec(path);
   if (connect && request.method === "GET") {
     const endpoint = url.origin + "/v1/devices/" + connect[1] + "/mcp";
@@ -95,7 +96,10 @@ export async function routeBrowserEnrollment(request, env, forward, fetchImpl = 
           "</code><br>Fingerprint: <code>" + escape(code) + "</code></p>" +
           "<form method=post><input type=hidden name=csrf value='" + escape(b.csrf) +
           "'><label><input type=checkbox name=status_only value=yes required> Allow this signed-in owner to read bridge status through MCP. " +
-          "This grants no Windows file, terminal or desktop access.</label><p>" +
+          "This grants no Windows file, terminal or desktop access." +
+          (env.UDB_ENABLE_LOCAL_TOOL_SYNC === "true" ?
+            " The full tool catalog is visible; execution uses permissions you separately approve on this Windows device." : "") +
+          "</label><p>" +
           "<button name=action value=approve>Approve device</button> " +
           "<button name=action value=reject formnovalidate>Reject</button></p></form>");
       }

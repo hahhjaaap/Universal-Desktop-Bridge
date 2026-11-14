@@ -151,9 +151,13 @@ def run(settings, relay=PRIVATE_RELAY) -> int:
         enroll_device(settings.home, relay)
     except HTTPError as exc:
         if exc.code == 404:
-            print("UDB: Private enrollment is disabled. Ask the relay owner to enable it.")
+            print(
+                "UDB: Private enrollment is disabled. Ask the relay owner to enable it."
+            )
         elif exc.code == 429:
-            print("UDB: Too many requests. Contact the relay owner; do not retry rapidly.")
+            print(
+                "UDB: Too many requests. Contact the relay owner; do not retry rapidly."
+            )
         else:
             print("UDB: Relay denied enrollment. Ask the owner to verify access.")
         return 2

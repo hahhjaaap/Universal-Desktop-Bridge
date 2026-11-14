@@ -23,7 +23,7 @@ from .config import activate, checked
 from .launcher import child_environment, command
 from .onboarding import CHATGPT_URL, attended_console, paired_cloud
 from .private_enrollment import PRIVATE_RELAY, _request_json
-from .setup_enrollment import EnrollmentError, enroll
+from .setup_enrollment import EnrollmentError, enroll, link_existing
 
 
 class SetupError(ValueError):
@@ -315,6 +315,29 @@ def run(
             token = cloud_secrets.load_device_token(settings.home, device_id)
             # Invalid/revoked/missing credentials stop here. Never auto re-enroll.
             remote = device_status(opener, relay, device_id, token)
+            fleet = remote.get("account_fleet") is True
+            if fleet:
+                phase = "fleet_link"
+                _, link_status = _request_json(
+                    opener,
+                    relay + "/v1/devices/" + device_id + "/fleet/status",
+                    proof=token,
+                )
+                if not isinstance(link_status, dict) or type(
+                    link_status.get("linked")
+                ) is not bool:
+                    raise SetupError("Fleet linking status was not verified")
+                if not link_status["linked"]:
+                    link_existing(
+                        settings.home,
+                        relay,
+                        device_id,
+                        token,
+                        opener=opener,
+                        browser=browser,
+                        pause=pause,
+                        clock=clock,
+                    )
             safe = replace(settings, enable_terminal=False)
             phase = "cloud_agent"
             state["phase"] = phase
@@ -335,7 +358,7 @@ def run(
             configure_autostart(safe, state, prompt)
             phase = "chatgpt_authorization"
             state["phase"] = phase
-            endpoint = relay + "/v1/devices/" + device_id + "/mcp"
+            endpoint = relay + (\n                "/v1/account/mcp"\n                if fleet\n                else "/v1/devices/" + device_id + "/mcp"\n            )
             if remote.get("authenticated_mcp_verified") is not True:
                 state.setdefault("challenge", secrets.token_hex(32))
                 save_journal(settings.home, state)

@@ -1,4 +1,4 @@
-"""Cloudflare-only attended setup and read-only legacy state regressions."""
+"""Automatic setup dispatch and read-only legacy state regressions."""
 
 import json
 import os
@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from udb import cli, cloud_agent, cloud_pair, connection, onboarding, owner_command
+from udb import cli, onboarding, owner_command, setup
 from udb.config import Settings
 
 
@@ -15,134 +15,30 @@ def settings(tmp_path):
     return Settings(home, home / "work")
 
 
-def test_setup_json_is_refused_before_any_state_write(tmp_path):
+@pytest.mark.parametrize("flags", [["--json"], ["--status"], ["--no-browser"]])
+def test_setup_diagnostic_flags_are_read_only(tmp_path, monkeypatch, flags):
+    calls = []
+    monkeypatch.setattr(setup, "run", lambda selected, **kw: calls.append(kw) or 2)
     home = tmp_path / "unused"
-    assert cli.main(["--json", "setup", "--home", str(home)]) == 2
+    assert cli.main(["setup", *flags, "--home", str(home)]) == 2
+    assert calls == [{"readonly": True, "json_output": flags == ["--json"]}]
     assert not home.exists()
 
 
-def test_public_setup_dispatches_only_cloudflare_without_state_write(
-    tmp_path, monkeypatch
-):
+def test_public_setup_dispatches_automatic_controller(tmp_path, monkeypatch):
     selected = settings(tmp_path)
     calls = []
-    monkeypatch.setattr(
-        onboarding, "setup_cloud", lambda candidate: calls.append(candidate) or 0
-    )
+    monkeypatch.setattr(setup, "run", lambda candidate: calls.append(candidate) or 0)
     args = SimpleNamespace(json=False, access=None, offline=False, online=False)
     assert cli._run_setup(args, selected) == 0
     assert calls == [selected]
     assert not selected.home.exists()
 
 
-def test_redirected_cloud_setup_refuses_before_pairing_or_state_write(
-    tmp_path, monkeypatch
-):
+def test_redirected_cloud_setup_refuses_before_state_write(tmp_path, monkeypatch):
     selected = settings(tmp_path)
-    monkeypatch.setattr(onboarding, "console_input", lambda: False)
-    monkeypatch.setattr(
-        cloud_pair,
-        "run",
-        lambda *_: pytest.fail("Non-attended setup may not pair"),
-    )
-    with pytest.raises(ValueError, match="attended"):
-        onboarding.setup_cloud(selected)
-    assert not selected.home.exists()
-
-
-def test_cloud_pair_cancellation_does_not_fall_back_to_tunnel(tmp_path, monkeypatch):
-    selected = settings(tmp_path)
-    monkeypatch.setattr(onboarding, "console_input", lambda: True)
-    monkeypatch.setattr(onboarding, "paired_cloud", lambda _: None)
-    monkeypatch.setattr(cloud_pair, "run", lambda _: 130)
-    assert onboarding.setup_cloud(selected) == 130
-    assert not selected.home.exists()
-
-
-def test_existing_cloud_pairing_preserves_legacy_state_without_key_prompt(
-    tmp_path, monkeypatch, capsys
-):
-    selected = settings(tmp_path)
-    selected.home.mkdir()
-    (selected.home / "state").mkdir()
-    legacy = selected.home / "state/connection.json"
-    legacy_bytes = b'{"tunnel_id":"tunnel_' + b"b" * 32 + b'"}'
-    legacy.write_bytes(legacy_bytes)
-    pairing = selected.home / "cloud-pairing.json"
-    pairing_bytes = (
-        b'{"relay":"https://example.workers.dev","device_id":"' + b"a" * 32 + b'"}'
-    )
-    pairing.write_bytes(pairing_bytes)
-    monkeypatch.setattr(onboarding, "console_input", lambda: True)
-    monkeypatch.setattr(
-        cloud_agent,
-        "load_pairing",
-        lambda _: ("https://example.workers.dev", "a" * 32, None),
-    )
-    monkeypatch.setattr(
-        connection,
-        "cloud_mcp_url",
-        lambda _: "https://example.workers.dev/v1/devices/" + "a" * 32 + "/mcp",
-    )
-    monkeypatch.setattr(
-        cloud_pair,
-        "run",
-        lambda *_: pytest.fail("Existing paired device may not be re-enrolled"),
-    )
-    assert onboarding.setup_cloud(selected) == 0
-    assert "Cloudflare MCP:" in capsys.readouterr().out
-    assert legacy.read_bytes() == legacy_bytes
-    assert pairing.read_bytes() == pairing_bytes
-    assert not (selected.home / "state/computer-access.dpapi").exists()
-
-
-def test_malformed_cloud_pairing_never_falls_back_to_legacy_enrollment(
-    tmp_path, monkeypatch
-):
-    selected = settings(tmp_path)
-    selected.home.mkdir()
-    pairing = selected.home / "cloud-pairing.json"
-    pairing.write_text('{"relay":"invalid"}', encoding="utf-8")
-    before = pairing.read_bytes()
-    monkeypatch.setattr(onboarding, "console_input", lambda: True)
-    monkeypatch.setattr(
-        cloud_pair,
-        "run",
-        lambda *_: pytest.fail("Malformed pairing may not prompt for Tunnel"),
-    )
-    with pytest.raises((ValueError, KeyError, OSError)):
-        onboarding.setup_cloud(selected)
-    assert pairing.read_bytes() == before
-
-
-def test_new_cloud_pairing_prints_only_the_scoped_https_endpoint(
-    tmp_path, monkeypatch, capsys
-):
-    selected = settings(tmp_path)
-    state = {"paired": False}
-    monkeypatch.setattr(onboarding, "console_input", lambda: True)
-    monkeypatch.setattr(
-        onboarding,
-        "paired_cloud",
-        lambda _: (
-            ("https://example.workers.dev", "a" * 32) if state["paired"] else None
-        ),
-    )
-
-    def simulate_pair(_):
-        state["paired"] = True
-        return 0
-
-    monkeypatch.setattr(cloud_pair, "run", simulate_pair)
-    monkeypatch.setattr(
-        connection,
-        "cloud_mcp_url",
-        lambda _: "https://example.workers.dev/v1/devices/" + "a" * 32 + "/mcp",
-    )
-    assert onboarding.setup_cloud(selected) == 0
-    output = capsys.readouterr().out
-    assert "https://example.workers.dev/v1/devices/" in output
-    assert "Tunnel ID" not in output and "Runtime key" not in output
+    monkeypatch.setattr(setup, "attended_console", lambda: False)
+    assert onboarding.setup_cloud(selected) == 2
     assert not selected.home.exists()
 
 

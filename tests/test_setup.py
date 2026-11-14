@@ -239,6 +239,38 @@ def test_inspect_fleet_uses_account_url_and_checks_registry_link(
     ]
 
 
+def test_inspect_fleet_status_failure_is_not_ready(selected, monkeypatch):
+    pair(selected)
+    report = {**remote(verified=True), "account_fleet": True}
+    monkeypatch.setattr(setup, "device_status", lambda *a: report)
+
+    def unavailable(*args, **kwargs):
+        raise OSError("synthetic network failure")
+
+    monkeypatch.setattr(setup, "_request_json", unavailable)
+    result = setup.inspect(selected, opener=object())
+    assert result["credential_valid"] is True
+    assert result["account_fleet"] is True
+    assert result["fleet_linked"] is False
+    assert result["failure"] == "fleet_status_unavailable"
+    assert result["mcp_url"] == RELAY + "/v1/account/mcp"
+
+
+def test_inspect_does_not_publish_url_when_device_status_is_unavailable(
+    selected, monkeypatch
+):
+    pair(selected)
+
+    def unavailable(*args):
+        raise OSError("synthetic network failure")
+
+    monkeypatch.setattr(setup, "device_status", unavailable)
+    result = setup.inspect(selected, opener=object())
+    assert result["paired"] is True
+    assert result["credential_valid"] is False
+    assert "mcp_url" not in result
+
+
 def test_existing_autostart_is_never_rewritten(selected, monkeypatch):
     monkeypatch.setattr(
         setup.autostart,

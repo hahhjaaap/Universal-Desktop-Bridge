@@ -8,6 +8,8 @@ import { isReadTool } from "./read-tools.js";
 import { companionAnnotations, isCompanionTool } from "./companion-tools.js";
 import { edgeCatalog, edgeCatalogSupported } from "./edge-discovery.js";
 import { FAMILIES, authorizedFamilyCatalog, publicToolNames, resolveFamily } from "./tool-families.js";
+import { checkLocalPermission, permissionRequired, windowsPermissionReport,
+  locallyAllowedTools, relayToolEnabled } from "./local-permissions.js";
 export { authorizeAccess } from "./access.js";
 
 const supported = new Set(["2025-03-26", "2025-06-18", "2025-11-25"]);
@@ -26,7 +28,8 @@ const rpcError = (rpc, code, message, status = 400) => {
   return json({ jsonrpc: "2.0", id: rpc.id, error: { code, message } }, status);
 };
 const serverInfo = (user) => ({
-  name: user.ownerTools?.length ? "udb-cloud-owner-gated" : "udb-cloud-readonly",
+  name: user.enrolledOwner ? "udb-cloud-local-permissions" :
+    user.ownerTools?.length ? "udb-cloud-owner-gated" : "udb-cloud-readonly",
   version: "0.1.0",
 });
 const modernResult = (result, user) => ({
@@ -79,8 +82,14 @@ function toolDescriptor(tool) {
 }
 
 function authorizedToolCatalog(tools, user) {
-  return authorizedFamilyCatalog(tools, user.allowTools)
-    .map(tool => fixtureToolDescriptor(toolDescriptor(tool), user));
+  const publicNames = user.enrolledOwner ? new Set(publicToolNames(user.catalogTools)) : null;
+  return authorizedFamilyCatalog(tools, user.catalogTools || user.allowTools)
+    .filter(tool => !publicNames || publicNames.has(tool.name))
+    .map(tool => fixtureToolDescriptor(toolDescriptor(tool), user))
+    .map(tool => user.enrolledOwner && tool.name !== "bridge_status" ? {
+      ...tool, description: (tool.description || "") + " Execution requires the Windows owner's local permission.",
+      _meta: { ...tool._meta, "udb/permissionSource": "windows_owner" },
+    } : tool);
 }
 
 function fixtureToolDescriptor(tool, user) {
@@ -353,10 +362,7 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
       return error(502, "device_initialize_rejected");
     return json({ jsonrpc: "2.0", id: rpc.id, result: {
       protocolVersion: answer.result.protocolVersion, capabilities: { tools: { listChanged: false } },
-      serverInfo: {
-        name: user.ownerTools?.length ? "udb-cloud-owner-gated" : "udb-cloud-readonly",
-        version: "0.1.0",
-      },
+      serverInfo: serverInfo(user),
     } });
   }
   if (rpc.method === "ping") return json({ jsonrpc: "2.0", id: rpc.id, result: {} });
@@ -366,8 +372,19 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
     let resolved;
     try { resolved = resolveFamily(rpc.params.name, rpc.params.arguments); }
     catch { return error(400, "invalid_family_arguments"); }
-    if (!user.allowTools.includes(resolved.name))
-      return error(403, "device_tool_not_authorized");
+    if (!user.allowTools.includes(resolved.name)) {
+      if (!user.enrolledOwner || !user.catalogTools.includes(resolved.name))
+        return error(403, "device_tool_not_authorized");
+      if (!relayToolEnabled(env, resolved.name)) return error(403, "relay_tool_group_disabled");
+      const permission = await checkLocalPermission(stub, resolved.name, env);
+      if (!permission.verified) return json({ error: "local_permission_state_unavailable",
+        dispatched: false, next_action: "Reconnect Windows and check bridge_status; the requested operation was not dispatched." }, 503);
+      if (!permission.allowed) {
+        const result = permissionRequired(resolved.name);
+        return json({ jsonrpc: "2.0", id: rpc.id,
+          result: modern ? modernResult(result, user) : result });
+      }
+    }
     rpc = { ...rpc, params: { ...rpc.params, ...resolved } };
   }
   if (user.stagingFixtureProject && rpc.method === "tools/call" &&
@@ -422,7 +439,8 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
       reply.result && !reply.result.isError && Array.isArray(reply.result.content)) {
     if (env.UDB_ENABLE_BROWSER_ENROLLMENT === "true")
       await recordMcpProof(stub, user.subject, reply.result);
-    const counts = catalogGrantCounts(user);
+    const report = user.enrolledOwner ? windowsPermissionReport(reply.result) : null;
+    const counts = catalogGrantCounts(report ? { ...user, allowTools: locallyAllowedTools(report, env) } : user);
     let toolsListed = null;
     if (useEdgeCatalog) {
       toolsListed = edgeCatalog(user.allowTools).length;
@@ -444,7 +462,8 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
     reply.result = {
       ...reply.result,
       content: [...reply.result.content, {
-        type: "text", text: JSON.stringify({ gateway_catalog_grants: counts, tools_listed: toolsListed }),
+        type: "text", text: JSON.stringify({ gateway_catalog_grants: counts, tools_listed: toolsListed,
+          ...(user.enrolledOwner ? { catalog_mode: "full", permission_source: "live_windows_owner" } : {}) }),
       }],
     };
   }

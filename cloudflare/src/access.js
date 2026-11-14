@@ -6,6 +6,7 @@ import { AuthError, deviceGrant } from "./oauth.js";
 import { ownerToolGrant } from "./owner-tools.js";
 import { companionToolGrant } from "./companion-tools.js";
 import { READ_TOOLS } from "./read-tools.js";
+import { ENROLLED_CATALOG } from "./local-permissions.js";
 
 const MAX_ASSERTION = 8192;
 const MAX_JWKS = 16384;
@@ -239,6 +240,9 @@ export async function authorizeAccess(access, env, deviceId, request = null,
   // Preserve the legacy read-only authorization response exactly when the
   // opt-in profile is absent; existing Access integrations remain unchanged.
   const readScope = stagingFixtureProject ? { stagingFixtureProject } : {};
+  if (enrolledStatusOnly && mode === "email" && env.UDB_ENABLE_LOCAL_TOOL_SYNC === "true")
+    return { subject, allowTools: readTools, catalogTools: ENROLLED_CATALOG,
+      enrolledOwner: true };
   return ownerTools.length
     ? { subject, allowTools: [...readTools, ...ownerTools], ownerTools, ...readScope }
     : { subject, allowTools: readTools, ...readScope };

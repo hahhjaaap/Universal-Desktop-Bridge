@@ -378,7 +378,10 @@ def run(
                 )
                 print("Cloud Agent online. Complete ChatGPT approval in your browser.")
                 print(
-                    "If this server is already added, call bridge_status through it; do not add a duplicate."
+                    "After OAuth, return to a ChatGPT chat and invoke bridge_status once; tool discovery alone does not complete setup."
+                )
+                print(
+                    "If this server is already added, use it; do not add a duplicate."
                 )
                 print(
                     "In "

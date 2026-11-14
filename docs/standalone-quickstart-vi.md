@@ -16,10 +16,9 @@ thực hiện ghép nối khi người dùng có mặt):
 udb setup
 ```
 
-`udb setup` tự tạo yêu cầu ghép nối có thể khôi phục và tự khởi động Cloud Agent.
-Chỉ cần chạy `udb start` riêng khi chủ máy muốn khởi động lại phiên sau khi đã dừng.
-`udb setup` tự tạo yêu cầu ghép nối có thể khôi phục; chủ máy so sánh
-device ID/fingerprint và approve trên trang Cloudflare Access. Không cần
+`udb setup` tự tạo yêu cầu ghép nối có thể khôi phục và khởi động Cloud Agent.
+Chủ máy so sánh device ID/fingerprint và approve trên trang Cloudflare Access.
+Chỉ cần chạy `udb start` riêng khi chủ máy muốn khởi động lại phiên sau khi đã dừng. Không cần
 mã mời hoặc admin key. Trang handoff hiển thị URL MCP và hướng dẫn OAuth.
 Sau OAuth, gọi `bridge_status` để xác minh; ở Fleet mode, gọi
 `list_devices` trước rồi `bridge_status` với đúng `device_id`.

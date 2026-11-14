@@ -1,41 +1,34 @@
-// Account-wide, versioned discovery metadata. Never seeded from Windows status.
-// These names come from the same classification source as local authorization.
-// Family action maps come from the same shared JSON as the Windows catalog.
-// NOTE: non-read standalone signatures are intentionally permissive until the
-// full canonical Windows schema is exported at build time; the Windows backend
-// performs argument validation, and a listed tool grants no execution rights.
+// Canonical schemas are generated from udb.registry.catalog() and checked in.
+// This keeps Python Windows handlers, Companion schemas and Cloudflare discovery
+// on one schema source. The live device is never consulted for discovery.
+import canonicalTools from "./fleet-tool-catalog.json" with { type: "json" };
 import { ENROLLED_CATALOG } from "./local-permissions.js";
-import { edgeCatalog } from "./edge-discovery.js";
-import { publicToolNames, FAMILIES } from "./tool-families.js";
+import { publicToolNames } from "./tool-families.js";
+import { isReadTool } from "./read-tools.js";
 import { companionAnnotations } from "./companion-tools.js";
 
-export const FLEET_CATALOG_VERSION = "0.2.0";
-const record = () => ({ type: "object", properties: {}, additionalProperties: true });
-const securitySchemes = [{ type: "oauth2", scopes: ["udb:read"] }];
+export const FLEET_CATALOG_VERSION = "0.3.0";
+const canonical = new Map(canonicalTools.map(tool => [tool.name, tool]));
+const POTENTIALLY_DESTRUCTIVE = new Set([
+  "propose_file_write", "desktop_action", "desktop_element_action", "desktop_stop",
+  "desktop_app", "desktop_batch", "host_browser", "host_workspace", "host_close_session",
+]);
 
 export function fleetCanonicalCatalog() {
-  const reads = new Map(edgeCatalog(ENROLLED_CATALOG).map(t => [t.name, t]));
-  const families = new Map(FAMILIES.map(f => [f.name, f]));
-  return publicToolNames(ENROLLED_CATALOG).map(name => {
-    if (reads.has(name)) return structuredClone(reads.get(name));
-    const family = families.get(name);
-    const inputSchema = family ? {
-      type: "object",
-      properties: {
-        action: { type: "string", enum: Object.keys(family.actions) },
-        params: record(),
-      },
-      required: ["action", "params"], additionalProperties: false,
-    } : record();
-    const annotations = family ? {
-      readOnlyHint: family.readOnly, destructiveHint: !family.readOnly,
-      idempotentHint: family.readOnly, openWorldHint: family.openWorld,
-    } : companionAnnotations(name);
+  const names = publicToolNames(ENROLLED_CATALOG);
+  const missing = names.filter(name => !canonical.has(name));
+  if (missing.length) throw new Error("fleet_catalog_schema_missing:" + missing.join(","));
+  return names.map(name => {
+    const tool = structuredClone(canonical.get(name));
+    const securitySchemes = [{ type: "oauth2", scopes: isReadTool(name) ? ["udb:read"] : [] }];
+    let annotations = tool.annotations ?? companionAnnotations(name);
+    if (POTENTIALLY_DESTRUCTIVE.has(name))
+      annotations = { ...annotations, readOnlyHint: false, destructiveHint: true };
     return {
-      name, description: family?.description ||
-        "Windows UDB operation. The target device enforces local permissions and validates arguments.",
-      inputSchema, ...(annotations ? { annotations } : {}),
-      securitySchemes: structuredClone(securitySchemes),
+      ...tool,
+      ...(annotations ? { annotations } : {}),
+      securitySchemes,
+      _meta: { ...tool._meta, securitySchemes },
     };
   });
 }

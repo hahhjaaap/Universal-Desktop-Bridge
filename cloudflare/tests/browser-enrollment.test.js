@@ -82,10 +82,10 @@ function fixture() {
       },
     },
   };
-  f.route = async (path, method = "GET", body, headers = {}) => {
+  f.route = async (path, method = "GET", body, headers = {}, access = null) => {
     const request = new Request(ROOT + path, { method, headers,
       body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body) });
-    return await routeBrowserEnrollment(request, env, (stub, req) => stub.fetch(req), keys) ??
+    return await routeBrowserEnrollment(request, env, (stub, req) => stub.fetch(req), keys, access) ??
       worker.fetch(request, env);
   };
   return f;
@@ -124,12 +124,12 @@ async function approve(f, p) {
   assert.equal(r.response.status, 200); assert.ok(r.csrf);
   return decide(f, p, r.csrf);
 }
-async function mcp(f, p, assertion, method = "tools/list", params = {}) {
+async function mcp(f, p, assertion, method = "tools/list", params = {}, access = null) {
   return handleMcp(new Request(ROOT + "/v1/devices/" + p.id + "/mcp", {
     method: "POST", headers: { "Cf-Access-Jwt-Assertion": assertion,
       "Content-Type": "application/json", "MCP-Protocol-Version": "2025-11-25" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-  }), f.env, p.id, f.env.DEVICES.get(p.id), keys);
+  }), f.env, p.id, f.env.DEVICES.get(p.id), keys, access);
 }
 
 test("browser enrollment is opt-in and requires separate pinned owner application", async () => {
@@ -177,12 +177,116 @@ test("owner approval rejects missing, forged, expired, other-account and MCP-aud
   assert.equal(f.objects.has(p.id), false);
 });
 
+test("approval diagnostics identify the failing verification step without echoing credentials", async () => {
+  const f = fixture(), p = await begin(f);
+  for (const [assertion, reason] of [
+    ["private-invalid-token", "owner_assertion_malformed"],
+    [await jwt(MCP), "owner_assertion_audience"],
+    [await jwt(APP, OWNER, { iss: "https://other.cloudflareaccess.com" }), "owner_assertion_issuer"],
+    [await jwt(APP, OWNER, { exp: 1 }), "owner_assertion_time"],
+  ]) {
+    const r = await review(f, p, assertion);
+    assert.equal(r.response.status, 403);
+    assert.ok(r.html.includes(reason));
+    assert.ok(!r.html.includes(assertion));
+    assert.ok(!r.html.includes("synthetic-owner@example.test"));
+  }
+  assert.equal(f.objects.has(p.id), false);
+});
+
+const runtimeOwner = (user_uuid = OWNER, aud = APP) => ({ aud,
+  async getIdentity() { return { user_uuid, email: "synthetic-owner@example.test" }; } });
+
+test("Worker passes trusted Access identity to approval without registering on GET", async () => {
+  const f = fixture(), p = await begin(f);
+  const request = new Request(ROOT + p.path + "/approval?code=" + hash(p.proof).slice(0, 10).toUpperCase());
+  const response = await worker.fetch(request, f.env, { access: runtimeOwner() });
+  assert.equal(response.status, 200);
+  const csrf = /name=csrf value='([a-f0-9]{64})'/.exec(await response.text())?.[1];
+  assert.ok(csrf);
+  assert.equal(f.objects.has(p.id), false);
+  assert.equal((await (await status(f, p)).json()).state, "pending");
+  const consent = new Request(ROOT + p.path + "/approval", { method: "POST",
+    headers: { Origin: ROOT, "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ csrf, action: "approve", status_only: "yes" }) });
+  assert.equal((await worker.fetch(consent, f.env, { access: runtimeOwner() })).status, 200);
+  assert.equal(f.objects.get(p.id).values.get("enrollment_owner"), TEAM + "#" + OWNER);
+});
+
+test("runtime approval requires exact application and account UUID, never email or global id", async () => {
+  const f = fixture(), p = await begin(f);
+  for (const access of [runtimeOwner(OTHER), runtimeOwner(OWNER, MCP), { aud: APP },
+    { aud: APP, getIdentity: async () => ({ email: "synthetic-owner@example.test", id: OWNER }) },
+    { aud: APP, getIdentity: async () => { throw new Error("unavailable"); } },
+  ]) {
+    assert.equal((await f.route(p.path + "/approval?code=" + hash(p.proof).slice(0, 10).toUpperCase(),
+      "GET", undefined, {}, access)).status, 403);
+  }
+  assert.equal(f.objects.has(p.id), false);
+});
+
+test("trusted runtime ownership cannot be overridden by an assertion for an allowed owner", async () => {
+  const f = fixture(), p = await begin(f);
+  for (const [assertion, access] of [
+    [await jwt(), runtimeOwner(OWNER, MCP)], [await jwt(), runtimeOwner(OTHER)],
+    [await jwt(), { aud: APP, getIdentity: async () => ({ email: "synthetic-owner@example.test" }) }],
+    [await jwt(), { aud: APP, getIdentity: async () => { throw new Error("unavailable"); } }],
+    ["forged", null], [await jwt(APP, OWNER, { exp: 1 }), null], [await jwt(MCP), null],
+  ]) {
+    assert.equal((await f.route(p.path + "/approval?code=" + hash(p.proof).slice(0, 10).toUpperCase(),
+      "GET", undefined, { "Cf-Access-Jwt-Assertion": assertion }, access)).status, 403);
+  }
+  assert.equal(f.objects.has(p.id), false);
+});
+
+test("native Access owner identity needs no second JWKS request and ignores client identity headers", async () => {
+  const f = fixture(), p = await begin(f);
+  for (const assertion of ["forged-client-header", await jwt(APP, OTHER), await jwt(MCP)]) {
+    const request = new Request(ROOT + p.path + "/approval?code=" + hash(p.proof).slice(0, 10).toUpperCase(),
+      { headers: { "Cf-Access-Jwt-Assertion": assertion } });
+    let fetched = false;
+    const response = await routeBrowserEnrollment(request, f.env, (stub, req) => stub.fetch(req),
+      async () => { fetched = true; throw new Error("JWKS unavailable"); }, runtimeOwner());
+    assert.equal(response.status, 200);
+    assert.equal(fetched, false);
+    assert.equal(f.objects.has(p.id), false);
+  }
+});
+
+test("native MCP identity binds a newly enrolled device to its owner UUID and status-only grant", async () => {
+  const f = fixture(), p = await begin(f);
+  assert.equal((await approve(f, p)).status, 200);
+  const response = await mcp(f, p, "untrusted-header", "tools/list", {}, runtimeOwner(OWNER, MCP));
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).result.tools.map(t => t.name), ["bridge_status"]);
+  for (const access of [runtimeOwner(OTHER, MCP), runtimeOwner(OWNER, APP),
+    { aud: MCP, getIdentity: async () => ({ email: "synthetic-owner@example.test" }) },
+  ]) {
+    // Even a valid owner JWT cannot override the native account/app identity.
+    assert.equal((await mcp(f, p, await jwt(MCP), "tools/list", {}, access)).status, 403);
+  }
+  assert.equal((await mcp(f, p, "untrusted-header", "tools/call",
+    { name: "computer_execute", arguments: {} }, runtimeOwner(OWNER, MCP))).status, 403);
+});
+
+test("client headers cannot inject runtime approval identity", async () => {
+  const f = fixture(), p = await begin(f);
+  const response = await f.route(p.path + "/approval?code=" + hash(p.proof).slice(0, 10).toUpperCase(),
+    "GET", undefined, { "Cf-Access-Authenticated-User-Email": "synthetic-owner@example.test",
+      "X-Access-Aud": APP, "X-User-UUID": OWNER, Cookie: "CF_Authorization=forged" });
+  assert.equal(response.status, 403);
+  assert.equal(f.objects.has(p.id), false);
+});
+
 test("approval is CSRF protected, bound to device and owner, single-use and status-only", async () => {
   const f = fixture(), p = await begin(f), other = await begin(f);
   const r = await review(f, p);
-  assert.equal(r.response.headers.get("referrer-policy"), "no-referrer");
+  assert.equal(r.response.headers.get("referrer-policy"), "same-origin");
   assert.match(r.response.headers.get("content-security-policy"), /frame-ancestors 'none'/);
   assert.equal((await decide(f, p, r.csrf, "approve", null, { Origin: "https://evil.invalid" })).status, 403);
+  assert.equal((await decide(f, p, r.csrf, "approve", null, { Origin: "null", "Sec-Fetch-Site": "same-origin" })).status, 403);
+  assert.equal((await decide(f, p, r.csrf, "approve", null, { "Sec-Fetch-Site": "cross-site" })).status, 403);
+  assert.equal((await decide(f, p, r.csrf, "approve", null, { "Sec-Fetch-Site": "same-site" })).status, 403);
   assert.equal((await decide(f, other, r.csrf)).status, 403);
   assert.equal((await decide(f, p, "0".repeat(64))).status, 403);
   assert.equal((await decide(f, p, r.csrf)).status, 200);

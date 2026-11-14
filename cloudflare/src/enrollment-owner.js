@@ -21,13 +21,36 @@ export function ownerEnrollmentConfig(env) {
     return { ...config, owners: owners.map(subject => subject.toLowerCase()) };
   } catch { return null; }
 }
-export async function authorizeEnrollmentOwner(request, env, fetchImpl = fetch) {
+export async function authorizeEnrollmentOwner(request, env, fetchImpl = fetch, access = null) {
   const config = ownerEnrollmentConfig(env);
-  if (!config) throw new AuthError();
-  const identity = await verifiedAccessIdentity(request, {
-    ...env, UDB_ACCESS_AUD: config.aud,
-  }, fetchImpl);
+  if (!config) throw new AuthError("owner_config_invalid");
+  // Only the Worker invocation context supplies this trusted object. Never
+  // construct it from headers, cookies or request JSON. MCP uses a different app.
+  if (access && access.aud !== config.aud) throw new AuthError("owner_runtime_audience");
+  let identity;
+  if (typeof access?.getIdentity === "function") {
+    // Cloudflare authenticates this context before invoking the Worker. Use its
+    // account-scoped identity as authority; request headers never select a user.
+    let observed;
+    try { observed = await access.getIdentity(); }
+    catch { throw new AuthError("owner_runtime_unavailable"); }
+    identity = { sub: observed?.user_uuid };
+  } else {
+    // No native browser identity (including aud-only WARP): verify the signed
+    // assertion independently. An invalid assertion never grants access here.
+    try {
+      identity = await verifiedAccessIdentity(request, {
+        ...env, UDB_ACCESS_AUD: config.aud,
+      }, fetchImpl);
+    } catch (error) {
+      const reason = ["malformed", "algorithm", "issuer", "audience", "time", "identity", "key", "signature"]
+        .map(value => "access_assertion_" + value).concat("access_keys_unavailable")
+        .includes(error?.message) ? error.message.slice(7) : "assertion_invalid";
+      throw new AuthError("owner_" + reason);
+    }
+  }
   const subject = stableAccessSubject(identity, config.team);
-  if (!subject || !config.owners.includes(subject.toLowerCase())) throw new AuthError();
+  if (!subject) throw new AuthError("owner_identity_missing");
+  if (!config.owners.includes(subject.toLowerCase())) throw new AuthError("owner_not_allowed");
   return subject;
 }

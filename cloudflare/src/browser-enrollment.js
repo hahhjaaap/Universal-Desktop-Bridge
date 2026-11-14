@@ -23,7 +23,9 @@ function page(body, status = 200) {
     "<h1>UDB device approval</h1>" + body + "</html>", { status, headers: {
     "content-type": "text/html; charset=utf-8", "cache-control": "no-store",
     "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
-    "referrer-policy": "no-referrer", "x-content-type-options": "nosniff",
+    // no-referrer makes native form POSTs send Origin: null. Keep same-origin
+    // submissions verifiable without leaking enrollment URLs across origins.
+    "referrer-policy": "same-origin", "x-content-type-options": "nosniff",
     "x-frame-options": "DENY" } });
 }
 async function form(request) {
@@ -42,7 +44,7 @@ async function form(request) {
   for (const key of values.keys()) if (values.getAll(key).length !== 1) throw new Error("duplicate_field");
   return Object.fromEntries(values);
 }
-export async function routeBrowserEnrollment(request, env, forward, fetchImpl = fetch) {
+export async function routeBrowserEnrollment(request, env, forward, fetchImpl = fetch, access = null) {
   const url = new URL(request.url), path = url.pathname;
   if (path === "/v1/setup" && request.method === "GET")
     return json({ protocol: 2, browser_enrollment: enabled(env), device_diagnostics: true,
@@ -68,8 +70,19 @@ export async function routeBrowserEnrollment(request, env, forward, fetchImpl = 
     if (approval) {
       if (!["GET", "POST"].includes(request.method)) return fail(405, "method_not_allowed");
       let owner;
-      try { owner = await authorizeEnrollmentOwner(request, env, fetchImpl); }
-      catch { return page("<p>Owner authentication is required. Sign in through the configured Cloudflare Access application.</p>", 403); }
+      try { owner = await authorizeEnrollmentOwner(request, env, fetchImpl, access); }
+      catch (error) {
+        const reason = ["owner_config_invalid", "owner_runtime_audience", "owner_runtime_unavailable",
+          "owner_assertion_invalid", "owner_identity_conflict", "owner_identity_missing",
+          "owner_not_allowed", "owner_keys_unavailable", ...["malformed", "algorithm", "issuer",
+            "audience", "time", "identity", "key", "signature"].map(value => "owner_assertion_" + value)]
+          .includes(error?.message) ? error.message : "owner_auth_failed";
+        // Static diagnostics only: never log assertions, cookies, identity or URL.
+        console.warn(JSON.stringify({ event: "udb_owner_auth_denied", reason,
+          runtime_present: Boolean(access), assertion_present: request.headers.has("Cf-Access-Jwt-Assertion") }));
+        return page("<p>Owner authentication could not be verified. Sign in through the configured Cloudflare Access application.</p>" +
+          "<p>Diagnostic: <code>" + reason + "</code>. If already signed in, ask the relay operator to check this code.</p>", 403);
+      }
       if (request.method === "GET") {
         const code = url.searchParams.get("code");
         if (!/^[A-F0-9]{10}$/.test(code || "")) return fail(400, "invalid_code");

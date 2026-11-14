@@ -17,11 +17,15 @@ udb setup
 udb start
 ```
 
-`udb setup` hiển thị URL của thiết bị đã ghép hoặc nhận mã mời Cloudflare
-một lần. Dán URL MCP vào ChatGPT với OAuth. Gọi `bridge_status` trong
-ChatGPT để xác minh kết nối. `udb mcp-config` xuất cấu hình HTTPS của
-thiết bị, hoặc danh sách rỗng trước khi ghép nối. Cờ cũ `--edit`
-không còn mở wizard Tunnel và không thay thế quy trình `udb setup` hiện hành.
+`udb setup` tự tạo yêu cầu ghép nối có thể khôi phục; chủ máy so sánh
+device ID/fingerprint và approve trên trang Cloudflare Access. Không cần
+mã mời hoặc admin key. Trang handoff hiển thị URL MCP và hướng dẫn OAuth.
+Sau OAuth, gọi `bridge_status` để xác minh; ở Fleet mode, gọi
+`list_devices` trước rồi `bridge_status` với đúng `device_id`.
+`udb mcp-config` vẫn xuất URL HTTPS riêng của từng máy để tương thích.
+Khi account Fleet được bật và máy đã liên kết, hãy dùng URL chung
+`/v1/account/mcp` do `udb setup` hiển thị và chỉ thêm một plugin.
+Cờ cũ `--edit` không còn mở wizard Tunnel.
 Lỗi ghép nối phải được xử lý theo Cloudflare; không nhập runtime API key
 hoặc Tunnel ID vào trình thiết lập mới.
 

@@ -13,17 +13,6 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  fleet-schema-export:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
-      - run: python -m pip install ".[dev]"
-      - run: python tools/export_fleet_catalog.py --write
-      - name: Emit generated canonical catalog for bootstrap
-        run: python -c "import json; from udb.registry import catalog; print('UDB_FLEET_CATALOG_JSON=' + json.dumps(catalog()['tools'], ensure_ascii=False, separators=(',', ':')))"
   cloudflare-and-observer:
     runs-on: ubuntu-latest
     steps:

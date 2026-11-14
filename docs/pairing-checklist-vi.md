@@ -101,9 +101,11 @@ udb doctor --cloud --json
 ```
 
 `udb setup --status` chỉ trả mã 0 khi credential hợp lệ, Cloud Agent online và
-có bằng chứng MCP xác thực mới. Điều này chứng minh lời gọi MCP đã được relay
-ghi nhận, **không** chứng minh danh tính ứng dụng ChatGPT độc lập; UDB không tự
-khai báo ChatGPT Connected từ heartbeat hoặc tên client không đáng tin.
+có bằng chứng MCP xác thực mới. Trong Fleet mode, liên kết thiết bị với tài
+khoản cũng phải được xác minh; status hiển thị URL `/v1/account/mcp` dùng chung.
+Điều này chứng minh lời gọi MCP đã được relay ghi nhận, **không** chứng minh
+danh tính ứng dụng ChatGPT độc lập; UDB không tự khai báo ChatGPT Connected từ
+heartbeat hoặc tên client không đáng tin.
 
 | Dấu hiệu | Kiểm tra | Không được suy ra |
 | --- | --- | --- |

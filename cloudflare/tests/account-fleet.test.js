@@ -46,7 +46,7 @@ function fixture() {
             queue = pending.catch(() => {}); return pending; },
         };
         const ctx = { storage, getWebSockets: () =>
-          state.get(id)?.online ? [{ readyState: 1 }] : [] };
+          state.get(id)?.online ? [{ readyState: 1, close() {} }] : [] };
         objects.set(id, { values, relay: new DeviceRelay(ctx, env) });
       }
       return { async fetch(request) {

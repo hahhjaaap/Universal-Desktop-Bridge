@@ -87,7 +87,8 @@ def run(
 
                 result = setup_cloud(settings)
             else:
-                from .private_enrollment import PRIVATE_RELAY, run as run_enroll
+                from .private_enrollment import PRIVATE_RELAY
+                from .private_enrollment import run as run_enroll
 
                 result = run_enroll(settings, relay or PRIVATE_RELAY)
             if result:

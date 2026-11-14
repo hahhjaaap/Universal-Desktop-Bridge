@@ -110,9 +110,13 @@ Provision the following in an isolated staging environment before rollout:
   source/hour, 50/hour overall, 20 pending and 200 recovery records. Identical
   POST recovery does not consume a second enrollment slot.
 
-Approval requires a signed Access JWT, exact pinned issuer/audience, allowlisted
-immutable subject, device fingerprint, short-lived owner/device-bound one-use
-CSRF and same-origin POST. No administrator secret goes to the browser or PC.
+Approval requires either a signed Access JWT with the pinned issuer/audience or
+Cloudflare's trusted `ctx.access` with the approval application's exact audience
+and account-scoped `user_uuid`. Both bind to the allowlisted immutable subject;
+email alone never grants approval. Conflicting runtime identity or an invalid
+assertion fails closed. Device fingerprint, short-lived owner/device-bound
+one-use CSRF and same-origin POST remain required. No administrator secret goes
+to the browser or PC.
 The handoff page uses a script nonce, no external script and a user gesture to
 copy the public MCP URL.
 

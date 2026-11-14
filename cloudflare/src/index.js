@@ -43,7 +43,7 @@ export default {
       response.headers.set("X-UDB-Project-Read-Capable", "1");
       return response;
     }
-    const browserEnrollment = await routeBrowserEnrollment(request, env, forward);
+    const browserEnrollment = await routeBrowserEnrollment(request, env, forward, fetch, ctx?.access);
     if (browserEnrollment) return browserEnrollment;
     const setup = await routeDeviceSetup(request, env, forward);
     if (setup) return setup;

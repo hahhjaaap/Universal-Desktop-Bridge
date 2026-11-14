@@ -21,12 +21,31 @@ export function ownerEnrollmentConfig(env) {
     return { ...config, owners: owners.map(subject => subject.toLowerCase()) };
   } catch { return null; }
 }
-export async function authorizeEnrollmentOwner(request, env, fetchImpl = fetch) {
+export async function authorizeEnrollmentOwner(request, env, fetchImpl = fetch, access = null) {
   const config = ownerEnrollmentConfig(env);
   if (!config) throw new AuthError();
-  const identity = await verifiedAccessIdentity(request, {
-    ...env, UDB_ACCESS_AUD: config.aud,
-  }, fetchImpl);
+  // Only the Worker invocation context supplies this trusted object. Never
+  // construct it from headers, cookies or request JSON. MCP uses a different app.
+  if (access && access.aud !== config.aud) throw new AuthError();
+  let observed = null;
+  if (typeof access?.getIdentity === "function") {
+    try { observed = await access.getIdentity(); }
+    catch { throw new AuthError(); }
+  }
+  let identity;
+  if (request.headers.has("Cf-Access-Jwt-Assertion")) {
+    // A present but invalid assertion must not fall back to runtime identity.
+    identity = await verifiedAccessIdentity(request, {
+      ...env, UDB_ACCESS_AUD: config.aud,
+    }, fetchImpl);
+    if (observed && ((typeof observed.email === "string" && observed.email !== identity.email) ||
+        (typeof observed.user_uuid === "string" &&
+          observed.user_uuid.toLowerCase() !== identity.sub?.toLowerCase()))) throw new AuthError();
+  } else {
+    // Workers can authenticate browser requests without forwarding an assertion.
+    // The account-scoped UUID, not email or the global identity id, binds ownership.
+    identity = { sub: observed?.user_uuid };
+  }
   const subject = stableAccessSubject(identity, config.team);
   if (!subject || !config.owners.includes(subject.toLowerCase())) throw new AuthError();
   return subject;

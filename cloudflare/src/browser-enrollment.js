@@ -42,7 +42,7 @@ async function form(request) {
   for (const key of values.keys()) if (values.getAll(key).length !== 1) throw new Error("duplicate_field");
   return Object.fromEntries(values);
 }
-export async function routeBrowserEnrollment(request, env, forward, fetchImpl = fetch) {
+export async function routeBrowserEnrollment(request, env, forward, fetchImpl = fetch, access = null) {
   const url = new URL(request.url), path = url.pathname;
   if (path === "/v1/setup" && request.method === "GET")
     return json({ protocol: 2, browser_enrollment: enabled(env), device_diagnostics: true,
@@ -68,7 +68,7 @@ export async function routeBrowserEnrollment(request, env, forward, fetchImpl = 
     if (approval) {
       if (!["GET", "POST"].includes(request.method)) return fail(405, "method_not_allowed");
       let owner;
-      try { owner = await authorizeEnrollmentOwner(request, env, fetchImpl); }
+      try { owner = await authorizeEnrollmentOwner(request, env, fetchImpl, access); }
       catch { return page("<p>Owner authentication is required. Sign in through the configured Cloudflare Access application.</p>", 403); }
       if (request.method === "GET") {
         const code = url.searchParams.get("code");

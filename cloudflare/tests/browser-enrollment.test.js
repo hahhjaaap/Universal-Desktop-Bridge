@@ -82,10 +82,10 @@ function fixture() {
       },
     },
   };
-  f.route = async (path, method = "GET", body, headers = {}) => {
+  f.route = async (path, method = "GET", body, headers = {}, access = null) => {
     const request = new Request(ROOT + path, { method, headers,
       body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body) });
-    return await routeBrowserEnrollment(request, env, (stub, req) => stub.fetch(req), keys) ??
+    return await routeBrowserEnrollment(request, env, (stub, req) => stub.fetch(req), keys, access) ??
       worker.fetch(request, env);
   };
   return f;
@@ -174,6 +174,61 @@ test("owner approval rejects missing, forged, expired, other-account and MCP-aud
   }
   const missing = await f.route(p.path + "/approval?code=" + hash(p.proof).slice(0, 10).toUpperCase());
   assert.equal(missing.status, 403);
+  assert.equal(f.objects.has(p.id), false);
+});
+
+const runtimeOwner = (user_uuid = OWNER, aud = APP) => ({ aud,
+  async getIdentity() { return { user_uuid, email: "synthetic-owner@example.test" }; } });
+
+test("Worker passes trusted Access identity to approval without registering on GET", async () => {
+  const f = fixture(), p = await begin(f);
+  const request = new Request(ROOT + p.path + "/approval?code=" + hash(p.proof).slice(0, 10).toUpperCase());
+  const response = await worker.fetch(request, f.env, { access: runtimeOwner() });
+  assert.equal(response.status, 200);
+  const csrf = /name=csrf value='([a-f0-9]{64})'/.exec(await response.text())?.[1];
+  assert.ok(csrf);
+  assert.equal(f.objects.has(p.id), false);
+  assert.equal((await (await status(f, p)).json()).state, "pending");
+  const consent = new Request(ROOT + p.path + "/approval", { method: "POST",
+    headers: { Origin: ROOT, "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ csrf, action: "approve", status_only: "yes" }) });
+  assert.equal((await worker.fetch(consent, f.env, { access: runtimeOwner() })).status, 200);
+  assert.equal(f.objects.get(p.id).values.get("enrollment_owner"), TEAM + "#" + OWNER);
+});
+
+test("runtime approval requires exact application and account UUID, never email or global id", async () => {
+  const f = fixture(), p = await begin(f);
+  for (const access of [runtimeOwner(OTHER), runtimeOwner(OWNER, MCP), { aud: APP },
+    { aud: APP, getIdentity: async () => ({ email: "synthetic-owner@example.test", id: OWNER }) },
+    { aud: APP, getIdentity: async () => { throw new Error("unavailable"); } },
+  ]) {
+    assert.equal((await f.route(p.path + "/approval?code=" + hash(p.proof).slice(0, 10).toUpperCase(),
+      "GET", undefined, {}, access)).status, 403);
+  }
+  assert.equal(f.objects.has(p.id), false);
+});
+
+test("invalid assertion or conflicting runtime identity cannot use the other authentication path", async () => {
+  const f = fixture(), p = await begin(f);
+  for (const [assertion, access] of [
+    ["", runtimeOwner()], ["forged", runtimeOwner()],
+    [await jwt(APP, OWNER, { exp: 1 }), runtimeOwner()],
+    [await jwt(MCP), runtimeOwner()], [await jwt(APP, OTHER), runtimeOwner()],
+    [await jwt(), runtimeOwner(OWNER, MCP)], [await jwt(), runtimeOwner(OTHER)],
+    [await jwt(), { aud: APP, getIdentity: async () => ({ user_uuid: OWNER, email: "other@example.test" }) }],
+  ]) {
+    assert.equal((await f.route(p.path + "/approval?code=" + hash(p.proof).slice(0, 10).toUpperCase(),
+      "GET", undefined, { "Cf-Access-Jwt-Assertion": assertion }, access)).status, 403);
+  }
+  assert.equal(f.objects.has(p.id), false);
+});
+
+test("client headers cannot inject runtime approval identity", async () => {
+  const f = fixture(), p = await begin(f);
+  const response = await f.route(p.path + "/approval?code=" + hash(p.proof).slice(0, 10).toUpperCase(),
+    "GET", undefined, { "Cf-Access-Authenticated-User-Email": "synthetic-owner@example.test",
+      "X-Access-Aud": APP, "X-User-UUID": OWNER, Cookie: "CF_Authorization=forged" });
+  assert.equal(response.status, 403);
   assert.equal(f.objects.has(p.id), false);
 });
 

@@ -1,5 +1,6 @@
 """Family routing, strict schema branches and desktop/gateway parity."""
 
+import asyncio
 import copy
 import json
 import shutil
@@ -24,18 +25,9 @@ def inventory():
 @pytest.mark.parametrize("group", FAMILIES, ids=lambda g: g["name"])
 def test_each_action_resolves_to_its_existing_handler_once(group, inventory):
     for action, target in group["actions"].items():
-        args = (
-            {"action": action, "session_id": "owned", "tab_id": "tab"}
-            if group.get("extend")
-            else {"action": action, "params": {}}
-        )
+        args = {"action": action, "params": {}}
         before = copy.deepcopy(args)
-        assert surface.resolve_call(group["name"], args) == (
-            target,
-            {k: v for k, v in args.items() if k != "action"}
-            if group.get("extend")
-            else {},
-        )
+        assert surface.resolve_call(group["name"], args) == (target, {})
         assert args == before
     jsonschema.Draft202012Validator.check_schema(
         inventory[group["name"]]["inputSchema"]
@@ -101,26 +93,51 @@ def test_schema_requires_action_specific_fields_and_separate_guest_input(invento
     )
 
 
-def test_browser_capture_is_strict_and_regular_calls_keep_their_shape(inventory):
-    schema = inventory["host_browser"]["inputSchema"]
+def test_browser_family_keeps_legacy_browser_calls_unchanged(inventory):
+    schema = inventory["browser"]["inputSchema"]
     for args in (
-        {"action": "open", "url": "https://example.test"},
-        {"action": "screenshot", "session_id": "s", "tab_id": "t"},
-        {},
+        {
+            "action": "control",
+            "params": {"action": "open", "url": "https://example.test"},
+        },
+        {"action": "screenshot", "params": {"session_id": "s", "tab_id": "t"}},
     ):
         jsonschema.validate(args, schema)
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(
-            {"action": "screenshot", "url": "https://example.test"}, schema
+            {"action": "screenshot", "params": {"url": "https://example.test"}}, schema
         )
-    with pytest.raises(ValueError):
-        surface.resolve_call(
-            "host_browser", {"action": "screenshot", "selector": "wrong"}
-        )
-    assert surface.resolve_call("host_browser", {"action": "list"}) == (
-        "host_browser",
-        {"action": "list"},
+    assert surface.resolve_call(
+        "browser",
+        {"action": "screenshot", "params": {"session_id": "s", "tab_id": "t"}},
+    ) == ("host_screenshot", {"session_id": "s", "tab_id": "t"})
+    # An older gateway authorizes host_browser by name. It must never gain a
+    # new screenshot operation when only the Windows build has been upgraded.
+    original = {"action": "screenshot", "session_id": "s", "tab_id": "t"}
+    assert surface.resolve_call("host_browser", original) == ("host_browser", original)
+    from udb.browser_actions import BROWSER_ACTIONS
+
+    assert "screenshot" not in BROWSER_ACTIONS
+
+
+def test_old_gateway_browser_grant_cannot_gain_capture_on_new_windows(
+    tmp_path, monkeypatch
+):
+    from udb.core import Agent
+    from udb.server import make_server
+
+    monkeypatch.setattr(
+        "udb.host_client.command",
+        lambda *a, **kw: pytest.fail(
+            "An old name-only browser grant must not dispatch screenshot"
+        ),
     )
+    args = {"action": "screenshot", "session_id": "owned", "tab_id": "tab"}
+    name, args = surface.resolve_call("host_browser", args)
+    server = make_server(Agent(tmp_path))
+    with pytest.raises(Exception, match="Error executing tool host_browser") as error:
+        asyncio.run(server.call_tool(name, args))
+    assert "Unsupported background browser action" in str(error.value.__cause__)
 
 
 def test_families_cannot_cross_backends_even_for_read_only_actions():
@@ -131,6 +148,15 @@ def test_families_cannot_cross_backends_even_for_read_only_actions():
     with pytest.raises(RuntimeError, match="permission backends"):
         consolidate_families(
             tools, {name: object() for name in ("file_list", "file_read")}
+        )
+
+
+def test_family_names_cannot_reuse_even_a_hidden_native_route():
+    backend = object()
+    with pytest.raises(RuntimeError, match="collides with a backend"):
+        consolidate_families(
+            [{"name": "host_browser", "inputSchema": {"type": "object"}}],
+            {"host_browser": backend, "browser": backend},
         )
 
 

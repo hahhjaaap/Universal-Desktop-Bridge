@@ -154,6 +154,7 @@ class Consolidation(unittest.TestCase):
                 "search",
                 "system_process",
                 "project_files",
+                "browser",
             },
         )
         self.assertEqual(len(self.proxy.tool_routes), len(original))
@@ -161,7 +162,7 @@ class Consolidation(unittest.TestCase):
             "propose_sandbox_job",
             "propose_media_download",
             "computer_desktop",
-            "host_browser",
+            "browser",
             "file_operation",
             "file_read_chunk",
             "file_upload",

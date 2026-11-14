@@ -99,6 +99,7 @@ def main():
             data["version"] != info["version"]
             or data["tool_count"] != len(names)
             or not {
+                "browser",
                 "terminal",
                 "sandbox_desktop",
                 "search",

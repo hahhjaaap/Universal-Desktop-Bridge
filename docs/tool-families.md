@@ -12,7 +12,7 @@ do not replace the immutable v0.12.0 release, upgrade Windows or deploy a Worker
 | `search` | `start`, `read`, `stop` | Background search worker operations |
 | `system_process` | `list`, `stop` | Process observations and guarded termination by observation ID |
 | `project_files` | `list`, `stat`, `read`, `read_lines` | Four read-only operations in the configured Companion project |
-| `host_browser` | Existing actions plus `screenshot` | Owned headless browser actions and the original tab screenshot operation |
+| `browser` | `control`, `screenshot` | Original `host_browser` actions in params, and the separate tab screenshot operation |
 
 ## Calling conventions
 
@@ -29,10 +29,10 @@ outer action and a guest input action:
 ```
 
 Each schema has separate branches for action-specific required fields and
-rejects unrelated fields. `host_browser` keeps its existing flat signature:
+rejects unrelated fields. Browser actions use the same wrapper:
 
 ```json
-{"name":"host_browser","arguments":{"action":"screenshot","session_id":"owned","tab_id":"tab","cached":false}}
+{"name":"browser","arguments":{"action":"screenshot","params":{"session_id":"owned","tab_id":"tab","cached":false}}}
 ```
 
 Calls still enforce the original session/project scope, observed process IDs,
@@ -47,15 +47,18 @@ Keep the existing per-device/per-subject grant entries using the **original
 operation names**. For example, a grant for `terminal_read` exposes only
 `terminal(action=read)`; it does not permit start or interact. A `host_browser`
 grant does not permit screenshot without the separate `host_screenshot` grant.
-Family names are not blanket grant shortcuts.
+Family names are not blanket grant shortcuts. All six families use new names,
+so an older gateway rejects them instead of treating new actions as part of an
+existing grant. The old `host_browser` interface remains unchanged and never
+acquires a screenshot action.
 
 Discovery narrows the action branches to the permitted subset. Execution
 independently resolves and checks that exact original operation before one
 forward to Windows. The gateway forwards original names, so updated gateway
 code can accept family calls while the Windows EXE still advertises the older
-59-tool catalog. Existing callers can continue using their old names. Upgrade
-the reviewed gateway before requiring new remote family names; an old gateway
-will reject them. Reverting either side retains the original callable routes.
+59-tool catalog. Existing callers can continue using their old names. An old
+gateway rejects new names when Windows is upgraded first; it does not broaden
+an old grant. Upgrade both components before requiring the new remote names. Reverting either side retains the original callable routes.
 
 ## Technical debt addressed
 

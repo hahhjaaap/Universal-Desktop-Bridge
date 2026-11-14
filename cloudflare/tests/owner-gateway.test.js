@@ -75,7 +75,7 @@ test("explicit Access owner and device grant show operations with local approval
   assert.equal(catalog.status, 200);
   const tools = (await catalog.json()).result.tools;
   assert.deepEqual(tools.map((t) => t.name), [
-    "bridge_status", "read_file", "computer_execute", "propose_file_write", "host_browser",
+    "bridge_status", "read_file", "computer_execute", "propose_file_write", "browser",
   ]);
   assert.deepEqual(tools[0].securitySchemes[0].scopes, ["udb:read"]);
   assert.deepEqual(tools[2].securitySchemes[0].scopes, []);
@@ -144,7 +144,7 @@ test("explicit full owner grant compacts the legacy 36-tool catalog without auto
   const tools = (await list.json()).result.tools;
   assert.equal(tools.length, 27);
   assert.deepEqual(new Set(tools.map((tool) => tool.name)),
-    new Set([...all.filter(name => !name.startsWith("desktop_") && name !== "host_screenshot"), "sandbox_desktop"]));
+    new Set([...all.filter(name => !name.startsWith("desktop_") && name !== "host_screenshot" && name !== "host_browser"), "sandbox_desktop", "browser"]));
   assert.ok(tools.every((tool) => tool.inputSchema.type === "object"));
   assert.equal(forwarded.length, 1);
   assert.equal(forwarded[0].method, "tools/list");

@@ -75,10 +75,10 @@
       "openWorld": false
     },
     {
-      "name": "host_browser",
-      "description": " action=screenshot uses the separate tab-capture grant (session_id/tab_id; cached/max_age_ms optional).",
-      "extend": true,
+      "name": "browser",
+      "description": "Owned headless browser; pass original browser actions in params for control, or capture a tab with screenshot. Separate grants apply.",
       "actions": {
+        "control": "host_browser",
         "screenshot": "host_screenshot"
       },
       "readOnly": false,

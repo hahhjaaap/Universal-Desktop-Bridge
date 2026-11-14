@@ -212,6 +212,7 @@ def main():
             assert info["source_dirty"] is False
         assert catalog["tool_count"] == len({t["name"] for t in catalog["tools"]})
         assert {
+            "browser",
             "terminal",
             "sandbox_desktop",
             "search",

@@ -7,7 +7,7 @@ import { FAMILIES, authorizedFamilyCatalog, consolidateFamilies, resolveFamily }
 const DEVICE = "a".repeat(32), SUBJECT = "owner@example.test", AUD = "family-test-audience";
 const identity = { aud: AUD, getIdentity: async () => ({ email: SUBJECT }) };
 const legacy = FAMILIES.flatMap(group => [
-  ...(group.extend ? [group.name] : []), ...Object.values(group.actions),
+  ...Object.values(group.actions),
 ]).map(name => ({ name, description: name,
   inputSchema: { type: "object", properties: { marker: { type: "string" } } } }));
 
@@ -61,8 +61,7 @@ for (const modern of [false, true]) {
 test("every family action requires its specific existing grant, never a sibling grant", async () => {
   for (const group of FAMILIES) for (const [action, target] of Object.entries(group.actions)) {
     const f = fixture([target]);
-    const args = group.extend ? { action, session_id: "s", tab_id: "t" }
-      : { action, params: { marker: "original" } };
+    const args = { action, params: { marker: "original" } };
     const before = structuredClone(args);
     assert.equal((await f.call(group.name, args)).status, 200, `${group.name}:${action}`);
     assert.deepEqual(args, before);
@@ -78,20 +77,20 @@ test("every family action requires its specific existing grant, never a sibling 
 
 test("browser screenshot and browser interaction retain independent grants", async () => {
   for (const modern of [false, true]) {
-    const capture = { action: "screenshot", session_id: "owned", tab_id: "tab" };
+    const capture = { action: "screenshot", params: { session_id: "owned", tab_id: "tab" } };
     const f = fixture(["host_browser"], modern);
     const schema = (await (await f.call(null)).json()).result.tools[0].inputSchema;
     assert.equal(schema.oneOf.length, 1);
-    assert.equal(schema.oneOf[0].properties.action.not.const, "screenshot");
+    assert.equal(schema.oneOf[0].properties.action.const, "control");
     f.calls.length = 0;
-    assert.equal((await f.call("host_browser", capture)).status, 403);
+    assert.equal((await f.call("browser", capture)).status, 403);
     assert.equal(f.calls.length, 0);
     f.setGrants(["host_screenshot"]);
-    assert.equal((await f.call("host_browser", { action: "open", url: "https://example.test" })).status, 403);
+    assert.equal((await f.call("browser", { action: "control", params: { action: "open", url: "https://example.test" } })).status, 403);
     const onlyCapture = (await (await f.call(null)).json()).result.tools[0].inputSchema;
-    assert.deepEqual(onlyCapture.properties.action, { const: "screenshot" });
+    assert.deepEqual(onlyCapture.properties.action.enum, ["screenshot"]);
     f.calls.length = 0;
-    assert.equal((await f.call("host_browser", capture)).status, 200);
+    assert.equal((await f.call("browser", capture)).status, 200);
     assert.deepEqual(f.calls[0].params, { name: "host_screenshot", arguments: { session_id: "owned", tab_id: "tab" } });
   }
 });
@@ -116,4 +115,13 @@ test("discovery and argument translation do not mutate shared schemas or request
   authorizedFamilyCatalog(tools, ["terminal_read"]);
   assert.deepEqual(tools, before);
   assert.deepEqual(legacy, original);
+});
+
+// All six families use fresh names. An old gateway must reject them rather
+// than authorize a broader operation using an existing, narrower tool grant.
+test("new names do not acquire authority from old gateway name-only grants", () => {
+  const legacyNames = new Set(legacy.map(tool => tool.name));
+  for (const group of FAMILIES) assert.ok(!legacyNames.has(group.name));
+  const call = { action: "screenshot", session_id: "s", tab_id: "t" };
+  assert.deepEqual(resolveFamily("host_browser", call), { name: "host_browser", arguments: call });
 });

@@ -41,6 +41,7 @@ def test_single_version_and_generated_registry(tmp_path):
     assert {
         "virtual_pointer",
         "work_recovery",
+        "browser",
         "terminal",
         "computer_desktop",
         "spreadsheet",

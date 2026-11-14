@@ -53,3 +53,11 @@ secrets*.json
 
 # Generated Qt/native UI previews
 ui-previews/
+
+# Disposable local scenario/benchmark reports (CI archives its own summaries)
+reports/runtime-scenarios/
+reports/simulation/
+reports/benchmark/
+.benchmarks/
+*.prof
+*.pstats

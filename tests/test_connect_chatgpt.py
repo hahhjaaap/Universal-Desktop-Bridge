@@ -223,8 +223,7 @@ def test_existing_paired_device_enables_autostart_without_reenrollment(
         ),
     )
     assert (
-        connect_chatgpt.run(settings(tmp_path), autostart=True, open_browser=False)
-        == 0
+        connect_chatgpt.run(settings(tmp_path), autostart=True, open_browser=False) == 0
     )
     assert len(calls) == 1
     assert calls[0][1:] == ("enable", True)
@@ -253,7 +252,9 @@ def test_invalid_or_unpaired_device_never_enables_autostart(
     from udb import autostart
 
     monkeypatch.setattr(
-        autostart, "run", lambda *a, **k: pytest.fail("Invalid device enabled autostart")
+        autostart,
+        "run",
+        lambda *a, **k: pytest.fail("Invalid device enabled autostart"),
     )
     monkeypatch.setattr(connect_chatgpt, "paired_cloud", lambda home: None)
     assert connect_chatgpt.run(settings(tmp_path), autostart=True) == 2

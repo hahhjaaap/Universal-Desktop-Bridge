@@ -5,6 +5,13 @@
 > live Cloudflare Worker are not automatically synchronized.
 > See [version/status](current-version.md).
 
+## Private device enrollment (source feature, not yet deployed)
+
+- [Đăng ký máy Windows mới không cần mã mời](private-device-enrollment-vi.md)
+  — request → owner verification/approval → stored device token; initially
+  disabled on the Cloudflare Worker, independent of ChatGPT OAuth/Access
+  and all Windows owner permissions.
+
 ## Start here (supported UDB 0.12.0 user procedures)
 
 - [Version and support matrix](current-version.md) — source versus published EXE,

@@ -68,7 +68,7 @@ async function registry(env, owner) {
 // A device-token-authenticated status check; never substitutes device auth for
 // user OAuth and never reveals the linked owner's identity to anonymous callers.
 export async function routeFleetLinkStatus(request, env) {
-  const match = /^\\/v1\\/devices\\/([a-f0-9]{32})\\/fleet\\/status$/.exec(new URL(request.url).pathname);
+  const match = new RegExp("^/v1/devices/([a-f0-9]{32})/fleet/status$").exec(new URL(request.url).pathname);
   if (!match) return null;
   if (!fleetEnabled(env)) return fail(404, "account_fleet_disabled");
   if (request.method !== "GET") return fail(405, "method_not_allowed");

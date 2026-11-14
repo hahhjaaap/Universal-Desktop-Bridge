@@ -76,6 +76,27 @@ thực thi chúng và không tự đưa vào quy trình không kiểm soát.
 Đây là thay đổi mã nguồn mới, **không tự cập nhật bản UDB đang cài**;
 chỉ có hiệu lực sau một bản phát hành và cài đặt được phê duyệt.
 
+## Kết nối ChatGPT
+
+`udb connect` là lối vào ChatGPT cho **máy đã được ghép nối hợp lệ**.
+Đối với hệ thống **dùng riêng**, không cần đăng UDB lên danh mục công khai:
+trong ChatGPT Plugins chọn **Add custom MCP server**, dán MCP endpoint
+mà Terminal cung cấp và đăng nhập OAuth do chủ hệ thống thiết lập.
+Không có tính năng nào tự cài plugin,
+tự cấp quyền Windows hoặc dùng chung token của chủ dự án.
+
+```powershell
+udb connect
+udb connect --no-browser
+udb connect --json
+```
+
+Máy mới chưa có tài khoản/ghép thiết bị sẽ báo `needs_enrollment`:
+hiện **chưa có dịch vụ đăng ký tự phục vụ công khai**. Chưa thể tuyên bố
+"tải xuống là kết nối ChatGPT ngay" cho mọi người dùng. Xem
+[thiết kế UDB Connect](managed-one-click-connect.md) để biết phần backend,
+OAuth và phát hành app công khai cần hoàn thành.
+
 ## Xem Live
 
 ```powershell

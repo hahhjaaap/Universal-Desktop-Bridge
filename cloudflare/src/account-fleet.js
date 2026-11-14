@@ -69,20 +69,21 @@ export async function registerEnrolledDevice(env, record) {
   // An enrollment approval already bound this record to an authenticated owner.
   // Reverify the actual device object before adding the idempotent index entry.
   if (!fleetEnabled(env)) return true; // feature-off leaves old enrollment intact
-  if (!DEVICE_ID.test(record?.id) || !DEVICE_ID.test(record?.id) ||
+  const requestId = record?.request_id || record?.id;
+  if (!DEVICE_ID.test(record?.id || "") || !DEVICE_ID.test(requestId || "") ||
       typeof record.owner !== "string" || record.owner.length > 500 ||
-      !NAME.test(record.name) || record.request_id !== undefined && record.request_id !== record.id)
+      !NAME.test(record.name))
     return false;
   const stub = env.DEVICES.get(env.DEVICES.idFromName(record.id));
   try {
     const status = await stub.fetch(new Request("https://internal/fleet/verify", {
-      method: "POST", body: JSON.stringify({ owner: record.owner, request_id: record.id }),
+      method: "POST", body: JSON.stringify({ owner: record.owner, request_id: requestId }),
     }));
     if (!status.ok || !(await status.json()).verified) return false;
     const account = await registry(env, record.owner);
     const response = await account.fetch(new Request("https://internal/fleet/register", {
       method: "POST", headers: { "X-UDB-Owner": record.owner },
-      body: JSON.stringify({ id: record.id, name: record.name, request_id: record.id }),
+      body: JSON.stringify({ id: record.id, name: record.name, request_id: requestId }),
     }));
     return response.status === 201;
   } catch { return false; } // The status poll safely retries this SAME registration.
@@ -96,7 +97,7 @@ export async function handleFleetRegistry(request, ctx) {
   const store = ctx.storage;
   if (path === "/fleet/register" && request.method === "POST") {
     const body = await readJson(request);
-    if (!DEVICE_ID.test(body?.id) || body?.request_id !== body.id || !NAME.test(body.name))
+    if (!DEVICE_ID.test(body?.id || "") || !DEVICE_ID.test(body?.request_id || "") || !NAME.test(body.name))
       return fail(400, "invalid_device_registration");
     return store.transaction(async txn => {
       const bound = await txn.get("fleet_owner");

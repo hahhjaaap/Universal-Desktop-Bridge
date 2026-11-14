@@ -140,8 +140,9 @@ udb setup --json
 
 These flags are read-only: no enrollment, credential write, browser launch,
 process start, autostart change or permission grant. Exit code 0 requires a valid
-device credential, an online Cloud Agent and fresh authenticated MCP proof; an
-online Agent without that proof remains incomplete. A nonzero result means setup
+device credential, an online Cloud Agent and fresh authenticated MCP proof. In
+Fleet mode it also requires the device's owner-approved account link to be
+verified; a valid device token alone is not enough. A nonzero result means setup
 is incomplete or requires owner repair; JSON does not include secrets.
 
 ## Operator provisioning: gated, not automatic infrastructure changes

@@ -14,9 +14,10 @@ thực hiện ghép nối khi người dùng có mặt):
 
 ```powershell
 udb setup
-udb start
 ```
 
+`udb setup` tự tạo yêu cầu ghép nối có thể khôi phục và tự khởi động Cloud Agent.
+Chỉ cần chạy `udb start` riêng khi chủ máy muốn khởi động lại phiên sau khi đã dừng.
 `udb setup` tự tạo yêu cầu ghép nối có thể khôi phục; chủ máy so sánh
 device ID/fingerprint và approve trên trang Cloudflare Access. Không cần
 mã mời hoặc admin key. Trang handoff hiển thị URL MCP và hướng dẫn OAuth.

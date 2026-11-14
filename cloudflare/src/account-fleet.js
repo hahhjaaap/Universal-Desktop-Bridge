@@ -324,10 +324,9 @@ export async function handleAccountMcp(request, env, access = null, fetchImpl = 
       structuredContent: { devices } };
     return result(rpc.id, value, modern);
   }
-  // Discovery is not a grant. Still reject names absent from the owner's
-  // stable catalog before checking device ownership and Windows permissions.
-  if (!ALLOWED.has(rpc.params.name) ||
-      !snapshot.catalog?.some(tool => tool.name === rpc.params.name))
+  // Reject unknown MCP names even if the client never requested discovery.
+  // The target device's own Access grant and live Windows check remain mandatory.
+  if (!ALLOWED.has(rpc.params.name))
     return fail(403, "fleet_tool_not_listed");
   const args = rpc.params.arguments;
   const id = args?.device_id;

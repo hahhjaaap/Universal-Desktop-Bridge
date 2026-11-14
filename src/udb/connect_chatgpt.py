@@ -22,7 +22,9 @@ def _print_status(status: dict, *, as_json: bool) -> None:
     if status["state"] == "needs_enrollment":
         print("UDB: This device is not yet enrolled in the private UDB relay.")
         print("To request owner approval without an invite: udb connect --enroll")
-        print("The owner approves the request separately; cloud enrollment must be enabled.")
+        print(
+            "The owner approves the request separately; cloud enrollment must be enabled."
+        )
         print("Legacy private invitations remain available: udb connect --setup")
         print("Never paste a shared administrator key or someone else's device token.")
         return
@@ -58,10 +60,15 @@ def run(
 ) -> int:
     """Optional owner-attended private setup; never bypass ChatGPT OAuth consent."""
     if (setup or enroll or autostart) and as_json:
-        print("UDB: Enrollment/setup/autostart cannot run in JSON mode.", file=sys.stderr)
+        print(
+            "UDB: Enrollment/setup/autostart cannot run in JSON mode.", file=sys.stderr
+        )
         return 2
     if setup and enroll:
-        print("UDB: Choose --setup (invite) OR --enroll (owner approval).", file=sys.stderr)
+        print(
+            "UDB: Choose --setup (invite) OR --enroll (owner approval).",
+            file=sys.stderr,
+        )
         return 2
     if relay and not enroll:
         print("UDB: --relay requires --enroll.", file=sys.stderr)

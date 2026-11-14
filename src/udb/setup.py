@@ -165,7 +165,7 @@ def inspect(settings, opener=None):
         )
         return result
     relay, device_id = pairing
-    result.update(paired=True, mcp_url=relay + "/v1/devices/" + device_id + "/mcp")
+    result.update(paired=True)
     try:
         token = cloud_secrets.load_device_token(settings.home, device_id)
     except Exception:
@@ -188,6 +188,11 @@ def inspect(settings, opener=None):
         result["failure"] = "relay_unreachable"
         return result
     fleet = remote.get("account_fleet") is True
+    result["mcp_url"] = (
+        relay + "/v1/account/mcp"
+        if fleet
+        else relay + "/v1/devices/" + device_id + "/mcp"
+    )
     result.update(
         credential_valid=True,
         relay_reachable=True,

@@ -156,6 +156,21 @@ in order, without resetting credentials or loosening permissions:
 Verify the Cloud Agent process and a read-only invocation in ChatGPT.
 
 
+### ChatGPT app connection (pilot status)
+
+`udb connect` opens the ChatGPT Plugins page **only after existing
+owner-attended device pairing has been validated**. `udb connect --json`
+inspects the state without opening a browser or changing any owner grant.
+For a private UDB deployment, connect the device-specific URL using
+ChatGPT's **Add custom MCP server** flow; **public directory publication
+is not required**. This is not self-service cloud enrollment or automatic
+plugin installation. Fresh downloads cannot connect without an identity-bound
+device registration service and ChatGPT's explicit OAuth/install consent.
+
+See [managed one-click connection design](docs/managed-one-click-connect.md)
+for the hosted service prerequisites, two-user isolation gates and
+the security reasons not to embed shared Cloudflare keys in installers.
+
 ### Commands: a small everyday set
 
 Run `udb --help` or `udb help` to see only the everyday commands. `udb`

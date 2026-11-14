@@ -15,10 +15,11 @@ to pair the intended device if needed, then `udb start`. For an existing
 `cloud-pairing.json`, run `udb setup` in the attended owner terminal to
 inspect the existing pairing. The deprecated `--edit` flag does not provide
 an independent Tunnel editing or recovery flow. Never paste a workers.dev
-URL into an old Tunnel prompt. Use `udb mcp-config`
-to inspect the device-specific HTTPS MCP endpoint. Verify Worker deployment,
-Cloudflare Access OAuth, the subject/device grant, Cloud Agent status and the
-actual MCP catalog independently. See
+URL into an old Tunnel prompt. `udb mcp-config` inspects the per-device HTTPS
+endpoint. If the opt-in account Fleet feature is enabled, use the shared
+`/v1/account/mcp` URL printed by `udb setup` for the single ChatGPT connection.
+Verify Worker deployment, Cloudflare Access OAuth, the subject/device grant,
+Cloud Agent status and the actual MCP catalog independently. See
 [Cloudflare project-read acceptance](cloudflare-project-read-acceptance.md).
 
 Old Tunnel ID and `local_tunnel_ready` instructions apply only to earlier

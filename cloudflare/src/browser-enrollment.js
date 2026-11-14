@@ -262,7 +262,7 @@ export async function handleBrowserEnrollment(request, ctx, env) {
     return { status: 200, record: { ...r } };
   });
   if (result.status !== 200) return fail(result.status, "decision_rejected");
-  if (result.csrf) return json({ name: result.name, csrf: result.csrf });
+  if (result.csrf) return json({ name: result.name, csrf: result.csrf, device_id: result.device_id });
   if (result.record.state === "rejected") return json({ rejected: true });
   return await finish(store, env, result.record) ? json({ approved: true }) :
     fail(503, "registration_pending_resume_setup");

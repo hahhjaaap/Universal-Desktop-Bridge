@@ -22,6 +22,20 @@ guards. Then run `udb start` to connect immediately. In ChatGPT, create a
 private custom MCP server using the printed URL and authorize OAuth. The
 ChatGPT creation/consent step is never automated.
 
+### Already paired: automatic reconnection at Windows logon
+
+For a device already enrolled using `udb connect --setup` or
+`udb connect --enroll`, run `udb connect --autostart --no-browser` once
+from an **attended local Windows terminal**. This opts in to starting the
+previously approved Cloud Agent each time the same Windows user logs on,
+using its existing per-device Credential Manager secret. It does **not**
+register another device, rotate/print a token, grant owner tools or repeat
+ChatGPT OAuth. `udb start` connects the current session. Use
+`udb autostart status --json` to inspect, or `udb autostart disable` to
+undo. Network interruptions reconnect with bounded backoff without replaying
+mutations with uncertain outcomes. The ChatGPT sign-in/consent and account
+session remain controlled by ChatGPT.
+
 ## Actual target UX (Desktop Commander-style)
 
 1. Download a verified **signed** UDB Windows installer.

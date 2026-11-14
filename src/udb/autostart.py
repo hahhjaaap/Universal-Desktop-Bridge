@@ -36,6 +36,13 @@ def script_text(settings, *, cloud_agent=False):
         root, record = found
         if record["home"] != str(settings.home):
             raise CommandError("Use the managed launcher's saved home for autostart.")
+        # The managed installer intentionally names this helper differently
+        # from udb.ps1 to avoid PowerShell execution-policy command collisions.
+        helper = root / "bin/udb-launcher.ps1"
+        if not helper.is_file():
+            raise CommandError(
+                "Managed UDB launcher missing. Repair the installation before autostart."
+            )
         launcher = [
             system_executable("powershell.exe"),
             "-NoLogo",
@@ -43,7 +50,7 @@ def script_text(settings, *, cloud_agent=False):
             "-ExecutionPolicy",
             "Bypass",
             "-File",
-            str(root / "bin/udb.ps1"),
+            str(helper),
         ]
         argv = [*launcher, "start", "--detach"]
     else:

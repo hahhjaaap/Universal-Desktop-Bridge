@@ -3,7 +3,6 @@
 import hashlib
 import io
 import json
-from contextlib import nullcontext
 from types import SimpleNamespace
 from urllib.error import HTTPError
 

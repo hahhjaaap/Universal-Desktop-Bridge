@@ -592,6 +592,7 @@ test("rate limits, public routing and handoff do not expose internal operations 
   const html = await handoff.text();
   assert.ok(html.includes("https://chatgpt.com/plugins"));
   assert.ok(html.includes("Copy MCP URL"));
+  assert.ok(html.includes("invoke bridge_status once"));
   assert.ok(!html.includes(ADMIN));
   assert.match(handoff.headers.get("content-security-policy"), /script-src 'nonce-/);
 });
@@ -667,7 +668,10 @@ test("fleet onboarding indexes approved devices and links an existing token only
   assert.equal((await f.route("/v1/setup")).status, 200);
   assert.equal((await (await f.route("/v1/setup")).json()).account_fleet, true);
   const handoff = await f.route("/v1/devices/" + device + "/connect-chatgpt");
-  assert.ok((await handoff.text()).includes(ROOT + "/v1/account/mcp"));
+  const handoffHtml = await handoff.text();
+  assert.ok(handoffHtml.includes(ROOT + "/v1/account/mcp"));
+  assert.ok(handoffHtml.includes("call list_devices"));
+  assert.ok(handoffHtml.includes("bridge_status with the chosen device_id"));
 });
 
 test("fleet linking never steals a device already owned by a different identity", async () => {

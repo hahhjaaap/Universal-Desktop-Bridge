@@ -5,10 +5,13 @@
 ## Scope and safety
 
 Optional alternative to a manually integrated RS256 JWT OAuth identity provider.
-Use **Cloudflare Access Managed OAuth**, configured as a **hostname/path scoped
-Access MCP application** for a single device MCP endpoint. Do not select Worker-
-level Access on a UDB relay: Cloudflare documents that Worker-level
-Access blocks WebSocket upgrades, which would disconnect the UDB Cloud Agent.
+For legacy per-device mode, use **Cloudflare Access Managed OAuth** configured
+as a **hostname/path scoped Access MCP application** for the device MCP endpoint.
+The opt-in account Fleet candidate uses the separate `/v1/account/mcp` resource;
+protect that exact resource with the reviewed account MCP Access application.
+Do not select Worker-level Access on a UDB relay: Cloudflare documents that
+Worker-level Access blocks WebSocket upgrades, which would disconnect the UDB
+Cloud Agent.
 
 The code remains **off by default**. The Windows device is not remotely
 controllable through the MCP gateway. It exposes only owner-granted read tools
@@ -17,8 +20,14 @@ tools described in [the project-read acceptance runbook](cloudflare-project-read
 
 ## Required authenticated identity boundary
 
-- The MCP endpoint is `/v1/devices/DEVICE_ID/mcp` on the existing Worker.
-- Set up a path-scoped Cloudflare Access application on that URL only.
+- In legacy per-device mode, the MCP endpoint is
+  `/v1/devices/DEVICE_ID/mcp` on the existing Worker. For the opt-in Fleet
+  candidate, the shared MCP resource is `/v1/account/mcp`; see
+  [account Fleet MCP](account-fleet-mcp.md) for its immutable owner-subject
+  binding and rollout requirements.
+- Set up a path-scoped Cloudflare Access application on the exact resource
+  URL being used; do not assume a device-path application covers the account
+  resource.
 - Configure an Access policy that allows **only the intended owner identity**.
 - Enable **Managed OAuth** under that application's Advanced settings.
 - ChatGPT or another MCP client must perform Access OAuth login and consent.
@@ -44,6 +53,12 @@ tools described in [the project-read acceptance runbook](cloudflare-project-read
   }
 }
 ```
+
+This email-based `UDB_DEVICE_GRANTS` example is for the legacy per-device
+resource. Fleet account membership uses the immutable Cloudflare team subject
+and owner-bound device registry described in
+[account Fleet MCP](account-fleet-mcp.md); do not infer account membership from
+an email grant or caller-supplied device ID.
 
 Use the actual device ID and Access sign-in identity only in private local
 configuration. Never commit secrets, personal identity grants or access tokens.

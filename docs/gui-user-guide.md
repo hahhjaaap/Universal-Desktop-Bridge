@@ -199,9 +199,12 @@ write, terminal or desktop access follows automatically.
 - **Permission grant:** separately authorized by the owner on the Windows
   machine; not inferred from any connected indicator.
 
-The current source does **not** implement production one-plugin Multi-PC
-selection. Do not infer another PC from a green connection label; distinguish
-the exact Cloudflare device ID and owner grants on paired devices. See
+PR #183 adds an opt-in account Fleet candidate with one `/v1/account/mcp`
+resource and explicit `device_id` routing. It is not deployed to the current
+staging Worker or production, and does not yet constitute accepted production
+one-plugin Multi-PC selection. Do not infer another PC from a green connection
+label; distinguish the exact Cloudflare device ID and owner grants on paired
+devices. See
 [remote-device troubleshooting](remote-device-troubleshooting.md) and
 [Cloudflare deployment acceptance](cloudflare-project-read-acceptance.md).
 

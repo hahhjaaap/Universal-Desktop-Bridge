@@ -28,14 +28,24 @@ in an enum. `list_devices` gives `device_id`, `display_name`, `connection`
 Display names are hints only; duplicated names do not affect routing.
 The target `device_id` is removed before forwarding tool arguments to Windows.
 
-The initial tool catalog is discovered from an online authorized Windows agent, then
-stored in the account DO so additional machines do not change schemas. **Limitation:**
-when no device has yet supplied a valid authorized catalog, discovery exposes only
-`list_devices`; refresh the MCP connection after the first authorized online agent
-appears. A first online device with a restricted/older catalog may seed only those
-capabilities; the candidate does not automatically merge differing schemas or guarantee
-40 tools for every agent. Regardless of discovery, target-specific permissions are
-checked on **every call** and Windows always performs its own local authorization.
+The account gateway provides a stable versioned catalog even when every
+machine is offline. Its 40 public schemas are generated from the authoritative
+`udb.registry.catalog()` implementation, which introspects the actual Windows
+MCP handlers and merges the Companion schemas and shared action families.
+The generated projection is checked in at
+`cloudflare/src/fleet-tool-catalog.json`; regenerate after changing a tool
+signature with `python tools/export_fleet_catalog.py --write`. CI runs
+`python tools/export_fleet_catalog.py --check` and fails on schema drift.
+Fleet discovery appends only the required top-level `device_id`; a regression
+test verifies every other schema field remains identical to the generated
+Windows catalog, including action-specific family branches.
+
+Prior persisted `fleet_catalog` snapshots are ignored: an old or
+permission-limited Windows agent cannot narrow account discovery. Discovery is
+metadata, not a Windows permission grant. Every call still revalidates account
+ownership, device online state, Access identity and the actual local Windows
+permission on that selected machine. No automatic failover or mutation replay
+is introduced.
 
 ## Rollout switches and safety
 
@@ -74,10 +84,13 @@ MCP clients should be instructed to use the prior endpoint if rolled back.
 5. In ChatGPT Plugins, add **one** custom MCP server using the account URL, then
    explicitly authorize OAuth. This requires the account/workspace to support custom
    MCP servers. Later machines do not require another plugin or device endpoint.
-6. Run `list_devices` and pass the stable returned `device_id` on each machine
-   operation. When display names are ambiguous, identify the correct machine first.
-   Local computer, terminal, files, desktop and background browser permissions
-   still must be approved on the actual target Windows device.
+6. After OAuth, call `list_devices`, select the intended device, then call
+   `bridge_status` with that exact `device_id`. This authenticated MCP read is
+   the setup verification signal; `tools/list` alone is not sufficient.
+7. Pass the stable returned `device_id` on every machine operation. When display
+   names are ambiguous, identify the correct machine first. Local computer,
+   terminal, files, desktop and background browser permissions still must be
+   approved on the actual target Windows device.
 
 `udb setup --status` and other diagnostic-only flags do not initiate approval.
 A browser approval never grants local Windows computer access, and an MCP tool cannot

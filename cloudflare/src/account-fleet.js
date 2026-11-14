@@ -6,6 +6,7 @@ import { stableAccessSubject } from "./enrollment-owner.js";
 import { handleMcp } from "./mcp.js";
 import { ENROLLED_CATALOG } from "./local-permissions.js";
 import { publicToolNames } from "./tool-families.js";
+import { fleetCanonicalCatalog, FLEET_CATALOG_VERSION } from "./fleet-catalog.js";
 
 const MODERN = "2026-07-28";
 const LEGACY = new Set(["2025-03-26", "2025-06-18", "2025-11-25"]);
@@ -20,7 +21,7 @@ const fail = (status, code) => json({ error: code }, status);
 const result = (id, value, modern = false) => json({ jsonrpc: "2.0", id,
   result: modern ? { ...value, resultType: "complete",
     _meta: { ...value._meta, [META + "serverInfo"]:
-      { name: "udb-account-fleet", version: "0.1.0" } } } : value });
+      { name: "udb-account-fleet", version: FLEET_CATALOG_VERSION } } } : value });
 const denied = (request) => json({ error: "cloudflare_access_authentication_required" }, 401, {
   "www-authenticate": 'Bearer error="invalid_token", resource_metadata="' +
     new URL(request.url).origin +
@@ -285,35 +286,12 @@ export async function handleAccountMcp(request, env, access = null, fetchImpl = 
   if (rpc.method === "initialize")
     return result(rpc.id, { protocolVersion: LEGACY.has(rpc.params?.protocolVersion) ?
       rpc.params.protocolVersion : "2025-11-25", capabilities: { tools: { listChanged: false } },
-      serverInfo: { name: "udb-account-fleet", version: "0.1.0" } });
+      serverInfo: { name: "udb-account-fleet", version: FLEET_CATALOG_VERSION } });
   if (rpc.method === "ping") return result(rpc.id, {});
   if (rpc.method === "tools/list") {
-    let catalog = snapshot.catalog;
-    if (!catalog) {
-      for (const device of snapshot.devices) {
-        const current = await verifiedDevice(env, owner, device);
-        if (!current.verified || !current.online) continue;
-        const found = await handleMcp(forwardedRequest(request, rpc, device.id), env,
-          device.id, current.stub, fetchImpl, access);
-        if (!found.ok) continue;
-        let payload;
-        try { payload = await found.json(); } catch { continue; }
-        const tools = payload?.result?.tools;
-        if (!Array.isArray(tools) || !tools.length) continue;
-        const safe = tools.filter(x => x && ALLOWED.has(x.name) && x.inputSchema?.type === "object" &&
-          !Object.hasOwn(x.inputSchema.properties || {}, "device_id"));
-        if (!safe.length) continue;
-        const response = await snapshot.account.fetch(new Request("https://internal/fleet/catalog", {
-          method: "POST", headers: { "X-UDB-Owner": owner },
-          body: JSON.stringify({ tools: safe }),
-        }));
-        if (response.ok) {
-          try { catalog = (await response.json()).tools; } catch { catalog = null; }
-          if (Array.isArray(catalog)) break;
-        }
-      }
-    }
-    return result(rpc.id, { tools: [listTool, ...deviceCatalog(catalog || [])],
+    // Discovery is account-wide metadata, never a snapshot of the first online
+    // device. Ignore legacy fleet_catalog entries seeded by earlier versions.
+    return result(rpc.id, { tools: [listTool, ...deviceCatalog(fleetCanonicalCatalog())],
       ...(modern ? { ttlMs: 0, cacheScope: "private" } : {}) }, modern);
   }
   if (rpc.method !== "tools/call") return fail(400, "unsupported_rpc");

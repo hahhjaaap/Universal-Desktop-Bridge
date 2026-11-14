@@ -28,11 +28,17 @@ updated.
 
 ## Connection model
 
-Use the attended `udb setup` on Windows and obtain the device-specific HTTPS
-MCP URL from `udb mcp-config`. UDB 0.12 uses Cloudflare; public OpenAI Tunnel
-and public local stdio MCP registration are not supported v0.12 user routes.
-Worker deployment, OAuth, subject/device grants and Windows permissions are
-separate controls and must not be inferred from green local process status.
+Use attended `udb setup` on Windows. `udb mcp-config` intentionally prints the
+legacy per-device HTTPS URL. When account Fleet is enabled and the device is
+linked, `udb setup` instead shows the shared `/v1/account/mcp` URL; add that URL
+once to the existing ChatGPT connection and use `list_devices` plus explicit
+`device_id` for machine selection. The Fleet implementation is the opt-in
+candidate in PR #183, not a production or current-release feature; the published
+v0.12.0 executable and deployed staging Worker have not been updated by this
+source branch. UDB 0.12 uses Cloudflare; public OpenAI Tunnel and public local
+stdio MCP registration are not supported v0.12 user routes. Worker deployment,
+OAuth, subject/device grants and Windows permissions remain separate controls
+and must not be inferred from green local process status.
 
 ## Source cleanup versus released installations
 

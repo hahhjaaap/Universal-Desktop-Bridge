@@ -15,10 +15,11 @@ to pair the intended device if needed, then `udb start`. For an existing
 `cloud-pairing.json`, run `udb setup` in the attended owner terminal to
 inspect the existing pairing. The deprecated `--edit` flag does not provide
 an independent Tunnel editing or recovery flow. Never paste a workers.dev
-URL into an old Tunnel prompt. Use `udb mcp-config`
-to inspect the device-specific HTTPS MCP endpoint. Verify Worker deployment,
-Cloudflare Access OAuth, the subject/device grant, Cloud Agent status and the
-actual MCP catalog independently. See
+URL into an old Tunnel prompt. `udb mcp-config` inspects the per-device HTTPS
+endpoint. If the opt-in account Fleet feature is enabled, use the shared
+`/v1/account/mcp` URL printed by `udb setup` for the single ChatGPT connection.
+Verify Worker deployment, Cloudflare Access OAuth, the subject/device grant,
+Cloud Agent status and the actual MCP catalog independently. See
 [Cloudflare project-read acceptance](cloudflare-project-read-acceptance.md).
 
 Old Tunnel ID and `local_tunnel_ready` instructions apply only to earlier
@@ -53,27 +54,30 @@ ID**, and a Windows **host machine** are different identities. A green local UDB
 two computers does **not** establish that one ChatGPT connection can
 distinguish them.
 
-Use an **explicit device-based** isolation test (no automatic host routing):
+Use an **explicit device-based** isolation test (never automatic host routing):
 
-1. On each computer, run `udb status --json` and `udb doctor --json`
-   locally, and confirm the Cloudflare pairing and intended device.
-2. On paired hosts, check each **distinct MCP device URL**
-   (`/v1/devices/DEVICE_ID/mcp`) and the approved subject/device tool grant.
-   Start only the intended Cloud Agent. Do not expose device credentials in
-   chat. Pair unpaired computers separately rather than reusing a device ID.
-3. In ChatGPT, connect to the **specific** MCP endpoint and refresh its tool
-   catalog; a Connected badge does not prove tool invocation.
-4. Call read-only `bridge_status` and (when separately granted) scoped
-   `list_projects` or `read_file` to distinguish the machines. Verify the
-   actual selected project and read result rather than assuming a unique
-   public machine identifier from `bridge_status`.
-5. If one host responds and another does not, diagnose the failed host's
-   Cloud Agent/Worker/OAuth/grant/plugin path in order. Do not infer a routing
-   collision without evidence.
+1. On each computer, run `udb status --json` and `udb doctor --json` locally;
+   confirm the pairing and intended device ID. Do not copy device credentials.
+2. In legacy per-device mode, each device has its own
+   `/v1/devices/DEVICE_ID/mcp` URL. In Fleet mode, use the one shared
+   `/v1/account/mcp` URL in ChatGPT and call `list_devices` to inspect the
+   authenticated owner's devices. Do not create a separate plugin for each PC.
+3. For every machine operation, pass the exact `device_id` returned by
+   `list_devices`. Display names are hints only. Check `connection` first;
+   an offline or unverified device must produce an explicit error, never
+   automatic failover to another host.
+4. Call read-only `bridge_status` and, when separately granted, scoped
+   `list_projects` or `read_file` with the selected `device_id`. Verify the
+   returned project and content instead of inferring identity from a display
+   name or from the ChatGPT Connected badge.
+5. If one host responds and another does not, diagnose that host's Cloud Agent,
+   Worker, OAuth and local grant separately. Revoke or disable only the
+   intended test device after the owner approves the action.
 
 Do not reuse device credentials between machines or disable endpoint
-authentication to make a test pass. **The current source
-does not guarantee a production one-plugin Multi-PC router.**
+authentication to make a test pass. PR #183 adds an opt-in Fleet candidate,
+but it is not deployed to production or the current staging Worker; verify
+the installed build and deployed flags before assuming one-plugin routing.
 
 A computer that is powered off, asleep or disconnected from the Internet
 cannot serve remote requests. Network access from a second device is a

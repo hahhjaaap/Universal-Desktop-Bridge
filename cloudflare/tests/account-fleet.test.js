@@ -3,6 +3,8 @@ import test from "node:test";
 import worker, { DeviceRelay } from "../src/index.js";
 import { registerEnrolledDevice } from "../src/account-fleet.js";
 import { ENROLLED_CATALOG } from "../src/local-permissions.js";
+import canonicalTools from "../src/fleet-tool-catalog.json" with { type: "json" };
+import { fleetCanonicalCatalog } from "../src/fleet-catalog.js";
 
 const BASE = "https://fleet-test.workers.dev";
 const TEAM = "https://fleet-test.cloudflareaccess.com";
@@ -102,6 +104,34 @@ function fixture() {
   return f;
 }
 
+test("account discovery mirrors the authoritative Windows catalog and preserves exact schemas offline", async () => {
+  const f = fixture();
+  const canonical = fleetCanonicalCatalog();
+  const expected = new Map(canonicalTools.map(tool => [tool.name, tool]));
+  assert.equal(canonical.length, 40);
+  assert.deepEqual(canonical.map(tool => tool.name).sort(), [...expected.keys()].sort());
+  for (const tool of canonical) {
+    assert.deepEqual(tool.inputSchema, expected.get(tool.name).inputSchema, tool.name);
+    assert.ok(Array.isArray(tool.securitySchemes));
+    assert.ok(tool.annotations, "all public tools expose truthful annotations: " + tool.name);
+  }
+  const response = await f.call(OWNER);
+  const listed = (await response.json()).result.tools;
+  assert.equal(listed.length, canonicalTools.length + 1);
+  const byName = new Map(listed.map(tool => [tool.name, tool]));
+  for (const tool of canonicalTools) {
+    const discovered = byName.get(tool.name);
+    assert.ok(discovered, "missing canonical tool " + tool.name);
+    assert.ok(discovered.inputSchema.required.includes("device_id"), tool.name);
+    assert.equal(discovered.inputSchema.properties.device_id.pattern, "^[a-f0-9]{32}$");
+    const schema = structuredClone(discovered.inputSchema);
+    delete schema.properties.device_id;
+    schema.required = schema.required.filter(name => name !== "device_id");
+    if (!Object.hasOwn(tool.inputSchema, "required")) delete schema.required;
+    assert.deepEqual(schema, tool.inputSchema, "device routing must not alter native schema: " + tool.name);
+  }
+});
+
 test("opt-in fleet discovery is a distinct protected resource and unauthenticated calls fail", async () => {
   const f = fixture();
   const metadata = await worker.fetch(new Request(BASE +
@@ -117,6 +147,29 @@ test("opt-in fleet discovery is a distinct protected resource and unauthenticate
   assert.equal((await f.call(OWNER)).status, 404);
   assert.equal((await worker.fetch(new Request(BASE +
     "/.well-known/oauth-protected-resource/v1/account/mcp"), f.env)).status, 404);
+});
+
+test("offline account discovery is complete, stable, and ignores poisoned legacy catalog", async () => {
+  const f = fixture();
+  const before = (await (await f.call(OWNER)).json()).result.tools;
+  assert.ok(before.length >= 35, "offline fleet must expose every canonical public family");
+  assert.ok(before.some(t => t.name === "computer_process"));
+  assert.ok(before.every(t => t.name === "list_devices" ||
+    t.inputSchema.required?.includes("device_id")),
+    "every Windows operation has required device_id");
+  const fleetKey = [...f.objects.keys()].find(k => k.startsWith("__udb_account_fleet_v1__"));
+  assert.ok(fleetKey);
+  f.objects.get(fleetKey).values.set("fleet_catalog", [tool("bridge_status")]);
+  await f.add(deviceA, OWNER, "Legacy", false);
+  f.state.get(deviceA).online = false;
+  assert.deepEqual((await (await f.call(OWNER)).json()).result.tools, before,
+    "an offline machine and a truncated cached catalog cannot change discovery");
+  f.state.get(deviceA).online = true;
+  f.state.get(deviceA).granted = true;
+  await f.add(deviceB, OWNER, "New", true);
+  assert.deepEqual((await (await f.call(OWNER)).json()).result.tools, before);
+  assert.equal(f.invocations.filter(x => x.rpc.method === "tools/list").length, 0,
+    "fleet discovery must never query an online device");
 });
 
 test("two identically named devices share one plugin schema; a third needs no new schema", async () => {

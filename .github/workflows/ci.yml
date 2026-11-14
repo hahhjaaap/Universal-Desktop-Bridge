@@ -35,6 +35,8 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -m pip install ".[office,dev]"
+      - name: Verify generated Cloudflare fleet schemas match Windows catalog
+        run: python tools/export_fleet_catalog.py --check
       - run: python -m ruff check src tools tests
       - run: python -m ruff format --check --diff .
       - run: python tools/audit_repository.py --strict

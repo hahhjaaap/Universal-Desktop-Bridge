@@ -6,7 +6,7 @@
 
 **Tiếng Việt:** UDB kết nối trợ lý AI với máy tính Windows theo quyền do chủ máy cấp. Hỗ trợ thao tác tệp, terminal, ứng dụng, trình duyệt riêng biệt và rà soát hóa đơn Excel. **Không tự cấp quyền, không tự kê khai thuế, không tự sửa dữ liệu kế toán gốc.**
 
-> **UDB 0.12.0 (2026-11-11):** Cloudflare is the remote MCP transport for paired Windows devices, and UDB Live adds terminal and read-only GUI activity views (`udb live`, `udb live --gui`). The public MCP connection no longer supports local stdio or OpenAI Tunnel; pair with `udb setup`, then use `udb mcp-config` for the device-specific HTTPS endpoint. Historical compatibility readers may still exist internally for older installations. Check [GitHub Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases), [release notes](docs/release-notes.md), and your installed `udb --version` separately. Worker deployment, Access/OAuth, device grants, and ChatGPT catalog discovery are still configured and verified separately.
+> **UDB 0.12.0 (2026-11-11):** Cloudflare is the remote MCP transport for paired Windows devices, and UDB Live adds terminal and read-only GUI activity views (`udb live`, `udb live --gui`). The public MCP connection no longer supports local stdio or OpenAI Tunnel; pair with `udb setup`. `udb mcp-config` remains the per-device endpoint for compatibility. When account Fleet is enabled, `udb setup` shows the shared `/v1/account/mcp` URL to add once for all linked devices. Historical compatibility readers may still exist internally for older installations. Check [GitHub Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases), [release notes](docs/release-notes.md), and your installed `udb --version` separately. Worker deployment, Access/OAuth, device grants, and ChatGPT catalog discovery are still configured and verified separately.
 
 **Current source maintenance (2026-11-13):** The `main` source also contains the
 PySide6-Essentials 6.12.0 dependency, Chrome Aura retirement, retired Tunnel
@@ -32,8 +32,9 @@ and [issue #162](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/16
 ## Cloudflare MCP (paired devices)
 
 Cloudflare is UDB's remote connection. The Windows agent opens an outbound
-WebSocket to the existing Worker, and ChatGPT connects to the device's MCP
-URL over HTTPS. The current source uses `udb setup` to orchestrate pairing,
+WebSocket to the existing Worker. ChatGPT connects over HTTPS to a device MCP
+URL in per-device mode, or to the single owner-scoped `/v1/account/mcp` URL
+when account Fleet is enabled. The current source uses `udb setup` to orchestrate pairing,
 Agent startup and the ChatGPT handoff. Browser enrollment needs separately
 approved operator provisioning; source code does not enable the hosted service. Windows still hosts device credentials,
 browser sessions, and owner approval controls. See [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -112,8 +113,7 @@ human decisions. The published installer and deployed relay must be upgraded
 and provisioned separately before this new flow is available. See
 [automatic setup, deployment gates and recovery](docs/automatic-setup.md).
 Use `udb gui` for on-device permission approvals.
-`udb mcp-config` prints the paired HTTPS endpoint for clients that support
-remote MCP. An unpaired profile prints an empty server list.
+`udb mcp-config` prints the paired **per-device** HTTPS endpoint for compatibility and diagnostics. In Fleet mode, use the shared account URL printed by `udb setup` instead of adding a separate plugin for each device. An unpaired profile prints an empty server list.
 
 ## Windows x64: install and start
 
@@ -142,8 +142,10 @@ udb live
 udb stop
 ```
 
-For another Windows device, enroll it through Cloudflare and use that device's
-MCP URL and grant. Troubleshoot each layer using
+For another Windows device, run `udb setup` on that machine and approve its
+identity. When account Fleet is enabled and linked, reuse the same account MCP
+URL in the existing plugin; do not add another per-device plugin. Without Fleet,
+use that device's own MCP URL and grants. Troubleshoot each layer using
 [remote-device diagnostics](docs/remote-device-troubleshooting.md).
 
 ### When ChatGPT cannot call UDB tools

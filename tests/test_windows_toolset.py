@@ -82,7 +82,7 @@ def test_discovery_consolidates_windows_interfaces_without_understating_launch_e
 
     data = catalog()
     tools = {row["name"]: row for row in data["tools"]}
-    assert data["tool_count"] == 59 and data["backend_count"] == 67
+    assert data["tool_count"] == 40 and data["backend_count"] == 67
     assert "computer_execute" not in tools and "computer_utilities" not in tools
     assert tools["computer_process"]["annotations"]["destructiveHint"] is True
     assert tools["computer_process"]["annotations"]["openWorldHint"] is True

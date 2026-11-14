@@ -58,13 +58,15 @@ from test_uia_provider import Client, object_data
 client=Client()
 try:
     tools=client.rpc("tools/list", {})["tools"]
-    assert len(tools)==59
+    assert len(tools)==40
     assert not {"enable_computer_access", "grant_computer_access"}.intersection(t["name"] for t in tools)
     status=object_data(client.rpc("tools/call", {"name":"computer_status", "arguments":{}}))
     assert status["enabled"] is False
     for name, arguments in (
         ("spreadsheet", {"action":"write", "path":"must-not-exist.xlsx", "sheets":{"Data":[["fixture"]]}}),
         ("terminal_start", {"program":sys.executable, "arguments":["-c","print('must not execute')"]}),
+        ("terminal", {"action":"start", "params":{"program":sys.executable, "arguments":["-c","print('must not execute')"]}}),
+        ("project_files", {"action":"read", "params":{"path":"README.md"}}),
     ):
         row=client.rpc("tools/call", {"name":name, "arguments":arguments}, allow_error=True)
         assert "error" in row or row.get("isError") is True, row

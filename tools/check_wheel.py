@@ -29,6 +29,7 @@ def main():
             "udb/computer_uia.ps1",
             "udb/desktop_guest.py",
             "udb/plugin.template.json",
+            "udb/tool_families.json",
             "udb_companion.py",
             "udb_extensions.py",
             "udb_features.py",
@@ -93,7 +94,19 @@ def main():
             timeout=45,
         )
         data = json.loads(result.stdout)
-        if data["version"] != info["version"] or data["tool_count"] != 59:
+        names = {tool["name"] for tool in data["tools"]}
+        if (
+            data["version"] != info["version"]
+            or data["tool_count"] != len(names)
+            or not {
+                "terminal",
+                "sandbox_desktop",
+                "search",
+                "system_process",
+                "project_files",
+            }
+            <= names
+        ):
             raise RuntimeError("Installed wheel has wrong catalog/version")
         print(
             json.dumps(

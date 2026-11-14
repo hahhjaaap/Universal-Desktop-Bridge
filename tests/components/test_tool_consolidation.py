@@ -145,7 +145,17 @@ class Consolidation(unittest.TestCase):
     def test_only_duplicate_interfaces_leave_discovery(self):
         original = {t["name"] for t in CORE + TOOLS}
         public = {t["name"] for t in self.catalog}
-        self.assertEqual(public, (original - HIDDEN_ALIASES) | {"file_transfer"})
+        self.assertEqual(
+            public,
+            (original - HIDDEN_ALIASES)
+            | {
+                "file_transfer",
+                "terminal",
+                "search",
+                "system_process",
+                "project_files",
+            },
+        )
         self.assertEqual(len(self.proxy.tool_routes), len(original))
         for name in (
             "propose_sandbox_job",
@@ -155,8 +165,10 @@ class Consolidation(unittest.TestCase):
             "file_operation",
             "file_read_chunk",
             "file_upload",
-            "search_start",
-            "system_process_terminate",
+            "search",
+            "system_process",
+            "terminal",
+            "project_files",
         ):
             self.assertIn(name, public)
 
@@ -241,6 +253,7 @@ class Consolidation(unittest.TestCase):
                 name="terminal_send", arguments=dict(session_id="owned", text="hello\n")
             ),
         )
+
         self.call(
             "terminal_read",
             session_id="owned",
@@ -255,6 +268,35 @@ class Consolidation(unittest.TestCase):
                 arguments=dict(session_id="owned", offset=12, timeout_ms=1000),
             ),
         )
+
+    def test_family_routes_once_before_original_permission_and_resource_checks(self):
+        for name, action, args, target in (
+            ("terminal", "start", {"program": "fixture.exe"}, "terminal_start"),
+            ("project_files", "read", {"path": "a.txt"}, "file_read"),
+            ("search", "stop", {"job_id": "owned"}, "search_stop"),
+            (
+                "system_process",
+                "stop",
+                {"observation_id": "observed"},
+                "system_process_terminate",
+            ),
+        ):
+            before = len(self.companion.calls)
+            self.call(name, action=action, params=args)
+            self.assertEqual(len(self.companion.calls), before + 1)
+            self.assertEqual(
+                self.companion.calls[-1], dict(name=target, arguments=args)
+            )
+        self.primary.enabled = False
+        for name, action in (
+            ("terminal", "list"),
+            ("project_files", "list"),
+            ("search", "read"),
+            ("system_process", "list"),
+        ):
+            with self.assertRaises(RuntimeError):
+                self.call(name, action=action, params={})
+        self.assertEqual(len(self.companion.calls), 4)
 
     def test_ambiguous_calls_never_reach_backend(self):
         bad = [

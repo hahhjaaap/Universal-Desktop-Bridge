@@ -12,6 +12,8 @@ Chrome Aura removal (PR #163), Windows release gating on a protected `main`
 (PR #164), and the unreachable OpenAI Tunnel onboarding removal / Windows Qt
 CI teardown fix (PR #165), desktop capture/UIA and parallel read fixes
 (PR #168), and concise CLI help with installer compatibility (PR #167).
+The compact tool-family source is described in [tool families](tool-families.md);
+its installed/deployed status must be verified separately.
 Each source merge was separately validated; none
 is evidence that the published v0.12.0 ZIP or deployed Cloudflare Worker was
 updated.

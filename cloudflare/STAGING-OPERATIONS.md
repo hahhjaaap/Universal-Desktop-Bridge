@@ -43,11 +43,12 @@ reviewed command includes `--keep-vars --strict` to protect remote settings.
 
 ## Security boundaries
 
-The local source catalog currently enumerates 59 public names, as verified
+The local source catalog currently enumerates 40 public names (67 native handlers retained), as verified
 by source registry tests; check `udb tools` for the installed build. A
 Cloudflare connection normally discovers **only the explicitly granted
 subset**, never the full catalog by default. Catalog visibility is not
-authorization.
+authorization. New [tool families](../docs/tool-families.md) retain the original
+per-operation grant names; no family grants a sibling action.
 Cloudflare Access and per-device grants are required; Windows permissions,
 local approvals, and scoped projects remain independent enforcement layers.
 In particular, enabling `computer` access exposes current-user file,

@@ -5,6 +5,12 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from .tool_families import (
+    FAMILY_MEMBERS,
+    LEGACY_ALIASES,
+    consolidate_families,
+    resolve_family,
+)
 from .windows_actions import DESKTOP_ACTIONS, UTILITY_ACTIONS
 
 # Only same-backend interfaces are combined. All legacy names remain callable.
@@ -18,19 +24,7 @@ GROUPS = (
     ("computer_desktop", "computer_utilities"),
     ("computer_process", "computer_execute"),
 )
-HIDDEN_ALIASES = frozenset(
-    {
-        "read_files",
-        "propose_text_edit",
-        "terminal_send",
-        "terminal_wait",
-        "file_search_context",
-        "file_copy",
-        "file_move",
-        "computer_utilities",
-        "computer_execute",
-    }
-)
+HIDDEN_ALIASES = FAMILY_MEMBERS | LEGACY_ALIASES
 
 
 def public_catalog(
@@ -144,12 +138,13 @@ def public_catalog(
         if first == "file_copy":
             catalog.pop(first)
             catalog["file_transfer"] = primary
-    return list(catalog.values())
+    return consolidate_families(list(catalog.values()), routes)
 
 
 def resolve_call(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     """Translate once; never execute, retry, broaden scope, or mutate caller args."""
     a = copy.deepcopy(arguments)
+    name, a = resolve_family(name, a)
     if name == "computer_desktop" and a.get("action") in UTILITY_ACTIONS:
         allowed = {"action", "text", "title", "name", "expected_version"}
         if set(a) - allowed:

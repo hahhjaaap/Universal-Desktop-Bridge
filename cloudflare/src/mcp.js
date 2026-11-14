@@ -6,6 +6,7 @@ import { accessConfig, authorizeAccess } from "./access.js";
 import { isReadTool } from "./read-tools.js";
 import { companionAnnotations, isCompanionTool } from "./companion-tools.js";
 import { edgeCatalog, edgeCatalogSupported } from "./edge-discovery.js";
+import { FAMILIES, authorizedFamilyCatalog, publicToolNames, resolveFamily } from "./tool-families.js";
 export { authorizeAccess } from "./access.js";
 
 const supported = new Set(["2025-03-26", "2025-06-18", "2025-11-25"]);
@@ -77,7 +78,7 @@ function toolDescriptor(tool) {
 }
 
 function authorizedToolCatalog(tools, user) {
-  return tools.filter((tool) => tool && user.allowTools.includes(tool.name))
+  return authorizedFamilyCatalog(tools, user.allowTools)
     .map(tool => fixtureToolDescriptor(toolDescriptor(tool), user));
 }
 
@@ -104,12 +105,11 @@ const fixtureReadDenied = () => json({
 }, 403);
 
 function catalogGrantCounts(user) {
-  const aliases = new Set([
-    "read_files", "propose_text_edit", "computer_utilities", "computer_execute",
-  ]);
-  const tools = [...new Set(user.allowTools)].filter((name) => !aliases.has(name));
+  const tools = publicToolNames(user.allowTools);
   const read = tools.filter(isReadTool).length;
-  const companion = tools.filter(isCompanionTool).length;
+  const companion = tools.filter(name => isCompanionTool(name) ||
+    FAMILIES.some(group => group.name === name &&
+      Object.values(group.actions).every(isCompanionTool))).length;
   return {
     read,
     owner: tools.length - read - companion,
@@ -359,8 +359,14 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   if (rpc.method === "ping") return json({ jsonrpc: "2.0", id: rpc.id, result: {} });
   if (!["tools/list", "tools/call"].includes(rpc.method) || !validRpc(rpc))
     return error(400, "unsupported_rpc");
-  if (rpc.method === "tools/call" && !user.allowTools.includes(rpc.params.name))
-    return error(403, "device_tool_not_authorized");
+  if (rpc.method === "tools/call") {
+    let resolved;
+    try { resolved = resolveFamily(rpc.params.name, rpc.params.arguments); }
+    catch { return error(400, "invalid_family_arguments"); }
+    if (!user.allowTools.includes(resolved.name))
+      return error(403, "device_tool_not_authorized");
+    rpc = { ...rpc, params: { ...rpc.params, ...resolved } };
+  }
   if (user.stagingFixtureProject && rpc.method === "tools/call" &&
       isReadTool(rpc.params.name)) {
     const { name, arguments: args } = rpc.params;

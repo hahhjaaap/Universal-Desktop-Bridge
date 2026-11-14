@@ -119,6 +119,29 @@ test("opt-in fleet discovery is a distinct protected resource and unauthenticate
     "/.well-known/oauth-protected-resource/v1/account/mcp"), f.env)).status, 404);
 });
 
+test("offline account discovery is complete, stable, and ignores poisoned legacy catalog", async () => {
+  const f = fixture();
+  const before = (await (await f.call(OWNER)).json()).result.tools;
+  assert.ok(before.length >= 35, "offline fleet must expose every canonical public family");
+  assert.ok(before.some(t => t.name === "computer_process"));
+  assert.ok(before.every(t => t.name === "list_devices" ||
+    t.inputSchema.required?.includes("device_id")),
+    "every Windows operation has required device_id");
+  const fleetKey = [...f.objects.keys()].find(k => k.startsWith("__udb_account_fleet_v1__"));
+  assert.ok(fleetKey);
+  f.objects.get(fleetKey).values.set("fleet_catalog", [tool("bridge_status")]);
+  await f.add(deviceA, OWNER, "Legacy", false);
+  f.state.get(deviceA).online = false;
+  assert.deepEqual((await (await f.call(OWNER)).json()).result.tools, before,
+    "an offline machine and a truncated cached catalog cannot change discovery");
+  f.state.get(deviceA).online = true;
+  f.state.get(deviceA).granted = true;
+  await f.add(deviceB, OWNER, "New", true);
+  assert.deepEqual((await (await f.call(OWNER)).json()).result.tools, before);
+  assert.equal(f.invocations.filter(x => x.rpc.method === "tools/list").length, 0,
+    "fleet discovery must never query an online device");
+});
+
 test("two identically named devices share one plugin schema; a third needs no new schema", async () => {
   const f = fixture();
   await f.add(deviceA, OWNER, "Dell", true);

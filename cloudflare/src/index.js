@@ -7,7 +7,7 @@ import { handleMcp, protectedResource } from "./mcp.js";
 import { routeBrowserEnrollment, handleBrowserEnrollment } from "./browser-enrollment.js";
 import { routeDeviceSetup, handleDeviceSetup } from "./setup-service.js";
 import { isParallelReadTool } from "./read-tools.js";
-import { fleetEnabled, fleetProtectedResource, handleAccountMcp, handleFleetRegistry } from "./account-fleet.js";
+import { fleetEnabled, fleetProtectedResource, handleAccountMcp, handleFleetRegistry, routeFleetLinkStatus } from "./account-fleet.js";
 
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store",
@@ -48,6 +48,8 @@ export default {
       return fleetProtectedResource(request, env);
     if (url.pathname === "/v1/account/mcp")
       return handleAccountMcp(request, env, ctx?.access);
+    const linkStatus = await routeFleetLinkStatus(request, env);
+    if (linkStatus) return linkStatus;
     const browserEnrollment = await routeBrowserEnrollment(request, env, forward, fetch, ctx?.access);
     if (browserEnrollment) return browserEnrollment;
     const setup = await routeDeviceSetup(request, env, forward);
@@ -150,6 +152,45 @@ export class DeviceRelay {
   async fetch(request) {
     const path = new URL(request.url).pathname;
     if (path.startsWith("/fleet/")) {
+      if (path === "/fleet/link-token" && request.method === "POST") {
+        const token = bearer(request);
+        const hash = await this.ctx.storage.get("device_token_sha256");
+        if (!token || !hash || await this.ctx.storage.get("enrollment_revoked") ||
+            !fixedEqual(await digest(token), hash))
+          return failure(403, "device_auth_failed");
+        return json({ valid: true });
+      }
+      if (path === "/fleet/self" && request.method === "GET") {
+        const token = bearer(request);
+        const hash = await this.ctx.storage.get("device_token_sha256");
+        if (!token || !hash || await this.ctx.storage.get("enrollment_revoked") ||
+            !fixedEqual(await digest(token), hash))
+          return failure(403, "device_auth_failed");
+        return json({ owner: await this.ctx.storage.get("enrollment_owner") || null,
+          request_id: await this.ctx.storage.get("enrollment_request") || null });
+      }
+      if (path === "/fleet/link-owner" && request.method === "POST") {
+        const b = await readJson(request);
+        if (!/^[a-f0-9]{32}$/.test(b.request_id || "") ||
+            typeof b.owner !== "string" || b.owner.length > 500 ||
+            !/^https:\/\/[^\s#]+#[0-9a-f-]{36}$/.test(b.owner) ||
+            !HASH.test(b.device_token_sha256 || ""))
+          return failure(400, "invalid_link");
+        return this.ctx.storage.transaction(async txn => {
+          const token = await txn.get("device_token_sha256");
+          const owner = await txn.get("enrollment_owner");
+          const original = await txn.get("enrollment_request");
+          if (!token || await txn.get("enrollment_revoked") ||
+              !fixedEqual(token, b.device_token_sha256) ||
+              (owner && owner !== b.owner))
+            return failure(409, "link_denied");
+          const requestId = owner && original ? original : b.request_id;
+          if (!owner || !original) await txn.put({
+            enrollment_owner: b.owner, enrollment_request: requestId,
+          });
+          return json({ linked: true, request_id: requestId });
+        });
+      }
       if (path === "/fleet/verify" && request.method === "POST") {
         const body = await readJson(request);
         if (typeof body.owner !== "string" || body.owner.length > 500 ||

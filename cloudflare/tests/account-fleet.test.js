@@ -127,7 +127,7 @@ test("account discovery mirrors the authoritative Windows catalog and preserves 
     const schema = structuredClone(discovered.inputSchema);
     delete schema.properties.device_id;
     schema.required = schema.required.filter(name => name !== "device_id");
-    if (!schema.required.length) delete schema.required;
+    if (!Object.hasOwn(tool.inputSchema, "required")) delete schema.required;
     assert.deepEqual(schema, tool.inputSchema, "device routing must not alter native schema: " + tool.name);
   }
 });

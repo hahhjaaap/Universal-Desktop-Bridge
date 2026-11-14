@@ -47,12 +47,17 @@ def request_admin(method, path, key, *, body=None, opener=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="UDB relay owner approval (private)")
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--list", action="store_true", help="List pending device requests")
+    group.add_argument(
+        "--list", action="store_true", help="List pending device requests"
+    )
     group.add_argument("--approve", metavar="DEVICE_ID", help="Approve one device")
     group.add_argument("--reject", metavar="DEVICE_ID", help="Deny a pending request")
     args = parser.parse_args(argv)
     if not sys.stdin.isatty():
-        print("Use an attended administrator terminal, not an unattended script.", file=sys.stderr)
+        print(
+            "Use an attended administrator terminal, not an unattended script.",
+            file=sys.stderr,
+        )
         return 2
     device_id = args.approve or args.reject
     if device_id and not DEVICE_ID.fullmatch(device_id):
@@ -70,22 +75,32 @@ def main(argv=None):
                 return 2
             for item in response.get("requests", []):
                 print(
-                    item["device_id"] + "  " + item["device_name"] +
-                    "  [" + item["state"] + "]"
+                    item["device_id"]
+                    + "  "
+                    + item["device_name"]
+                    + "  ["
+                    + item["state"]
+                    + "]"
                 )
             return 0
         if args.approve:
-            print("Compare this device ID and the 10-character code on the NEW Windows machine.")
+            print(
+                "Compare this device ID and the 10-character code on the NEW Windows machine."
+            )
             code = input("Verification code shown on that machine: ").strip().upper()
             if not CODE.fullmatch(code):
                 print("Invalid verification code.", file=sys.stderr)
                 return 2
             status, result = request_admin(
-                "POST", "/v1/admin/enrollments/" + device_id + "/approve",
-                key, body={"code": code},
+                "POST",
+                "/v1/admin/enrollments/" + device_id + "/approve",
+                key,
+                body={"code": code},
             )
             if status == 200 and result == {"approved": True, "device_id": device_id}:
-                print("Approved. Windows will finish securely without an invitation code.")
+                print(
+                    "Approved. Windows will finish securely without an invitation code."
+                )
                 return 0
             return 2
         confirmation = input("Type REJECT to deny this pending device: ").strip()
@@ -93,7 +108,9 @@ def main(argv=None):
             print("Canceled.")
             return 2
         status, data = request_admin(
-            "DELETE", "/v1/admin/enrollments/" + device_id, key,
+            "DELETE",
+            "/v1/admin/enrollments/" + device_id,
+            key,
         )
         if status == 200 and data == {"rejected": True}:
             print("Request rejected.")
@@ -106,7 +123,10 @@ def main(argv=None):
         )
         return 2
     except (OSError, ValueError, KeyError, TypeError):
-        print("Relay response unavailable or invalid; verify before retry.", file=sys.stderr)
+        print(
+            "Relay response unavailable or invalid; verify before retry.",
+            file=sys.stderr,
+        )
         return 2
 
 

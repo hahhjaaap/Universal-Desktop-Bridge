@@ -276,7 +276,11 @@ def run(
             print(json.dumps(report, indent=2) if json_output else render(report))
             return (
                 0
-                if report.get("credential_valid") and report.get("cloud_agent_online")
+                if (
+                    report.get("credential_valid")
+                    and report.get("cloud_agent_online")
+                    and report.get("authenticated_mcp_verified")
+                )
                 else 2
             )
         if not attended_console():

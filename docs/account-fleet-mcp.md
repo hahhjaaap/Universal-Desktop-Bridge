@@ -84,10 +84,13 @@ MCP clients should be instructed to use the prior endpoint if rolled back.
 5. In ChatGPT Plugins, add **one** custom MCP server using the account URL, then
    explicitly authorize OAuth. This requires the account/workspace to support custom
    MCP servers. Later machines do not require another plugin or device endpoint.
-6. Run `list_devices` and pass the stable returned `device_id` on each machine
-   operation. When display names are ambiguous, identify the correct machine first.
-   Local computer, terminal, files, desktop and background browser permissions
-   still must be approved on the actual target Windows device.
+6. After OAuth, call `list_devices`, select the intended device, then call
+   `bridge_status` with that exact `device_id`. This authenticated MCP read is
+   the setup verification signal; `tools/list` alone is not sufficient.
+7. Pass the stable returned `device_id` on every machine operation. When display
+   names are ambiguous, identify the correct machine first. Local computer,
+   terminal, files, desktop and background browser permissions still must be
+   approved on the actual target Windows device.
 
 `udb setup --status` and other diagnostic-only flags do not initiate approval.
 A browser approval never grants local Windows computer access, and an MCP tool cannot

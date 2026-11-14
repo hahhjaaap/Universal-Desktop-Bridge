@@ -270,7 +270,7 @@ def test_invalid_or_unpaired_device_never_enables_autostart(
         lambda home: (_ for _ in ()).throw(ValueError("invalid endpoint")),
     )
     assert connect_chatgpt.run(settings(tmp_path), autostart=True) == 2
-    assert "invalid pairing" in capsys.readouterr().out.lower()
+    assert "pairing is invalid" in capsys.readouterr().out.lower()
 
 
 def test_existing_pairing_autostart_cannot_enable_terminal(

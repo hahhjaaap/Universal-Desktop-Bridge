@@ -29,8 +29,10 @@ URL in PowerShell. Existing advanced pairing/connect commands remain supported.
    If the server already exists, use it to call `bridge_status` or `list_devices`;
    do not add a duplicate. Account/workspace availability is controlled by ChatGPT.
 5. UDB waits for a successful authenticated MCP read from the actual agent.
-   Static tool discovery, an open browser, Agent online and device-token
-   diagnostics are insufficient evidence.
+   After OAuth, use the connected ChatGPT server to invoke `bridge_status`.
+   In Fleet mode, call `list_devices` first and then `bridge_status` with the
+   selected `device_id`. Static tool discovery, an open browser, Agent online
+   and device-token diagnostics are insufficient evidence.
 6. On an opted-in Fleet staging relay, the account MCP endpoint publishes the
    versioned 40-tool catalog even when every Windows device is offline.
    `list_devices` remains available; a call targeting an offline device returns

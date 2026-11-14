@@ -176,6 +176,25 @@ def test_readonly_flags_never_create_files_browse_spawn_or_write_credentials(
     assert not selected.home.exists()
 
 
+@pytest.mark.parametrize(("verified", "expected"), [(False, 2), (True, 0)])
+def test_readonly_setup_requires_authenticated_mcp_verification(
+    selected, monkeypatch, capsys, verified, expected
+):
+    report = {
+        "credential_valid": True,
+        "cloud_agent_online": True,
+        "authenticated_mcp_verified": verified,
+        "chatgpt_connected": False,
+    }
+    monkeypatch.setattr(setup, "inspect", lambda *_: report)
+
+    assert setup.run(selected, readonly=True, json_output=True) == expected
+    output = json.loads(capsys.readouterr().out)
+    assert output["authenticated_mcp_verified"] is verified
+    assert output["chatgpt_connected"] is False
+    assert not selected.home.exists()
+
+
 def test_existing_autostart_is_never_rewritten(selected, monkeypatch):
     monkeypatch.setattr(
         setup.autostart,

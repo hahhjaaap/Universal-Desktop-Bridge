@@ -23,7 +23,9 @@ function page(body, status = 200) {
     "<h1>UDB device approval</h1>" + body + "</html>", { status, headers: {
     "content-type": "text/html; charset=utf-8", "cache-control": "no-store",
     "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
-    "referrer-policy": "no-referrer", "x-content-type-options": "nosniff",
+    // no-referrer makes native form POSTs send Origin: null. Keep same-origin
+    // submissions verifiable without leaking enrollment URLs across origins.
+    "referrer-policy": "same-origin", "x-content-type-options": "nosniff",
     "x-frame-options": "DENY" } });
 }
 async function form(request) {

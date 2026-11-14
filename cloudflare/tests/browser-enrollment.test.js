@@ -281,9 +281,12 @@ test("client headers cannot inject runtime approval identity", async () => {
 test("approval is CSRF protected, bound to device and owner, single-use and status-only", async () => {
   const f = fixture(), p = await begin(f), other = await begin(f);
   const r = await review(f, p);
-  assert.equal(r.response.headers.get("referrer-policy"), "no-referrer");
+  assert.equal(r.response.headers.get("referrer-policy"), "same-origin");
   assert.match(r.response.headers.get("content-security-policy"), /frame-ancestors 'none'/);
   assert.equal((await decide(f, p, r.csrf, "approve", null, { Origin: "https://evil.invalid" })).status, 403);
+  assert.equal((await decide(f, p, r.csrf, "approve", null, { Origin: "null", "Sec-Fetch-Site": "same-origin" })).status, 403);
+  assert.equal((await decide(f, p, r.csrf, "approve", null, { "Sec-Fetch-Site": "cross-site" })).status, 403);
+  assert.equal((await decide(f, p, r.csrf, "approve", null, { "Sec-Fetch-Site": "same-site" })).status, 403);
   assert.equal((await decide(f, other, r.csrf)).status, 403);
   assert.equal((await decide(f, p, "0".repeat(64))).status, 403);
   assert.equal((await decide(f, p, r.csrf)).status, 200);

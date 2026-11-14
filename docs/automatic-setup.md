@@ -113,8 +113,12 @@ Provision the following in an isolated staging environment before rollout:
 Approval requires either a signed Access JWT with the pinned issuer/audience or
 Cloudflare's trusted `ctx.access` with the approval application's exact audience
 and account-scoped `user_uuid`. Both bind to the allowlisted immutable subject;
-email alone never grants approval. Conflicting runtime identity or an invalid
-assertion fails closed. Device fingerprint, short-lived owner/device-bound
+email alone never grants approval. When native Access identity is available,
+it is authoritative and request identity headers are ignored. This path needs
+no duplicate signing-key fetch. A wrong application, missing or disallowed
+runtime UUID fails closed, even with an otherwise valid assertion. Without
+native identity, a signed assertion must pass every verification step.
+Device fingerprint, short-lived owner/device-bound
 one-use CSRF and same-origin POST remain required. No administrator secret goes
 to the browser or PC.
 The handoff page uses a script nonce, no external script and a user gesture to

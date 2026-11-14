@@ -48,14 +48,17 @@ async function getKeys(url, fetchImpl) {
   if (cachedJwks.url === url && Date.now() < cachedJwks.until)
     return cachedJwks.keys;
   let response;
+  let stage = "fetch";
   try {
     response = await fetchImpl(url, { redirect: "error", signal: AbortSignal.timeout(3000),
       headers: { accept: "application/json" } });
+    stage = "response";
     if (response.status !== 200 ||
         !response.headers.get("content-type")?.includes("application/json"))
       throw new Error();
     const reader = response.body?.getReader();
     if (!reader) throw new Error();
+    stage = "body";
     const chunks = [];
     let size = 0;
     try {
@@ -70,11 +73,18 @@ async function getKeys(url, fetchImpl) {
     const bytes = new Uint8Array(size);
     let offset = 0;
     for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+    stage = "json";
     const parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     if (!Array.isArray(parsed?.keys) || parsed.keys.length > 16) throw new Error();
     cachedJwks = { url, until: Date.now() + 30000, keys: parsed.keys };
     return parsed.keys;
-  } catch { throw new AuthError("access_keys_unavailable"); }
+  } catch (error) {
+    console.warn(JSON.stringify({ event: "udb_access_keys_unavailable", stage,
+      response_status: response?.status ?? null,
+      response_json: Boolean(response?.headers.get("content-type")?.includes("application/json")),
+      timed_out: error?.name === "TimeoutError" || error?.name === "AbortError" }));
+    throw new AuthError("access_keys_unavailable");
+  }
 }
 
 function emailSubject(subject) {

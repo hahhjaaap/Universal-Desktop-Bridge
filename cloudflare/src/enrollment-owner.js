@@ -27,14 +27,17 @@ export async function authorizeEnrollmentOwner(request, env, fetchImpl = fetch, 
   // Only the Worker invocation context supplies this trusted object. Never
   // construct it from headers, cookies or request JSON. MCP uses a different app.
   if (access && access.aud !== config.aud) throw new AuthError("owner_runtime_audience");
-  let observed = null;
+  let identity;
   if (typeof access?.getIdentity === "function") {
+    // Cloudflare authenticates this context before invoking the Worker. Use its
+    // account-scoped identity as authority; request headers never select a user.
+    let observed;
     try { observed = await access.getIdentity(); }
     catch { throw new AuthError("owner_runtime_unavailable"); }
-  }
-  let identity;
-  if (request.headers.has("Cf-Access-Jwt-Assertion")) {
-    // A present but invalid assertion must not fall back to runtime identity.
+    identity = { sub: observed?.user_uuid };
+  } else {
+    // No native browser identity (including aud-only WARP): verify the signed
+    // assertion independently. An invalid assertion never grants access here.
     try {
       identity = await verifiedAccessIdentity(request, {
         ...env, UDB_ACCESS_AUD: config.aud,
@@ -45,14 +48,6 @@ export async function authorizeEnrollmentOwner(request, env, fetchImpl = fetch, 
         .includes(error?.message) ? error.message.slice(7) : "assertion_invalid";
       throw new AuthError("owner_" + reason);
     }
-    if (observed && ((typeof observed.email === "string" && observed.email !== identity.email) ||
-        (typeof observed.user_uuid === "string" &&
-          observed.user_uuid.toLowerCase() !== identity.sub?.toLowerCase())))
-      throw new AuthError("owner_identity_conflict");
-  } else {
-    // Workers can authenticate browser requests without forwarding an assertion.
-    // The account-scoped UUID, not email or the global identity id, binds ownership.
-    identity = { sub: observed?.user_uuid };
   }
   const subject = stableAccessSubject(identity, config.team);
   if (!subject) throw new AuthError("owner_identity_missing");

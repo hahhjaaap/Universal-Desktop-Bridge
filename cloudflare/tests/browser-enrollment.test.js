@@ -225,19 +225,32 @@ test("runtime approval requires exact application and account UUID, never email 
   assert.equal(f.objects.has(p.id), false);
 });
 
-test("invalid assertion or conflicting runtime identity cannot use the other authentication path", async () => {
+test("trusted runtime ownership cannot be overridden by an assertion for an allowed owner", async () => {
   const f = fixture(), p = await begin(f);
   for (const [assertion, access] of [
-    ["", runtimeOwner()], ["forged", runtimeOwner()],
-    [await jwt(APP, OWNER, { exp: 1 }), runtimeOwner()],
-    [await jwt(MCP), runtimeOwner()], [await jwt(APP, OTHER), runtimeOwner()],
     [await jwt(), runtimeOwner(OWNER, MCP)], [await jwt(), runtimeOwner(OTHER)],
-    [await jwt(), { aud: APP, getIdentity: async () => ({ user_uuid: OWNER, email: "other@example.test" }) }],
+    [await jwt(), { aud: APP, getIdentity: async () => ({ email: "synthetic-owner@example.test" }) }],
+    [await jwt(), { aud: APP, getIdentity: async () => { throw new Error("unavailable"); } }],
+    ["forged", null], [await jwt(APP, OWNER, { exp: 1 }), null], [await jwt(MCP), null],
   ]) {
     assert.equal((await f.route(p.path + "/approval?code=" + hash(p.proof).slice(0, 10).toUpperCase(),
       "GET", undefined, { "Cf-Access-Jwt-Assertion": assertion }, access)).status, 403);
   }
   assert.equal(f.objects.has(p.id), false);
+});
+
+test("native Access owner identity needs no second JWKS request and ignores client identity headers", async () => {
+  const f = fixture(), p = await begin(f);
+  for (const assertion of ["forged-client-header", await jwt(APP, OTHER), await jwt(MCP)]) {
+    const request = new Request(ROOT + p.path + "/approval?code=" + hash(p.proof).slice(0, 10).toUpperCase(),
+      { headers: { "Cf-Access-Jwt-Assertion": assertion } });
+    let fetched = false;
+    const response = await routeBrowserEnrollment(request, f.env, (stub, req) => stub.fetch(req),
+      async () => { fetched = true; throw new Error("JWKS unavailable"); }, runtimeOwner());
+    assert.equal(response.status, 200);
+    assert.equal(fetched, false);
+    assert.equal(f.objects.has(p.id), false);
+  }
 });
 
 test("client headers cannot inject runtime approval identity", async () => {

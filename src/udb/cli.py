@@ -115,6 +115,7 @@ def add_settings(
 # A command missing from this table is intentionally *not* advertised in -h.
 SIMPLE_COMMAND_HELP = {
     "setup": "Pair this Windows device with Cloudflare",
+    "connect": "Open ChatGPT authorization for an enrolled UDB device",
     "start": "Start UDB (also the default: udb)",
     "stop": "Stop the UDB headless agent",
     "gui": "Open the UDB Manager",
@@ -128,6 +129,7 @@ SIMPLE_COMMAND_HELP = {
 
 SIMPLE_COMMAND_HELP_VI = {
     "setup": "Ghép nối máy Windows với Cloudflare",
+    "connect": "Kết nối UDB riêng tư với ChatGPT",
     "start": "Khởi động UDB (cũng có thể chỉ gõ udb)",
     "stop": "Dừng UDB",
     "gui": "Mở trình quản lý UDB",
@@ -142,6 +144,7 @@ ADVANCED_COMMAND_HELP = """Advanced UDB commands (kept for compatibility)
 
 Connection and recovery:
   udb mcp-config         Show the paired HTTPS MCP endpoint
+  udb connect            Open ChatGPT for an owner-enrolled device
   udb reconnect          Reconnect the existing Cloud Agent
   udb cloud-pair         Attended device pairing (alternative to setup)
   udb cloud-agent        Run the Cloud Agent directly
@@ -269,6 +272,7 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         "start",
         "quickstart",
         "setup",
+        "connect",
         "gui",
         "live",
         "runtime",
@@ -301,6 +305,27 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         else:
             command = subcommands.add_parser(name)
         add_settings(command, suppress=True)
+        if name == "connect":
+            command.add_argument(
+                "--setup",
+                action="store_true",
+                help="One-time private device pairing in a local Windows console",
+            )
+            command.add_argument(
+                "--autostart",
+                action="store_true",
+                help="With --setup, opt in to Cloud Agent startup at Windows logon",
+            )
+            command.add_argument(
+                "--no-browser",
+                action="store_true",
+                help="Inspect pairing without launching ChatGPT",
+            )
+            command.add_argument(
+                "--json",
+                action="store_true",
+                default=argparse.SUPPRESS,
+            )
         if name == "help":
             command.add_argument(
                 "topic", nargs="?", choices=("advanced", "vi", *command_names)
@@ -716,6 +741,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         if action == "setup":
             return _run_setup(args, settings)
+        if action == "connect":
+            if args.access or args.offline or args.online:
+                raise ValueError(
+                    "Connect does not change Windows access or startup mode"
+                )
+            from .connect_chatgpt import run as connect_chatgpt
+
+            return connect_chatgpt(
+                settings,
+                as_json=args.json,
+                open_browser=not args.no_browser,
+                setup=args.setup,
+                autostart=args.autostart,
+            )
         if action == "quickstart":
             if args.access or args.offline or args.online:
                 raise ValueError(

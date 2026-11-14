@@ -54,6 +54,12 @@ tools described in [the project-read acceptance runbook](cloudflare-project-read
 }
 ```
 
+This email-based `UDB_DEVICE_GRANTS` example is for the legacy per-device
+resource. Fleet account membership uses the immutable Cloudflare team subject
+and owner-bound device registry described in
+[account Fleet MCP](account-fleet-mcp.md); do not infer account membership from
+an email grant or caller-supplied device ID.
+
 Use the actual device ID and Access sign-in identity only in private local
 configuration. Never commit secrets, personal identity grants or access tokens.
 

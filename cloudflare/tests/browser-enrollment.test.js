@@ -136,6 +136,7 @@ test("browser enrollment is opt-in and requires separate pinned owner applicatio
   for (const mutate of [
     env => delete env.UDB_ENABLE_BROWSER_ENROLLMENT,
     env => env.UDB_ENROLLMENT_ACCESS_AUD = MCP,
+    env => env.UDB_ACCESS_AUD = "",
     env => env.UDB_ENROLLMENT_OWNER_SUBJECTS = '["owner@example.test"]',
     env => env.UDB_TENANT_POLICY = "{}",
     env => delete env.UDB_ACCESS_TEAM_DOMAIN,

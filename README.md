@@ -33,8 +33,9 @@ and [issue #162](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/16
 
 Cloudflare is UDB's remote connection. The Windows agent opens an outbound
 WebSocket to the existing Worker, and ChatGPT connects to the device's MCP
-URL over HTTPS. Use `udb setup` to pair or display the endpoint, then
-`udb start` to run the paired agent. Windows still hosts device credentials,
+URL over HTTPS. The current source uses `udb setup` to orchestrate pairing,
+Agent startup and the ChatGPT handoff. Browser enrollment needs separately
+approved operator provisioning; source code does not enable the hosted service. Windows still hosts device credentials,
 browser sessions, and owner approval controls. See [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ### UDB Live
@@ -99,8 +100,18 @@ starts an online session by itself. Windows Search indexing may take time.
 
 ## Quick start
 
-On Windows, run `udb setup` and `udb start` to connect the paired Cloud Agent.
-Use `udb gui` for on-device approvals and browser handoff.
+On Windows, the current source starts the setup flow with one command:
+
+```powershell
+udb setup
+```
+
+It resumes saved progress, preserves existing credentials and offers startup at
+Windows sign-in once. Browser owner approval and ChatGPT OAuth remain explicit
+human decisions. The published installer and deployed relay must be upgraded
+and provisioned separately before this new flow is available. See
+[automatic setup, deployment gates and recovery](docs/automatic-setup.md).
+Use `udb gui` for on-device permission approvals.
 `udb mcp-config` prints the paired HTTPS endpoint for clients that support
 remote MCP. An unpaired profile prints an empty server list.
 
@@ -121,11 +132,11 @@ Windows-only candidate-release checker is available in
 publisher certificate has been provisioned and no signed installer is
 claimed.
 
-The first attended start can guide Cloudflare pairing.
+The first attended start can guide setup; no second startup command is needed
+with the new setup controller. Optional diagnostics and activity commands:
 
 ```powershell
-udb setup
-udb start
+udb setup --status
 udb status --json
 udb live
 udb stop
@@ -158,7 +169,14 @@ Verify the Cloud Agent process and a read-only invocation in ChatGPT.
 
 ### Private device enrollment without administrator-issued invitations
 
-On a **new Windows machine** (once the reviewed Worker feature has been
+The current source's normal path is `udb setup`, with authenticated browser
+approval and resumable Credential Manager recovery. It stays gated until the
+operator configures the separate Access approval application; see
+[automatic setup](docs/automatic-setup.md). It never prints a successful ChatGPT
+login from an Agent heartbeat.
+
+The older `udb connect --enroll` administrative approval path remains available
+for existing deployments. On a **new Windows machine** (once the reviewed Worker feature has been
 deployed and enabled), open an attended local terminal:
 
 ```powershell
@@ -205,7 +223,7 @@ or replacing any existing script or Windows shortcut.
 | Everyday command | Purpose |
 | --- | --- |
 | `udb` / `udb start` | Start the Windows UDB agent |
-| `udb setup` | Pair with Cloudflare using an attended owner console |
+| `udb setup` | Run/resume owner-approved setup, Agent startup and ChatGPT handoff |
 | `udb stop` | Stop the headless agent |
 | `udb gui` | Open the local owner Manager |
 | `udb status --json` | Inspect local agent and transport status |

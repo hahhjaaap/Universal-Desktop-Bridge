@@ -1,5 +1,6 @@
 // Version 2 enrollment: resumable device proof, authenticated owner and one-use CSRF.
 import { HASH, bearer, digest, fixedEqual, readJson } from "./auth.js";
+import { accessConfig } from "./access.js";
 import { enrollmentEnabled } from "./enrollment.js";
 import { authorizeEnrollmentOwner, ownerEnrollmentConfig } from "./enrollment-owner.js";
 
@@ -9,7 +10,7 @@ const json = (b, status = 200) => Response.json(b, { status, headers: {
 const fail = (status, error) => json({ error }, status);
 const stub = env => env.DEVICES.get(env.DEVICES.idFromName(HUB));
 const enabled = env => enrollmentEnabled(env) && !!ownerEnrollmentConfig(env) &&
-  env.UDB_AUTH_MODE === "cloudflare-access" && typeof env.UDB_ACCESS_AUD === "string" &&
+  env.UDB_AUTH_MODE === "cloudflare-access" && !!accessConfig(env) &&
   env.UDB_ACCESS_AUD !== env.UDB_ENROLLMENT_ACCESS_AUD && env.UDB_TENANT_POLICY === undefined;
 const ID = /^[a-f0-9]{32}$/;
 const label = s => typeof s === "string" && /^[A-Za-z0-9 _.-]{1,48}$/.test(s);

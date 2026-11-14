@@ -163,7 +163,8 @@ def enroll(
         or result.get("device_id") != device_id
     ):
         raise EnrollmentError("Enrollment response did not match the saved request")
-    print("Approve this Windows device in your browser.")
+    if result.get("state") == "pending":
+        print("Approve this Windows device in your browser.")
     print("Device: " + device_id + "  Fingerprint: " + fingerprint[:10].upper())
     approval_url = (
         relay
@@ -172,7 +173,7 @@ def enroll(
         + "/approval?code="
         + fingerprint[:10].upper()
     )
-    if browser and not browser(approval_url):
+    if result.get("state") == "pending" and browser and not browser(approval_url):
         print("Open the owner approval page: " + approval_url)
     deadline = clock() + wait
     while clock() < deadline:

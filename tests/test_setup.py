@@ -410,3 +410,35 @@ def test_frozen_integrity_checks_actual_exe_hash_and_never_claims_signature(
     executable.write_bytes(b"modified executable")
     with pytest.raises(setup.SetupError, match="integrity failed"):
         setup.installation_status()
+
+
+def test_approved_pending_recovery_does_not_request_owner_approval_again(
+    tmp_path, monkeypatch
+):
+    pending = {"id": DEVICE, "proof": "d" * 64, "token": TOKEN, "relay": RELAY}
+
+    class Store:
+        def load(self):
+            return pending
+
+    responses = iter(
+        [
+            (201, {"device_id": DEVICE, "state": "approved"}),
+            (200, {"device_id": DEVICE, "state": "approved"}),
+        ]
+    )
+    monkeypatch.setattr(
+        setup_enrollment, "_request_json", lambda *a, **kw: next(responses)
+    )
+    saved = []
+    monkeypatch.setattr(setup_enrollment, "commit_pairing", lambda *a: saved.append(a))
+    assert (
+        setup_enrollment.enroll(
+            tmp_path / "owner",
+            store=Store(),
+            opener=object(),
+            browser=lambda _: pytest.fail("Already approved"),
+        )
+        == DEVICE
+    )
+    assert saved[0][1] == pending

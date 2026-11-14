@@ -364,20 +364,27 @@ def run(
                         break
                     pause(min(3, max(0, until - clock())))
             verified = remote.get("authenticated_mcp_verified") is True
-            state["phase"] = "authenticated_mcp_verified" if verified else phase
+            online = remote.get("cloud_agent_online") is True
+            state["phase"] = (
+                "authenticated_mcp_verified"
+                if verified and online
+                else "cloud_agent"
+                if not online
+                else phase
+            )
             save_journal(settings.home, state)
             print(
                 render(
                     {
                         "paired": True,
-                        "cloud_agent_online": True,
+                        "cloud_agent_online": online,
                         "authenticated_mcp_verified": verified,
                         "chatgpt_connected": False,
                         "mcp_url": endpoint,
                     }
                 )
             )
-            return 0 if verified else 2
+            return 0 if verified and online else 2
     except KeyboardInterrupt:
         print("Setup paused. Run udb setup to resume the saved request.")
         return 130

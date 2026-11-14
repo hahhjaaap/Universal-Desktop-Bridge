@@ -442,3 +442,26 @@ def test_approved_pending_recovery_does_not_request_owner_approval_again(
         == DEVICE
     )
     assert saved[0][1] == pending
+
+
+def test_agent_lost_during_oauth_never_reports_online_or_complete(
+    selected, monkeypatch, capsys
+):
+    pair(selected)
+    results = iter([remote(), remote(False, True)])
+    monkeypatch.setattr(setup, "device_status", lambda *a: next(results))
+    monkeypatch.setattr(
+        setup, "_request_json", lambda *a, **kw: (200, {"challenge_ready": True})
+    )
+    assert (
+        setup.run(
+            selected,
+            prompt=lambda _: "n",
+            browser=lambda _: True,
+            clock=lambda: 0,
+            verification_wait=1,
+        )
+        == 2
+    )
+    assert "Cloud Agent: pending" in capsys.readouterr().out
+    assert setup.read_journal(selected.home)["phase"] == "cloud_agent"

@@ -149,8 +149,20 @@ def enroll_device(home: Path, relay=PRIVATE_RELAY, *, opener=None, pause=None):
 def run(settings, relay=PRIVATE_RELAY) -> int:
     try:
         enroll_device(settings.home, relay)
-    except (ValueError, RuntimeError, TimeoutError, KeyboardInterrupt) as exc:
-        # Do not print low-level HTTP details or request/device secrets.
-        print("UDB: enrollment incomplete. " + str(exc))
+    except HTTPError as exc:
+        if exc.code == 404:
+            print("UDB: Private enrollment is disabled. Ask the relay owner to enable it.")
+        elif exc.code == 429:
+            print("UDB: Too many requests. Contact the relay owner; do not retry rapidly.")
+        else:
+            print("UDB: Relay denied enrollment. Ask the owner to verify access.")
+        return 2
+    except (OSError, ValueError, RuntimeError, TimeoutError, KeyboardInterrupt) as exc:
+        # Only controlled local errors are printed; network exceptions can
+        # contain remote URLs, headers and internal implementation details.
+        if isinstance(exc, (OSError, KeyboardInterrupt)):
+            print("UDB: Network/console failed; verify relay status before retrying.")
+        else:
+            print("UDB: enrollment incomplete. " + str(exc))
         return 2
     return 0

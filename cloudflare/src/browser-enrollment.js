@@ -3,6 +3,7 @@ import { HASH, bearer, digest, fixedEqual, readJson } from "./auth.js";
 import { accessConfig } from "./access.js";
 import { enrollmentEnabled } from "./enrollment.js";
 import { authorizeEnrollmentOwner, ownerEnrollmentConfig } from "./enrollment-owner.js";
+import { fleetEnabled, registerEnrolledDevice } from "./account-fleet.js";
 
 const TTL = 600000, RETAIN = 86400000, HUB = "__udb_browser_enrollment_v2__";
 const json = (b, status = 200) => Response.json(b, { status, headers: {
@@ -52,9 +53,13 @@ export async function routeBrowserEnrollment(request, env, forward, fetchImpl = 
       full_tool_catalog: enabled(env) && env.UDB_ENABLE_LOCAL_TOOL_SYNC === "true" });
   const connect = /^\/v1\/devices\/([a-f0-9]{32})\/connect-chatgpt$/.exec(path);
   if (connect && request.method === "GET") {
-    const endpoint = url.origin + "/v1/devices/" + connect[1] + "/mcp";
+    const account = fleetEnabled(env);
+    const endpoint = url.origin + (account ? "/v1/account/mcp" :
+      "/v1/devices/" + connect[1] + "/mcp");
     const nonce = crypto.randomUUID();
-    const response = page("<p>Copy this device MCP URL, then add a custom MCP server in ChatGPT Plugins and approve OAuth.</p>" +
+    const response = page("<p>" + (account ?
+      "One account MCP URL for all approved Windows devices. Add it once in ChatGPT Plugins and approve OAuth." :
+      "Copy this device MCP URL, then add a custom MCP server in ChatGPT Plugins and approve OAuth.") + "</p>" +
       "<p><code id=endpoint>" + escape(endpoint) + "</code></p><button id=copy>Copy MCP URL</button> " +
       "<a href='https://chatgpt.com/plugins' target=_blank rel='noopener noreferrer'>Open ChatGPT Plugins</a>" +
       "<p id=message></p><p>If custom MCP servers are unavailable for your account, ask your ChatGPT workspace administrator. Windows permissions remain separate.</p>" +
@@ -141,6 +146,10 @@ async function finish(store, env, record) {
           device_token_sha256: record.tokenHash }) }));
   } catch { return false; }
   if (response.status !== 201) return false;
+  // Two Durable Objects cannot share a transaction. Persist the device first,
+  // then idempotently index its authenticated owner. Uncertain index writes are
+  // reconciled by the existing registering/status retry with the same ID.
+  if (!await registerEnrolledDevice(env, record)) return false;
   await store.transaction(async txn => {
     const records = await txn.get("setup_enrollments") || [];
     const r = records.find(x => x.id === record.id);

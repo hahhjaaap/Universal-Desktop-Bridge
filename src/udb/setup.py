@@ -323,9 +323,10 @@ def run(
                     relay + "/v1/devices/" + device_id + "/fleet/status",
                     proof=token,
                 )
-                if not isinstance(link_status, dict) or type(
-                    link_status.get("linked")
-                ) is not bool:
+                if (
+                    not isinstance(link_status, dict)
+                    or type(link_status.get("linked")) is not bool
+                ):
                     raise SetupError("Fleet linking status was not verified")
                 if not link_status["linked"]:
                     link_existing(
@@ -359,9 +360,7 @@ def run(
             phase = "chatgpt_authorization"
             state["phase"] = phase
             endpoint = relay + (
-                "/v1/account/mcp"
-                if fleet
-                else "/v1/devices/" + device_id + "/mcp"
+                "/v1/account/mcp" if fleet else "/v1/devices/" + device_id + "/mcp"
             )
             if remote.get("authenticated_mcp_verified") is not True:
                 state.setdefault("challenge", secrets.token_hex(32))

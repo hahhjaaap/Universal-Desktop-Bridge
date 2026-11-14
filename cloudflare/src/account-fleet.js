@@ -153,9 +153,10 @@ export async function handleFleetRegistry(request, ctx) {
       return fail(400, "invalid_catalog");
     return store.transaction(async txn => {
       if (await txn.get("fleet_owner") !== owner) return fail(403, "registry_owner_conflict");
-      if (!await txn.get("fleet_catalog"))
-        await txn.put("fleet_catalog", body.tools);
-      return json({ stored: true });
+      const existing = await txn.get("fleet_catalog");
+      if (!existing) await txn.put("fleet_catalog", body.tools);
+      // Always return the authoritative winning schema, including in races.
+      return json({ stored: true, tools: existing || body.tools });
     });
   }
   return fail(404, "not_found");
@@ -306,7 +307,10 @@ export async function handleAccountMcp(request, env, access = null, fetchImpl = 
           method: "POST", headers: { "X-UDB-Owner": owner },
           body: JSON.stringify({ tools: safe }),
         }));
-        if (response.ok) { catalog = safe; break; }
+        if (response.ok) {
+          try { catalog = (await response.json()).tools; } catch { catalog = null; }
+          if (Array.isArray(catalog)) break;
+        }
       }
     }
     return result(rpc.id, { tools: [listTool, ...deviceCatalog(catalog || [])],
@@ -320,6 +324,11 @@ export async function handleAccountMcp(request, env, access = null, fetchImpl = 
       structuredContent: { devices } };
     return result(rpc.id, value, modern);
   }
+  // Discovery is not a grant. Still reject names absent from the owner's
+  // stable catalog before checking device ownership and Windows permissions.
+  if (!ALLOWED.has(rpc.params.name) ||
+      !snapshot.catalog?.some(tool => tool.name === rpc.params.name))
+    return fail(403, "fleet_tool_not_listed");
   const args = rpc.params.arguments;
   const id = args?.device_id;
   if (!DEVICE_ID.test(id || "") || Object.hasOwn(rpc.params, "device_id"))

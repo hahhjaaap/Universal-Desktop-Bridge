@@ -592,6 +592,7 @@ test("rate limits, public routing and handoff do not expose internal operations 
   const html = await handoff.text();
   assert.ok(html.includes("https://chatgpt.com/plugins"));
   assert.ok(html.includes("Copy MCP URL"));
+  assert.ok(html.includes("invoke bridge_status once"));
   assert.ok(!html.includes(ADMIN));
   assert.match(handoff.headers.get("content-security-policy"), /script-src 'nonce-/);
 });

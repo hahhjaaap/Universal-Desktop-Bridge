@@ -2,6 +2,17 @@
 
 > **Historical evidence:** Earlier run counts/benchmarks are not current UDB 0.12.0 CI results. The UDB Aura extension is retired from source. See [version/status](current-version.md).
 
+## Current optimization sweep (2026-11-14)
+
+The latest audit separates source optimizations from benchmarked Windows
+releases and Cloudflare deployments. It covers memory-bounded release hashing,
+GUI idle reads, oversized activity metadata and a prioritized full-system
+performance plan. See [optimization audit](optimization-audit-2026-11-14.md).
+
+Run `python tools/benchmark_optimizations.py` for synthetic, disposable-fixture
+measurements. The original source observations below are historical and must
+not be treated as measurements of an installed UDB v0.12.0 executable.
+
 Run from a developer checkout installed with `python -m pip install -e ".[office,dev]"`:
 
 ```sh

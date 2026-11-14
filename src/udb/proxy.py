@@ -30,6 +30,54 @@ from udb.transport import (
     rpc_error,
 )
 
+_RESOURCE_EXEMPT = frozenset(
+    {
+        "terminal_stop",
+        "terminal_read",
+        "terminal_list",
+        "terminal_wait",
+        "search_read",
+        "search_stop",
+        "system_process_terminate",
+    }
+)
+_CONTROL_ACTIONS = {
+    "file_operation": ("read", "list", "cancel"),
+    "file_upload": ("status", "abort"),
+    "virtual_pointer": ("hide", "stop", "status"),
+}
+_LIGHT_TOOLS = frozenset(
+    {
+        "file_list",
+        "file_read",
+        "file_write",
+        "file_replace",
+        "file_stat",
+        "file_mkdir",
+        "file_copy",
+        "file_move",
+        "file_read_lines",
+        "file_read_chunk",
+        "file_upload",
+        "system_process_list",
+    }
+)
+
+
+def _resource_requirement(name, arguments):
+    """Classify only resource admission, after original owner/capability checks."""
+    if (
+        name in _RESOURCE_EXEMPT
+        or arguments.get("action") in _CONTROL_ACTIONS.get(name, ())
+        or (name == "terminal_interact" and not arguments.get("text"))
+        or (name == "work_recovery" and arguments.get("action", "list") != "resume")
+    ):
+        return None
+    light = name in _LIGHT_TOOLS and not (
+        name == "file_upload" and arguments.get("action") == "commit"
+    )
+    return "light_operations_ready" if light else "admission_ready"
+
 
 def _result_payload(result: dict[str, Any]) -> dict[str, Any]:
     """Read a backend object once; malformed data never grants owner access."""
@@ -307,6 +355,49 @@ class UnifiedProxy:
             self.public_tool_names = frozenset(tool["name"] for tool in catalog)
             return {"tools": copy.deepcopy(self.tool_cache)}
 
+    def _authorize_companion(self, name, arguments):
+        """Enforce existing grants before inspecting resource admission."""
+        access = self.primary.request(
+            "tools/call", {"name": "computer_status", "arguments": {}}
+        )
+        result = access.get("result", {})
+        grant = _result_payload(result)
+        if result.get("isError") or grant.get("enabled") is not True:
+            self.companion.request("udb/close-sessions", timeout=10)
+            raise RuntimeError(
+                "Existing UDB owner computer access is required; AI cannot grant it"
+            )
+        if name == "virtual_pointer" and "desktop" not in grant.get("capabilities", []):
+            raise RuntimeError("Existing desktop capability is required")
+        if (
+            name == "virtual_pointer"
+            and grant.get("desktop_paused")
+            and arguments.get("action") not in {"status", "hide", "stop"}
+        ):
+            raise RuntimeError(
+                "Desktop control is paused locally; only the owner can resume in UDB"
+            )
+        if (
+            name == "terminal_start"
+            and arguments.get("mode") == "conpty"
+            and "execute" not in grant.get("capabilities", [])
+        ):
+            raise RuntimeError("Existing execute capability is required")
+        requirement = _resource_requirement(name, arguments)
+        if requirement is None:
+            return
+        host = self.primary.request(
+            "tools/call", {"name": "host_status", "arguments": {}}
+        )
+        state = _result_payload(host.get("result", {}))
+        resources = state.get("resources", {})
+        if not isinstance(resources, dict):
+            resources = {}
+        if not resources.get(requirement) or not fresh(resources):
+            raise RuntimeError(
+                "Machine busy or resource monitor unavailable; retry after 6 seconds"
+            )
+
     def call_tool(self, params: dict[str, Any]) -> dict[str, Any]:
         name = params.get("name")
         if not isinstance(name, str):
@@ -348,102 +439,7 @@ class UnifiedProxy:
         if backend is None:
             raise ValueError("Unknown MCP tool")
         if backend is self.companion:
-            access = self.primary.request(
-                "tools/call", {"name": "computer_status", "arguments": {}}
-            )
-            result = access.get("result", {})
-            grant = _result_payload(result)
-            if (
-                result.get("isError")
-                or not isinstance(grant, dict)
-                or grant.get("enabled") is not True
-            ):
-                self.companion.request("udb/close-sessions", timeout=10)
-                raise RuntimeError(
-                    "Existing UDB owner computer access is required; AI cannot grant it"
-                )
-            arguments = params.get("arguments", {})
-            if name == "virtual_pointer" and "desktop" not in grant.get(
-                "capabilities", []
-            ):
-                raise RuntimeError("Existing desktop capability is required")
-            if (
-                name == "virtual_pointer"
-                and grant.get("desktop_paused")
-                and arguments.get("action") not in {"status", "hide", "stop"}
-            ):
-                raise RuntimeError(
-                    "Desktop control is paused locally; only the owner can resume in UDB"
-                )
-            if (
-                name == "terminal_start"
-                and arguments.get("mode") == "conpty"
-                and "execute" not in grant.get("capabilities", [])
-            ):
-                raise RuntimeError("Existing execute capability is required")
-            job_control = (
-                (
-                    name == "file_operation"
-                    and arguments.get("action") in ("read", "list", "cancel")
-                )
-                or (name == "terminal_interact" and not arguments.get("text"))
-                or (
-                    name == "file_upload"
-                    and arguments.get("action") in ("status", "abort")
-                )
-                or (
-                    name == "virtual_pointer"
-                    and arguments.get("action") in ("hide", "stop", "status")
-                )
-                or (
-                    name == "work_recovery"
-                    and arguments.get("action", "list") != "resume"
-                )
-            )
-            if not job_control and name not in {
-                "terminal_stop",
-                "terminal_read",
-                "terminal_list",
-                "terminal_wait",
-                "search_read",
-                "search_stop",
-                "system_process_terminate",
-            }:
-                host = self.primary.request(
-                    "tools/call", {"name": "host_status", "arguments": {}}
-                )
-                data = host.get("result", {})
-                state = _result_payload(data)
-                resources = (
-                    state.get("resources", {}) if isinstance(state, dict) else {}
-                )
-                if not isinstance(resources, dict):
-                    resources = {}
-                light = name in {
-                    "file_list",
-                    "file_read",
-                    "file_write",
-                    "file_replace",
-                    "file_stat",
-                    "file_mkdir",
-                    "file_copy",
-                    "file_move",
-                    "file_read_lines",
-                    "file_read_chunk",
-                    "file_upload",
-                    "system_process_list",
-                }
-                if name == "file_upload" and arguments.get("action") == "commit":
-                    light = False
-                ready = (
-                    resources.get("light_operations_ready")
-                    if light
-                    else resources.get("admission_ready")
-                )
-                if not ready or not fresh(resources):
-                    raise RuntimeError(
-                        "Machine busy or resource monitor unavailable; retry after 6 seconds"
-                    )
+            self._authorize_companion(name, arguments)
         reply = backend.request("tools/call", params)
         if reply.get("error"):
             return {"_upstream_rpc_error": reply["error"]}

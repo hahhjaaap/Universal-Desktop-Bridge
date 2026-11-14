@@ -133,3 +133,50 @@ def test_old_logs_and_new_live_viewers_share_a_backend(monkeypatch, tmp_path):
         assert cli.main([command, "--home", str(tmp_path), "--once"]) == 0
     assert len(calls) == 2
     assert calls[0] == calls[1]
+
+
+@pytest.mark.parametrize(
+    "argv,expected",
+    [
+        (["start"], (False, False, False, False)),
+        (["--detach", "start"], (True, False, False, False)),
+        (["start", "--detach"], (True, False, False, False)),
+        (["--follow", "start", "--offline"], (False, True, True, False)),
+        (["--offline", "start", "--detach"], (True, False, True, False)),
+        (["--online", "start"], (False, False, False, True)),
+        (["--detach", "start", "--follow"], (True, True, False, False)),
+    ],
+)
+def test_start_preserves_flags_before_and_after_the_subcommand(
+    monkeypatch, argv, expected
+):
+    observed = []
+    monkeypatch.setattr(cli, "load", lambda **kwargs: object())
+    monkeypatch.setattr(
+        cli,
+        "_prepare_startup",
+        lambda args, settings: (
+            observed.append((args.detach, args.follow, args.offline, args.online)) or 0
+        ),
+    )
+    assert cli.main(argv) == 0
+    assert observed == [expected]
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--offline", "start", "--online"],
+        ["start", "--offline", "--online"],
+        ["start", "--detach", "--follow"],
+    ],
+)
+def test_conflicting_start_flags_never_load_owner_state(monkeypatch, argv):
+    monkeypatch.setattr(
+        cli, "load", lambda **kwargs: pytest.fail("invalid flags must not load state")
+    )
+    try:
+        result = cli.main(argv)
+    except SystemExit as error:
+        result = error.code
+    assert result == 2

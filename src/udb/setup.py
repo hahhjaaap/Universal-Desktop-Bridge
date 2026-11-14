@@ -124,6 +124,22 @@ def device_status(opener, relay, device_id, token):
     return result
 
 
+def fleet_link_status(opener, relay, device_id, token):
+    """Verify the account registry link using the existing device credential."""
+    status, result = _request_json(
+        opener,
+        relay + "/v1/devices/" + device_id + "/fleet/status",
+        proof=token,
+    )
+    if (
+        status != 200
+        or not isinstance(result, dict)
+        or type(result.get("linked")) is not bool
+    ):
+        raise SetupError("Fleet linking status was not verified")
+    return result["linked"]
+
+
 def inspect(settings, opener=None):
     """Read-only: no journals, credentials, browser, process or Run-key writes."""
     opener = opener or build_opener(NoRedirect())
@@ -171,14 +187,29 @@ def inspect(settings, opener=None):
     except (OSError, ValueError):
         result["failure"] = "relay_unreachable"
         return result
+    fleet = remote.get("account_fleet") is True
     result.update(
         credential_valid=True,
         relay_reachable=True,
         cloud_agent_online=remote.get("cloud_agent_online") is True,
         authenticated_mcp_verified=remote.get("authenticated_mcp_verified") is True,
+        account_fleet=fleet,
         verification_method=remote.get("verification_method"),
         verified_at=remote.get("verified_at"),
     )
+    if fleet:
+        result["mcp_url"] = relay + "/v1/account/mcp"
+        try:
+            result["fleet_linked"] = fleet_link_status(
+                opener, relay, device_id, token
+            )
+        except (HTTPError, OSError, ValueError):
+            result["fleet_linked"] = False
+            result["failure"] = "fleet_status_unavailable"
+            result["recovery"] = (
+                "Device credential is valid, but account Fleet linking could not be verified. "
+                "Run udb setup to resume or complete the owner-approved link."
+            )
     return result
 
 
@@ -280,6 +311,10 @@ def run(
                     report.get("credential_valid")
                     and report.get("cloud_agent_online")
                     and report.get("authenticated_mcp_verified")
+                    and (
+                        report.get("account_fleet") is not True
+                        or report.get("fleet_linked") is True
+                    )
                 )
                 else 2
             )
@@ -327,12 +362,8 @@ def run(
                     relay + "/v1/devices/" + device_id + "/fleet/status",
                     proof=token,
                 )
-                if (
-                    not isinstance(link_status, dict)
-                    or type(link_status.get("linked")) is not bool
-                ):
-                    raise SetupError("Fleet linking status was not verified")
-                if not link_status["linked"]:
+                linked = fleet_link_status(opener, relay, device_id, token)
+                if not linked:
                     link_existing(
                         settings.home,
                         relay,
@@ -343,6 +374,10 @@ def run(
                         pause=pause,
                         clock=clock,
                     )
+                    if not fleet_link_status(opener, relay, device_id, token):
+                        raise SetupError(
+                            "Fleet owner approval completed, but the account registry link is not verified yet; run udb setup to resume"
+                        )
             safe = replace(settings, enable_terminal=False)
             phase = "cloud_agent"
             state["phase"] = phase

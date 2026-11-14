@@ -75,7 +75,7 @@ test("explicit Access owner and device grant show operations with local approval
   assert.equal(catalog.status, 200);
   const tools = (await catalog.json()).result.tools;
   assert.deepEqual(tools.map((t) => t.name), [
-    "bridge_status", "read_file", "computer_execute", "propose_file_write", "host_browser",
+    "bridge_status", "read_file", "computer_execute", "propose_file_write", "browser",
   ]);
   assert.deepEqual(tools[0].securitySchemes[0].scopes, ["udb:read"]);
   assert.deepEqual(tools[2].securitySchemes[0].scopes, []);
@@ -118,7 +118,7 @@ test("legacy JWT resource cannot inherit Access-only owner tool scope", async ()
   assert.equal(forwarded.length, 0);
 });
 
-test("explicit full owner grant discovers all 36 local tools without auto-running them", async () => {
+test("explicit full owner grant compacts the legacy 36-tool catalog without auto-running them", async () => {
   const all = [...READ_TOOLS, ...OWNER_TOOLS];
   assert.equal(all.length, 36);
   const env = {
@@ -142,9 +142,10 @@ test("explicit full owner grant discovers all 36 local tools without auto-runnin
     env, DEVICE, stub, fetch, access());
   assert.equal(list.status, 200);
   const tools = (await list.json()).result.tools;
-  assert.equal(tools.length, 36);
-  assert.deepEqual(tools.map((tool) => tool.name), all);
-  assert.ok(tools.every((tool) => tool.inputSchema.properties.fixture.type === "string"));
+  assert.equal(tools.length, 27);
+  assert.deepEqual(new Set(tools.map((tool) => tool.name)),
+    new Set([...all.filter(name => !name.startsWith("desktop_") && name !== "host_screenshot" && name !== "host_browser"), "sandbox_desktop", "browser"]));
+  assert.ok(tools.every((tool) => tool.inputSchema.type === "object"));
   assert.equal(forwarded.length, 1);
   assert.equal(forwarded[0].method, "tools/list");
 

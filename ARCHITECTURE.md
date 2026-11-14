@@ -40,7 +40,10 @@ Deployed Cloudflare Worker, OAuth, grants and ChatGPT discovery require
 separate verification.
 
 `udb.catalog` translates/consolidates public tool schemas and `udb.registry`
-publishes them. The companion's `dispatch.validate_catalog()` rejects schema
+publishes them. `tool_families.json` is shared with the Cloudflare gateway for
+action-to-original-operation mapping. Family routing precedes the existing
+permission/resource checks, and discovery is narrowed to each grant's allowed
+actions; see [tool families](docs/tool-families.md). The companion's `dispatch.validate_catalog()` rejects schema
 names that lack a handler, unexpected handlers and duplicate schemas.
 `udb.proxy` owns backend routing, concurrency and response normalization.
 Keep this separate from file permissions and owner approvals.

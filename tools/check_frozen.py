@@ -210,7 +210,19 @@ def main():
         if args.expected_revision:
             assert info["source_revision"] == args.expected_revision
             assert info["source_dirty"] is False
-        assert catalog["tool_count"] == 59 and catalog["backend_count"] == 67
+        assert catalog["tool_count"] == len({t["name"] for t in catalog["tools"]})
+        assert {
+            "browser",
+            "terminal",
+            "sandbox_desktop",
+            "search",
+            "system_process",
+            "project_files",
+        } <= {t["name"] for t in catalog["tools"]}
+        assert (
+            catalog["backend_count"]
+            == catalog["core_count"] + catalog["companion_count"]
+        )
         if os.name == "nt":
             assert info["kind"] == "frozen" and info["release_provenance"]
         runtime = json.loads(run("runtime", "--probe"))
@@ -452,7 +464,9 @@ def main():
                 b'{"jsonrpc":"2.0","method":"notifications/initialized"}\n'
             )
             process.stdin.flush()
-            assert len(rpc("tools/list", {})["result"]["tools"]) == 59
+            assert {t["name"] for t in rpc("tools/list", {})["result"]["tools"]} == {
+                t["name"] for t in catalog["tools"]
+            }
             status = rpc("tools/call", dict(name="bridge_status", arguments={}))[
                 "result"
             ]
@@ -522,7 +536,7 @@ def main():
                     dict(
                         result="PASS",
                         version=version,
-                        tools=59,
+                        tools=catalog["tool_count"],
                         manifest=True,
                         real_mcp_workers=True,
                         owner_access_denied=True,

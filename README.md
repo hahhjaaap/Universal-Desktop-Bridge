@@ -510,6 +510,10 @@ Compatibility launchers and import aliases are intentionally retained. Generated
 - Source work, document reviews and browser pages can contain untrusted content. Review outputs before acting.
 - This project is a local bridge, **not ChatGPT Work**, a tax-compliance service or an autonomous account administrator.
 
+The source now offers [40 public tool interfaces](docs/tool-families.md), grouped
+by task while retaining the original operations and per-action permissions.
+Use `udb tools` to inspect the installed build.
+
 Configuration templates live in `examples/config/`; `udb build` still exports them
 as `udb.example.toml` and `MCP_CONFIGURATION.example.json` beside release artifacts.
 Root Python launchers remain for existing scripts, and `render.yaml` stays at the

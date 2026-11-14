@@ -1,0 +1,88 @@
+{
+  "legacyAliases": [
+    "read_files",
+    "propose_text_edit",
+    "terminal_send",
+    "terminal_wait",
+    "file_search_context",
+    "file_copy",
+    "file_move",
+    "computer_utilities",
+    "computer_execute"
+  ],
+  "families": [
+    {
+      "name": "terminal",
+      "description": "Owned project terminals; pass action-specific arguments in params. No input replay.",
+      "actions": {
+        "start": "terminal_start",
+        "list": "terminal_list",
+        "read": "terminal_read",
+        "interact": "terminal_interact",
+        "stop": "terminal_stop"
+      },
+      "readOnly": false,
+      "openWorld": true
+    },
+    {
+      "name": "sandbox_desktop",
+      "description": "Approved Sandbox guest only. Pass the guest input action inside params. No host control.",
+      "actions": {
+        "status": "desktop_status",
+        "screenshot": "desktop_screenshot",
+        "input": "desktop_action",
+        "snapshot": "desktop_snapshot",
+        "wait_for": "desktop_wait_for",
+        "element": "desktop_element_action",
+        "stop": "desktop_stop",
+        "app": "desktop_app",
+        "batch": "desktop_batch"
+      },
+      "readOnly": false,
+      "openWorld": false
+    },
+    {
+      "name": "search",
+      "description": "Background project search; pass action-specific arguments in params.",
+      "actions": {
+        "start": "search_start",
+        "read": "search_read",
+        "stop": "search_stop"
+      },
+      "readOnly": false,
+      "openWorld": false
+    },
+    {
+      "name": "system_process",
+      "description": "Observed processes; pass list/stop arguments in params. Stop requires user authorization.",
+      "actions": {
+        "list": "system_process_list",
+        "stop": "system_process_terminate"
+      },
+      "readOnly": false,
+      "openWorld": false
+    },
+    {
+      "name": "project_files",
+      "description": "Read-only configured-project files; pass action-specific arguments in params.",
+      "actions": {
+        "list": "file_list",
+        "stat": "file_stat",
+        "read": "file_read",
+        "read_lines": "file_read_lines"
+      },
+      "readOnly": true,
+      "openWorld": false
+    },
+    {
+      "name": "browser",
+      "description": "Owned headless browser; pass original browser actions in params for control, or capture a tab with screenshot. Separate grants apply.",
+      "actions": {
+        "control": "host_browser",
+        "screenshot": "host_screenshot"
+      },
+      "readOnly": false,
+      "openWorld": true
+    }
+  ]
+}

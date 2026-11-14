@@ -108,6 +108,7 @@ def test_onedir_spec_collects_dependencies_and_readable_guest_source(monkeypatch
     assert executable["exclude_binaries"] is True
     assert collected["name"] == "candidate" and collected["args"][0] == "synthetic-exe"
     assert (str(root / "src/udb/desktop_guest.py"), "udb") in collected["args"][2]
+    assert (str(root / "src/udb/tool_families.json"), "udb") in collected["args"][2]
 
 
 def test_benchmark_keeps_first_launch_separate_from_sorted_percentiles():

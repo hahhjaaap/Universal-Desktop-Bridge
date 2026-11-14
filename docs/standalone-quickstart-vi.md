@@ -49,6 +49,33 @@ bản cài v0.12.0 đã phát hành ngày 11/11/2026 không tự được cập 
 Xem [kế hoạch tương thích, nâng cấp và rollback](cli-migration.md) trước khi
 thay lệnh trong script hoặc cập nhật bản cài Windows.
 
+## Terminal-first: trợ giúp và thao tác an toàn
+
+Bản mã nguồn sau PR #167 hỗ trợ:
+
+```powershell
+udb help
+udb help vi
+udb help advanced
+udb help doctor
+udb update --check
+```
+
+Gõ nhầm lệnh thông dụng (ví dụ `udb statu`) sẽ hiển thị gợi ý
+`udb status`, thay vì một danh sách dài lệnh kỹ thuật.
+`udb help vi` hiển thị nhóm lệnh ngắn bằng tiếng Việt.
+
+Khi chạy trực tiếp trong Terminal có tương tác, `udb update` yêu cầu
+nhập `UPDATE`; `udb rollback` yêu cầu nhập `ROLLBACK`. Enter hoặc
+nhập sai sẽ hủy trước khi chạy installer. `udb update --check`
+chỉ kiểm tra nên không cần xác nhận. Chỉ dùng `--yes` khi đã chủ
+động chấp nhận thay đổi. Các lệnh JSON/tự động hóa không tương tác được
+giữ tương thích để không làm hỏng script cũ, vì vậy nên giới hạn quyền
+thực thi chúng và không tự đưa vào quy trình không kiểm soát.
+
+Đây là thay đổi mã nguồn mới, **không tự cập nhật bản UDB đang cài**;
+chỉ có hiệu lực sau một bản phát hành và cài đặt được phê duyệt.
+
 ## Xem Live
 
 ```powershell

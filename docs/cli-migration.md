@@ -27,6 +27,22 @@ The supported, easy-to-remember surface is:
 Running `udb update` **without** `--check` is not a read-only operation.
 Check current release provenance and retain rollback/backup options first.
 
+## Terminal-first ergonomics
+
+- `udb help vi` shows a Vietnamese everyday command reference.
+- A typo such as `udb statu` suggests `udb status` without loading
+  configuration, starting the Agent, or exposing a long list of internal verbs.
+- In an attended console, `udb update` requires typing `UPDATE`;
+  `udb rollback` requires typing `ROLLBACK`. The confirmation occurs before
+  launching the updater. Canceling leaves the installation unchanged.
+- `udb update --check` is read-only and never prompts.
+- `--yes` intentionally bypasses that human prompt; machine-readable
+  `--json` and noninteractive scripts retain their existing behavior for
+  backward compatibility. Security does **not** depend on this new prompt:
+  independent owner, installer, release and process-ancestry checks remain.
+- `udb allow-source`, `udb revoke-source`, and broad desktop permission
+  grants continue to use their existing separate attended approval checks.
+
 ## Migration and compatibility
 
 | Historic / advanced command | Preferred usage | Removal decision |

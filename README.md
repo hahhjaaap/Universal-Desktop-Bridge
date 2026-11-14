@@ -195,6 +195,20 @@ This simplified help applies to the updated source until it is included in
 a separately reviewed and published release. The existing v0.12.0 download
 does not change merely because source documentation or CLI code changed.
 
+### Terminal-first quality-of-life additions
+
+The source CLI also supports `udb help vi` (Vietnamese quick reference) and
+suggests nearby valid subcommands for simple typos, without loading owner state.
+Human-attended `udb update` and `udb rollback` ask for an exact typed
+confirmation; `udb update --check` never does. Noninteractive/JSON workflows
+remain compatible to avoid breaking existing installers and scripts; do not
+treat those invocations as an interactive approval. For an explicit local
+operation, `--yes` bypasses the attended prompt. Permission grants remain
+subject to their existing separate owner-attended checks.
+
+These changes require a separately reviewed Windows release; merging source
+does not automatically replace installed UDB.
+
 ## Accounting-first workflow: Vietnamese invoice XLSX
 
 The `spreadsheet` tool supports two guarded actions:

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
+import re
 import sys
 from collections.abc import Sequence
 from contextlib import contextmanager
@@ -123,6 +125,19 @@ SIMPLE_COMMAND_HELP = {
     "help": "Show easy commands (or: udb help advanced)",
 }
 
+
+SIMPLE_COMMAND_HELP_VI = {
+    "setup": "Ghép nối máy Windows với Cloudflare",
+    "start": "Khởi động UDB (cũng có thể chỉ gõ udb)",
+    "stop": "Dừng UDB",
+    "gui": "Mở trình quản lý UDB",
+    "status": "Xem trạng thái hoạt động",
+    "doctor": "Chẩn đoán lỗi và kết nối",
+    "live": "Theo dõi hoạt động (--gui để mở cửa sổ)",
+    "update": "Kiểm tra bản cập nhật bằng --check",
+    "help": "Xem hướng dẫn",
+}
+
 ADVANCED_COMMAND_HELP = """Advanced UDB commands (kept for compatibility)
 
 Connection and recovery:
@@ -135,6 +150,8 @@ Connection and recovery:
   udb autostart disable  Disable Windows sign-in startup
   udb rollback           Restore the previous managed release
   udb quickstart         Start/check local support components
+  udb update --yes       Skip attended confirmation for an intentional update
+  udb rollback --yes     Skip attended confirmation for an intentional rollback
 
 Permissions (owner-attended):
   udb --access computer   Attended opt-in to broad Windows access
@@ -177,11 +194,65 @@ def _everyday_help() -> str:
             "  udb --version            Show installed UDB version",
             "",
             "For uncommon commands: udb help advanced",
+            "Vietnamese commands: udb help vi",
             "For command options: udb help <command> or udb <command> --help",
             "Help does not start UDB, grant access, or change owner state.",
         ]
     )
     return "\n".join(lines)
+
+
+def _everyday_help_vi() -> str:
+    """Optional Vietnamese help without changing the machine-readable CLI."""
+    lines = [
+        "UDB - lệnh thường dùng",
+        "Cách dùng: udb [lệnh] [tùy chọn]",
+        "",
+        "  udb                      Khởi động UDB (như udb start)",
+    ]
+    for name, description in SIMPLE_COMMAND_HELP_VI.items():
+        display = "update --check" if name == "update" else name
+        lines.append(f"  udb {display:<22} {description}")
+    lines.extend(
+        [
+            "",
+            "  udb --version            Xem phiên bản hiện tại",
+            "",
+            "Lệnh nâng cao: udb help advanced",
+            "Hướng dẫn từng lệnh: udb help <command>",
+            "Các lệnh trợ giúp không khởi động UDB hay cấp thêm quyền.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+class _UdbArgumentParser(argparse.ArgumentParser):
+    """Offer one concrete hint for a misspelled command, not 28 choices."""
+
+    def error(self, message):
+        if message.startswith("argument COMMAND: invalid choice:"):
+            match = re.search(
+                r"invalid choice: '([A-Za-z][A-Za-z0-9_-]{0,31})'", message
+            )
+            if match:
+                wrong = match.group(1)
+                commands = next(
+                    (
+                        action.choices.keys()
+                        for action in self._actions
+                        if isinstance(action, argparse._SubParsersAction)
+                    ),
+                    (),
+                )
+                suggestion = difflib.get_close_matches(wrong, commands, n=1, cutoff=0.6)
+                hint = f" Did you mean 'udb {suggestion[0]}'?" if suggestion else ""
+                self.exit(
+                    2,
+                    f"UDB: Unknown command '{wrong}'.{hint}\n"
+                    "Try 'udb help' (Vietnamese: 'udb help vi').\n",
+                )
+            self.exit(2, "UDB: Unknown command. Try 'udb help'.\n")
+        super().error(message)
 
 
 class _EverydayHelpAction(argparse.Action):
@@ -232,7 +303,7 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         add_settings(command, suppress=True)
         if name == "help":
             command.add_argument(
-                "topic", nargs="?", choices=("advanced", *command_names)
+                "topic", nargs="?", choices=("advanced", "vi", *command_names)
             )
         if name in ("autostart", "update", "rollback", "version"):
             command.add_argument(
@@ -249,6 +320,12 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
                 "--cloud-agent",
                 action="store_true",
                 help="Opt in to Cloudflare Cloud Agent at Windows logon (local console only)",
+            )
+        if name in ("update", "rollback"):
+            command.add_argument(
+                "--yes",
+                action="store_true",
+                help="Skip attended confirmation; for an intentional local action",
             )
         if name == "update":
             command.add_argument(
@@ -472,6 +549,35 @@ def _run_gui(args: argparse.Namespace, settings: Settings) -> int:
         ).returncode
 
 
+def _confirm_attended_maintenance(
+    action: str, args: argparse.Namespace, *, incoming=None, outgoing=None
+) -> bool:
+    """Require a typed confirmation for human-attended update/rollback.
+
+    Preserve pre-existing noninteractive and JSON automation; those already
+    have their own owner/update guards. Never confirm permission grants here.
+    """
+    if action == "update" and getattr(args, "check", False):
+        return True
+    if getattr(args, "yes", False) or getattr(args, "json", False):
+        return True
+    incoming = sys.stdin if incoming is None else incoming
+    outgoing = sys.stderr if outgoing is None else outgoing
+    if not incoming.isatty() or not outgoing.isatty():
+        return True
+    token = "ROLLBACK" if action == "rollback" else "UPDATE"
+    outgoing.write(
+        f"UDB: {action} changes the active Windows installation. "
+        "Keep an independent owner-state backup.\n"
+        f"Type {token} to continue, or Enter to cancel: "
+    )
+    outgoing.flush()
+    try:
+        return incoming.readline().strip() == token
+    except (KeyboardInterrupt, OSError):
+        return False
+
+
 def _run_maintenance(action: str, args: argparse.Namespace, settings: Settings) -> int:
     if args.access or args.offline or args.online:
         raise ValueError(
@@ -512,7 +618,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise SystemExit("Worker role required")
         return worker(argv[1], argv[2:])
 
-    parser = argparse.ArgumentParser(
+    parser = _UdbArgumentParser(
         prog="udb",
         description="Universal Desktop Bridge: one package, one command",
         add_help=False,
@@ -548,6 +654,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if action == "help":
         if args.topic == "advanced":
             print(ADVANCED_COMMAND_HELP)
+        elif args.topic == "vi":
+            print(_everyday_help_vi())
         elif args.topic:
             # Reuse argparse subcommand help without loading runtime settings.
             try:
@@ -623,6 +731,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                     enable_autostart=args.autostart,
                 )
         if action in ("autostart", "update", "rollback"):
+            if action in ("update", "rollback") and not _confirm_attended_maintenance(
+                action, args
+            ):
+                print("UDB: Cancelled; no update or rollback started.", file=sys.stderr)
+                return 2
             return _run_maintenance(action, args, settings)
         if action == "start":
             startup_result = _prepare_startup(args, settings)

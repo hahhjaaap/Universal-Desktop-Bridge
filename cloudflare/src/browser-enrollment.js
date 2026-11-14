@@ -69,7 +69,16 @@ export async function routeBrowserEnrollment(request, env, forward, fetchImpl = 
       if (!["GET", "POST"].includes(request.method)) return fail(405, "method_not_allowed");
       let owner;
       try { owner = await authorizeEnrollmentOwner(request, env, fetchImpl, access); }
-      catch { return page("<p>Owner authentication is required. Sign in through the configured Cloudflare Access application.</p>", 403); }
+      catch (error) {
+        const reason = ["owner_config_invalid", "owner_runtime_audience", "owner_runtime_unavailable",
+          "owner_assertion_invalid", "owner_identity_conflict", "owner_identity_missing",
+          "owner_not_allowed"].includes(error?.message) ? error.message : "owner_auth_failed";
+        // Static diagnostics only: never log assertions, cookies, identity or URL.
+        console.warn(JSON.stringify({ event: "udb_owner_auth_denied", reason,
+          runtime_present: Boolean(access), assertion_present: request.headers.has("Cf-Access-Jwt-Assertion") }));
+        return page("<p>Owner authentication could not be verified. Sign in through the configured Cloudflare Access application.</p>" +
+          "<p>Diagnostic: <code>" + reason + "</code>. If already signed in, ask the relay operator to check this code.</p>", 403);
+      }
       if (request.method === "GET") {
         const code = url.searchParams.get("code");
         if (!/^[A-F0-9]{10}$/.test(code || "")) return fail(400, "invalid_code");

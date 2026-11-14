@@ -65,6 +65,29 @@ async function registry(env, owner) {
   return env.DEVICES.get(env.DEVICES.idFromName("__udb_account_fleet_v1__" + key));
 }
 
+// A device-token-authenticated status check; never substitutes device auth for
+// user OAuth and never reveals the linked owner's identity to anonymous callers.
+export async function routeFleetLinkStatus(request, env) {
+  const match = /^\\/v1\\/devices\\/([a-f0-9]{32})\\/fleet\\/status$/.exec(new URL(request.url).pathname);
+  if (!match) return null;
+  if (!fleetEnabled(env)) return fail(404, "account_fleet_disabled");
+  if (request.method !== "GET") return fail(405, "method_not_allowed");
+  if (request.headers.has("Origin")) return fail(403, "browser_origin_not_supported");
+  try {
+    const self = await env.DEVICES.get(env.DEVICES.idFromName(match[1])).fetch(
+      new Request("https://internal/fleet/self", { headers: {
+        Authorization: request.headers.get("Authorization") || "",
+      } }));
+    if (!self.ok) return fail(self.status, "device_auth_failed");
+    const body = await self.json();
+    if (!body.owner || !body.request_id) return json({ linked: false });
+    const snapshot = await fleetSnapshot(env, body.owner);
+    const entry = snapshot.devices.find(x => x.id === match[1] &&
+      x.request_id === body.request_id);
+    return json({ linked: Boolean(entry) });
+  } catch { return fail(503, "fleet_registry_unavailable"); }
+}
+
 export async function registerEnrolledDevice(env, record) {
   // An enrollment approval already bound this record to an authenticated owner.
   // Reverify the actual device object before adding the idempotent index entry.

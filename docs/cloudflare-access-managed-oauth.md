@@ -5,10 +5,13 @@
 ## Scope and safety
 
 Optional alternative to a manually integrated RS256 JWT OAuth identity provider.
-Use **Cloudflare Access Managed OAuth**, configured as a **hostname/path scoped
-Access MCP application** for a single device MCP endpoint. Do not select Worker-
-level Access on a UDB relay: Cloudflare documents that Worker-level
-Access blocks WebSocket upgrades, which would disconnect the UDB Cloud Agent.
+For legacy per-device mode, use **Cloudflare Access Managed OAuth** configured
+as a **hostname/path scoped Access MCP application** for the device MCP endpoint.
+The opt-in account Fleet candidate uses the separate `/v1/account/mcp` resource;
+protect that exact resource with the reviewed account MCP Access application.
+Do not select Worker-level Access on a UDB relay: Cloudflare documents that
+Worker-level Access blocks WebSocket upgrades, which would disconnect the UDB
+Cloud Agent.
 
 The code remains **off by default**. The Windows device is not remotely
 controllable through the MCP gateway. It exposes only owner-granted read tools

@@ -75,7 +75,7 @@ def run(
         return 2
     if autostart and not (setup or enroll):
         print(
-            "UDB: Use --enroll --autostart or --setup --autostart from Windows.",
+            "UDB: Use --setup --autostart, or --enroll --autostart, from Windows.",
             file=sys.stderr,
         )
         return 2

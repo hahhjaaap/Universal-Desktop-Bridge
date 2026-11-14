@@ -37,8 +37,11 @@ URL in PowerShell. Existing advanced pairing/connect commands remain supported.
 ## Tool discovery and local permission synchronization
 
 `UDB_ENABLE_LOCAL_TOOL_SYNC=true` opts enrolled devices into full discovery.
-Both checked-in Wrangler entrypoints target staging and set this flag; no
-production configuration is changed. Without the flag, enrollment retains its
+Both checked-in Wrangler entrypoints still target staging and retain the
+existing deployment configuration guard. Set this flag in the authorized
+staging deployment configuration after acceptance; the existing `--keep-vars`
+deployment path preserves it. No production configuration is changed.
+Without the flag, enrollment retains its
 original status-only behavior. Explicit legacy grants, tenant policies and the
 strict issuer-sub pilot remain authoritative and are never widened.
 The existing relay-wide `UDB_ENABLE_OWNER_TOOLS` and

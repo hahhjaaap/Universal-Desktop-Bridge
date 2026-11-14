@@ -5,6 +5,7 @@ The generated JSON is checked into cloudflare/src so Worker discovery never
 needs a live Windows device or a second hand-maintained schema inventory.
 Run with --write after changing a native/Companion tool schema; CI uses --check.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -33,7 +34,9 @@ def render() -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--write", action="store_true", help="regenerate the checked-in JSON")
+    mode.add_argument(
+        "--write", action="store_true", help="regenerate the checked-in JSON"
+    )
     mode.add_argument(
         "--check", action="store_true", help="fail if generated JSON is stale"
     )

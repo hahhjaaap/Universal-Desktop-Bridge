@@ -170,7 +170,7 @@ def load(
 _active: Settings | None = None
 
 
-def activate(settings: Settings) -> Settings | None:
+def activate(settings: Settings | None) -> Settings | None:
     """Temporarily expose settings to the legacy manager entry point."""
     global _active
     previous = _active

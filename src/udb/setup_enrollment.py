@@ -33,9 +33,10 @@ def missing_credential(error):
 class PendingStore:
     def __init__(self, home):
         identity = str(checked(home)).casefold()
-        self.target = "UniversalDesktopBridge/Enrollment/" + hashlib.sha256(
-            identity.encode()
-        ).hexdigest()
+        self.target = (
+            "UniversalDesktopBridge/Enrollment/"
+            + hashlib.sha256(identity.encode()).hexdigest()
+        )
 
     def load(self):
         try:
@@ -58,7 +59,9 @@ class PendingStore:
             cloud_secrets.validate_token(value["token"])
             return value
         except (ValueError, TypeError, KeyError, UnicodeError):
-            raise EnrollmentError("Saved enrollment recovery is invalid; owner repair required") from None
+            raise EnrollmentError(
+                "Saved enrollment recovery is invalid; owner repair required"
+            ) from None
 
     def save_new(self, value):
         if self.load() is not None:
@@ -77,7 +80,10 @@ def commit_pairing(home, pending):
         if paired_cloud(home) != (pending["relay"], pending["id"]):
             raise EnrollmentError("Existing pairing differs; refusing to overwrite")
     try:
-        if not cloud_secrets.on_windows() and not cloud_secrets.token_file(home).exists():
+        if (
+            not cloud_secrets.on_windows()
+            and not cloud_secrets.token_file(home).exists()
+        ):
             existing = None
         else:
             existing = cloud_secrets.load_device_token(home, pending["id"])
@@ -86,7 +92,9 @@ def commit_pairing(home, pending):
             raise
         existing = None
     if existing is not None and existing != pending["token"]:
-        raise EnrollmentError("Existing device credential differs; owner repair required")
+        raise EnrollmentError(
+            "Existing device credential differs; owner repair required"
+        )
     if existing is None:
         cloud_secrets.save_device_token(home, pending["id"], pending["token"])
     if pair.exists():
@@ -106,46 +114,82 @@ def commit_pairing(home, pending):
         temporary.unlink(missing_ok=True)
 
 
-def enroll(home, *, opener=None, store=None, browser=None, pause=time.sleep,
-           clock=time.monotonic, wait=600):
+def enroll(
+    home,
+    *,
+    opener=None,
+    store=None,
+    browser=None,
+    pause=time.sleep,
+    clock=time.monotonic,
+    wait=600,
+):
     home = checked(home)
     if paired_cloud(home):
         raise EnrollmentError("Already paired; enrollment must not run")
     if cloud_secrets.token_file(home).exists():
-        raise EnrollmentError("Existing legacy credential detected; owner repair required")
+        raise EnrollmentError(
+            "Existing legacy credential detected; owner repair required"
+        )
     store = store or PendingStore(home)
     opener = opener or build_opener(NoRedirect())
     pending = store.load()
     if pending is None:
-        pending = {"id": secrets.token_hex(16), "proof": secrets.token_hex(32),
-                   "token": secrets.token_urlsafe(48), "relay": PRIVATE_RELAY}
+        pending = {
+            "id": secrets.token_hex(16),
+            "proof": secrets.token_hex(32),
+            "token": secrets.token_urlsafe(48),
+            "relay": PRIVATE_RELAY,
+        }
         store.save_new(pending)  # BEFORE any network side effect.
     relay, device_id = pending["relay"], pending["id"]
     fingerprint = hashlib.sha256(pending["proof"].encode("ascii")).hexdigest()
     status, result = _request_json(
-        opener, relay + "/v1/setup/enrollments", method="POST",
-        data={"request_id": device_id, "request_secret_sha256": fingerprint,
-              "device_token_sha256": hashlib.sha256(pending["token"].encode("ascii")).hexdigest(),
-              "device_name": "Windows UDB"},
+        opener,
+        relay + "/v1/setup/enrollments",
+        method="POST",
+        data={
+            "request_id": device_id,
+            "request_secret_sha256": fingerprint,
+            "device_token_sha256": hashlib.sha256(
+                pending["token"].encode("ascii")
+            ).hexdigest(),
+            "device_name": "Windows UDB",
+        },
     )
-    if status != 201 or not isinstance(result, dict) or result.get("device_id") != device_id:
+    if (
+        status != 201
+        or not isinstance(result, dict)
+        or result.get("device_id") != device_id
+    ):
         raise EnrollmentError("Enrollment response did not match the saved request")
     print("Approve this Windows device in your browser.")
     print("Device: " + device_id + "  Fingerprint: " + fingerprint[:10].upper())
-    if browser:
-        browser(relay + "/v1/setup/enrollments/" + device_id +
-                "/approval?code=" + fingerprint[:10].upper())
+    approval_url = (
+        relay
+        + "/v1/setup/enrollments/"
+        + device_id
+        + "/approval?code="
+        + fingerprint[:10].upper()
+    )
+    if browser and not browser(approval_url):
+        print("Open the owner approval page: " + approval_url)
     deadline = clock() + wait
     while clock() < deadline:
-        _, state = _request_json(opener, relay + "/v1/setup/enrollments/" + device_id +
-                                 "/status", proof=pending["proof"])
+        _, state = _request_json(
+            opener,
+            relay + "/v1/setup/enrollments/" + device_id + "/status",
+            proof=pending["proof"],
+        )
         if not isinstance(state, dict) or state.get("device_id") != device_id:
             raise EnrollmentError("Enrollment status did not match this Windows device")
         if state.get("state") == "approved":
             commit_pairing(home, pending)
             return device_id
         if state.get("state") == "rejected":
-            raise EnrollmentError("Owner rejected this device; no pairing or permission was saved")
+            raise EnrollmentError(
+                "Owner rejected this device; no pairing or permission was saved"
+            )
         if state.get("state") not in ("pending", "registering"):
             raise EnrollmentError("Unexpected enrollment state; saved request retained")
         pause(min(4, max(0, deadline - clock())))

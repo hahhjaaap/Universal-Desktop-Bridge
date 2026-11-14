@@ -319,9 +319,20 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
             command = subcommands.add_parser(name)
         add_settings(command, suppress=True)
         if name == "setup":
-            command.add_argument("--status", action="store_true", help="Read-only setup diagnostics")
-            command.add_argument("--no-browser", action="store_true", help="Inspect only; make no setup changes")
-            command.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help="Read-only JSON diagnostics")
+            command.add_argument(
+                "--status", action="store_true", help="Read-only setup diagnostics"
+            )
+            command.add_argument(
+                "--no-browser",
+                action="store_true",
+                help="Inspect only; make no setup changes",
+            )
+            command.add_argument(
+                "--json",
+                action="store_true",
+                default=argparse.SUPPRESS,
+                help="Read-only JSON diagnostics",
+            )
         if name == "connect":
             command.add_argument(
                 "--enroll",
@@ -498,8 +509,15 @@ def _run_setup(args: argparse.Namespace, settings: Settings) -> int:
     if args.access or args.offline or args.online:
         raise ValueError("Use udb setup without --access/--offline/--online")
     if getattr(args, "edit", False):
-        print("UDB: --edit is obsolete; using automatic Cloudflare setup.", file=sys.stderr)
-    readonly = args.json or getattr(args, "status", False) or getattr(args, "no_browser", False)
+        print(
+            "UDB: --edit is obsolete; using automatic Cloudflare setup.",
+            file=sys.stderr,
+        )
+    readonly = (
+        args.json
+        or getattr(args, "status", False)
+        or getattr(args, "no_browser", False)
+    )
     with _settings_scope(settings):
         if readonly:
             from .setup import run

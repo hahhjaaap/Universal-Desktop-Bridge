@@ -28,14 +28,19 @@ in an enum. `list_devices` gives `device_id`, `display_name`, `connection`
 Display names are hints only; duplicated names do not affect routing.
 The target `device_id` is removed before forwarding tool arguments to Windows.
 
-The initial tool catalog is discovered from an online authorized Windows agent, then
-stored in the account DO so additional machines do not change schemas. **Limitation:**
-when no device has yet supplied a valid authorized catalog, discovery exposes only
-`list_devices`; refresh the MCP connection after the first authorized online agent
-appears. A first online device with a restricted/older catalog may seed only those
-capabilities; the candidate does not automatically merge differing schemas or guarantee
-40 tools for every agent. Regardless of discovery, target-specific permissions are
-checked on **every call** and Windows always performs its own local authorization.
+The account gateway now provides a stable versioned catalog from its own
+Windows tool classifications and shared family action map, even when every
+machine is offline. Prior persisted `fleet_catalog` snapshots are ignored:
+an old or permission-limited Windows agent cannot narrow account discovery.
+Discovery does not grant Windows permissions; actual calls still revalidate
+ownership, online state, Access and the machine's local grant.
+
+**Known schema limitation (draft):** the canonical six read operations have
+precise argument schemas. Tool families expose shared action enums but general
+`params` records, and standalone privileged operations currently use permissive
+JSON object schemas. The Windows backend remains the argument-validation
+authority. A follow-up generated, build-verified full schema is required before
+this PR should be treated as complete production acceptance.
 
 ## Rollout switches and safety
 

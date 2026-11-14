@@ -544,9 +544,7 @@ def _prepare_startup(args: argparse.Namespace, settings: Settings) -> int | None
     if not (args.detach or args.json or args.access) and onboarding.attended_console():
         with _settings_scope(settings):
             try:
-                result = onboarding.setup_cloud(settings)
-                if result:
-                    return result
+                return onboarding.setup_cloud(settings)
             except KeyboardInterrupt:
                 print("\nSetup canceled.", file=sys.stderr)
                 return 130

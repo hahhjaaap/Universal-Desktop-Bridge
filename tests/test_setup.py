@@ -388,7 +388,9 @@ def test_local_only_autostart_adds_cloud_agent_only_after_attended_consent(
     assert setup.read_journal(selected.home)["autostart_decision"] == "accepted"
 
 
-def test_frozen_integrity_checks_actual_exe_hash_and_never_claims_signature(tmp_path, monkeypatch):
+def test_frozen_integrity_checks_actual_exe_hash_and_never_claims_signature(
+    tmp_path, monkeypatch
+):
     import hashlib
 
     from udb import maintenance
@@ -400,7 +402,9 @@ def test_frozen_integrity_checks_actual_exe_hash_and_never_claims_signature(tmp_
     monkeypatch.setattr(setup.sys, "frozen", True, raising=False)
     monkeypatch.setattr(setup.sys, "executable", str(executable))
     monkeypatch.setattr(maintenance, "installation", lambda: None)
-    monkeypatch.setattr(setup, "runtime_identity", lambda: {"publisher_verified": False})
+    monkeypatch.setattr(
+        setup, "runtime_identity", lambda: {"publisher_verified": False}
+    )
     assert setup.installation_status()["integrity"] == "manifest_sha256"
     assert setup.installation_status()["publisher_verified"] is False
     executable.write_bytes(b"modified executable")

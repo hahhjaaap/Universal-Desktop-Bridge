@@ -145,3 +145,17 @@ def test_explicit_online_uses_paired_cloudflare_device(tmp_path, monkeypatch):
     )
     assert cli._prepare_startup(args, selected) is None
     assert args.online is True and args.offline is False
+
+
+def test_attended_start_does_not_repeat_lifecycle_after_setup(tmp_path, monkeypatch):
+    selected = settings(tmp_path)
+    monkeypatch.setattr(onboarding, "paired_cloud", lambda _: None)
+    monkeypatch.setattr(onboarding, "attended_console", lambda: True)
+    monkeypatch.setattr(owner_command, "headless_state", lambda _: None)
+    calls = []
+    monkeypatch.setattr(onboarding, "setup_cloud", lambda s: calls.append(s) or 0)
+    args = SimpleNamespace(
+        offline=False, online=False, detach=False, json=False, access=None
+    )
+    assert cli._prepare_startup(args, selected) == 0
+    assert calls == [selected]

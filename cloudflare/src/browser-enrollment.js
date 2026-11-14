@@ -63,7 +63,9 @@ export async function routeBrowserEnrollment(request, env, forward, fetchImpl = 
       "Copy this device MCP URL, then add a custom MCP server in ChatGPT Plugins and approve OAuth.") + "</p>" +
       "<p><code id=endpoint>" + escape(endpoint) + "</code></p><button id=copy>Copy MCP URL</button> " +
       "<a href='https://chatgpt.com/plugins' target=_blank rel='noopener noreferrer'>Open ChatGPT Plugins</a>" +
-      "<p id=message></p><p>After approving OAuth, return to a ChatGPT chat and invoke bridge_status once. Opening this page or discovering tools alone does not complete setup verification.</p>" +
+      "<p id=message></p><p>" + (account ?
+        "After approving OAuth, call list_devices, then call bridge_status with the chosen device_id. Opening this page or discovering tools alone does not complete setup verification." :
+        "After approving OAuth, return to a ChatGPT chat and invoke bridge_status once. Opening this page or discovering tools alone does not complete setup verification.") + "</p>" +
       "<p>If custom MCP servers are unavailable for your account, ask your ChatGPT workspace administrator. Windows permissions remain separate.</p>" +
       "<script nonce='" + nonce + "'>document.getElementById('copy').onclick=async()=>{try{await navigator.clipboard.writeText(document.getElementById('endpoint').textContent);document.getElementById('message').textContent='Copied. Paste it into Add custom MCP server.'}catch{document.getElementById('message').textContent='Select and copy the URL above.'}};</script>");
     response.headers.set("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-" + nonce + "'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'");

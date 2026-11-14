@@ -22,6 +22,18 @@ across:
 - Native manager and UI;
 - Fault injection, error propagation and no-retry.
 
+CI now uses `--require-domains`: each of the eight categories must have at least
+**one passing test** on each Python/OS matrix job. A missing or skipped-only
+category makes the simulation report fail closed, even if all other tests
+pass. The JSON report records `missing_domains`, so the failure is inspectable
+without exporting test names, parameters or private content. This is a
+coverage-presence gate, **not** a percentage of executable code covered.
+
+The report explicitly leaves live Cloudflare deployment/ChatGPT OAuth, two
+physical PCs, Windows Sandbox boot, physical input and actual installed
+CPU/RAM/antivirus performance as **unverified**. Those require separate
+owner-authorized end-to-end acceptance, not synthetic assertions.
+
 A test may contribute to multiple groups. Counts are **not code coverage**,
 and categories do not imply every scenario in the domain is tested.
 The report deliberately excludes test parameters, tool outputs and host secrets.

@@ -24,7 +24,9 @@ def render() -> str:
     tools = catalog()["tools"]
     names = [tool.get("name") for tool in tools]
     if not tools or len(names) != len(set(names)):
-        raise SystemExit("Authoritative UDB catalog is empty or contains duplicate names")
+        raise SystemExit(
+            "Authoritative UDB catalog is empty or contains duplicate names"
+        )
     return json.dumps(tools, ensure_ascii=False, indent=2) + "\n"
 
 
@@ -32,7 +34,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--write", action="store_true", help="regenerate the checked-in JSON")
-    mode.add_argument("--check", action="store_true", help="fail if generated JSON is stale")
+    mode.add_argument(
+        "--check", action="store_true", help="fail if generated JSON is stale"
+    )
     args = parser.parse_args()
     generated = render()
     if args.write:
@@ -40,10 +44,14 @@ def main() -> int:
         print(f"Wrote {OUTPUT.relative_to(ROOT)}")
         return 0
     if not OUTPUT.is_file() or OUTPUT.read_text(encoding="utf-8") != generated:
-        print("Fleet catalog is stale. Run: python tools/export_fleet_catalog.py --write",
-              file=sys.stderr)
+        print(
+            "Fleet catalog is stale. Run: python tools/export_fleet_catalog.py --write",
+            file=sys.stderr,
+        )
         return 1
-    print(f"Fleet catalog matches {len(json.loads(generated))} authoritative public tools")
+    print(
+        f"Fleet catalog matches {len(json.loads(generated))} authoritative public tools"
+    )
     return 0
 
 

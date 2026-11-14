@@ -1,8 +1,14 @@
-# UDB Connect — public one-time setup contract
+# UDB Connect — legacy one-time setup design
 
-Status: **design plus a safe client entrypoint, NOT a finished one-click service**.
-No public enrollment, production Cloudflare deployment, ChatGPT app submission,
-user account or device permissions are created by this PR.
+> **Historical compatibility note:** this document describes the earlier
+> `udb connect` / invitation design, not the current first-run procedure.
+> For new devices use [automatic setup](automatic-setup.md). For the opt-in
+> one-plugin multi-device candidate, see [account Fleet MCP](account-fleet-mcp.md).
+> Neither document authorizes production deployment or bypasses owner consent.
+
+Status: **legacy design plus compatibility entrypoint**, not the current setup
+runbook. Public app submission, production Cloudflare deployment and automatic
+ChatGPT OAuth consent are not provided by this legacy command.
 
 ## Private deployment alternative (without public directory listing)
 

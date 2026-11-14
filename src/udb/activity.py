@@ -17,6 +17,7 @@ from .outcomes import native_status, report_outcome
 
 KEEP_ROWS = 2000
 MAX_DETAIL = 2048
+MAX_LOG_INPUT = 4096  # Reject oversized untrusted metadata before regex scans.
 SAFE_FIELDS = frozenset(
     {
         "action",
@@ -59,6 +60,12 @@ DETAIL_FIELDS = frozenset(
 
 def clean(value, limit=240):
     text = str(value)
+    # Metadata is *not* a payload channel. Avoid multiple full-string regex
+    # passes and large intermediate copies for a malicious megabyte-scale
+    # path, tool name or diagnostic. Oversized values fail closed: omitting
+    # their contents also avoids leaking partial credentials at the cutoff.
+    if len(text) > MAX_LOG_INPUT:
+        return "[oversized metadata]"
     text = re.sub(r"(?i)\b(?:sk|sess)-[a-z0-9_-]{8,}", "[redacted]", text)
     text = re.sub(r"(?i)\bBearer\s+\S+", "Bearer [redacted]", text)
     text = re.sub(

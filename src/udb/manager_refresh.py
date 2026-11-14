@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QTreeWidgetItem
 from .activity_gui import READ_ERRORS, render_timeline
 from .manager_job_refresh import should_reload_job_details
 from .manager_widgets import icon
+from .sandbox_refresh_cache import SandboxRestartCache
 from .ui_connection import unknown_indicator, worker_indicator
 from .ui_jobs import job_metadata, visible_jobs
 from .ui_security import (
@@ -585,15 +586,13 @@ class ManagerRefreshMixin:
             "Cloudflare MCP · xác minh bằng bridge_status trong ChatGPT."
         )
         self.detail_status.setText("Cloudflare: " + state)
-        setup = self.agent.state / "sandbox-setup-result.json"
-        needs_restart = False
-        if setup.exists():
-            try:
-                needs_restart = bool(
-                    json.loads(setup.read_text("utf-8-sig")).get("RestartNeeded")
-                )
-            except (OSError, ValueError):
-                pass
+        # Keep the non-security-critical restart hint off the 1.5s hot path.
+        # Live connection state and owner permissions are still read above.
+        cache = getattr(self, "_sandbox_restart_cache", None)
+        if cache is None:
+            cache = SandboxRestartCache()
+            self._sandbox_restart_cache = cache
+        needs_restart = cache.read(self.agent.state / "sandbox-setup-result.json")
         self.sandbox_label.setText(
             (
                 "Sandbox: chưa sẵn sàng. Lần bật tính năng trước yêu cầu khởi động lại Windows."

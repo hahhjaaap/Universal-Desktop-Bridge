@@ -3,6 +3,7 @@
 import { readJson, validRpc } from "./auth.js";
 import { AuthError, authorize, oauthConfig } from "./oauth.js";
 import { accessConfig, authorizeAccess } from "./access.js";
+import { enrolledReadGrant, recordMcpProof } from "./setup-service.js";
 import { isReadTool } from "./read-tools.js";
 import { companionAnnotations, isCompanionTool } from "./companion-tools.js";
 import { edgeCatalog, edgeCatalogSupported } from "./edge-discovery.js";
@@ -216,7 +217,8 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   let user;
   if (mode === "cloudflare-access") {
     // Cloudflare runtime identity or a verified Access-signed JWT only.
-    try { user = await authorizeAccess(access, env, id, request, fetchImpl); }
+    try { user = await authorizeAccess(access, env, id, request, fetchImpl,
+      identity => enrolledReadGrant(env, stub, identity)); }
     catch (failure) {
       // Do not log caller identity, bearer material, JWTs, device IDs, or
       // request bodies. Only static reason classes are permitted in logs.
@@ -325,6 +327,7 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
     } });
   }
   if (useEdgeCatalog && rpc.method === "tools/list") {
+    await probeSetupConnection(env, stub, user);
     const result = { tools: edgeCatalog(user.allowTools)
       .map(tool => fixtureToolDescriptor(tool, user)) };
     console.info(JSON.stringify({ event: "udb_mcp_tools_discovered",
@@ -409,6 +412,7 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
     reply.result = filtered;
   }
   if (rpc.method === "tools/list" && !reply.error) {
+    await probeSetupConnection(env, stub, user);
     if (!Array.isArray(reply.result?.tools)) return error(502, "invalid_device_catalog");
     reply.result = { tools: authorizedToolCatalog(reply.result.tools, user) };
     console.info(JSON.stringify({ event: "udb_mcp_tools_discovered",
@@ -416,6 +420,8 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   }
   if (rpc.method === "tools/call" && rpc.params.name === "bridge_status" &&
       reply.result && !reply.result.isError && Array.isArray(reply.result.content)) {
+    if (env.UDB_ENABLE_BROWSER_ENROLLMENT === "true")
+      await recordMcpProof(stub, user.subject, reply.result);
     const counts = catalogGrantCounts(user);
     let toolsListed = null;
     if (useEdgeCatalog) {
@@ -450,4 +456,16 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
       Object.assign(reply.result, { ttlMs: 0, cacheScope: "private" });
   }
   return json(reply);
+}
+
+async function probeSetupConnection(env, stub, user) {
+  if (env.UDB_ENABLE_BROWSER_ENROLLMENT !== "true" || !user.allowTools.includes("bridge_status")) return;
+  try {
+    const response = await relay(stub, { jsonrpc: "2.0", id: "udb-setup-probe",
+      method: "tools/call", params: { name: "bridge_status", arguments: {} } });
+    if (!response.ok) return;
+    const reply = await response.json();
+    if (reply?.jsonrpc === "2.0" && reply.id === "udb-setup-probe" && !reply.error)
+      await recordMcpProof(stub, user.subject, reply.result, "tools/list+bridge_status");
+  } catch { /* Verification never changes the authenticated discovery result. */ }
 }

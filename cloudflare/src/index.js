@@ -4,6 +4,8 @@ import { HASH, bearer, adminAuthorized, digest, readJson, validRpc, fixedEqual }
 import { newPairing, PAIRING_TTL_MS } from "./pairing.js";
 import { routeEnrollment, handleEnrollmentHub } from "./enrollment.js";
 import { handleMcp, protectedResource } from "./mcp.js";
+import { routeBrowserEnrollment, handleBrowserEnrollment } from "./browser-enrollment.js";
+import { routeDeviceSetup, handleDeviceSetup } from "./setup-service.js";
 import { isParallelReadTool } from "./read-tools.js";
 
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
@@ -41,6 +43,10 @@ export default {
       response.headers.set("X-UDB-Project-Read-Capable", "1");
       return response;
     }
+    const browserEnrollment = await routeBrowserEnrollment(request, env, forward);
+    if (browserEnrollment) return browserEnrollment;
+    const setup = await routeDeviceSetup(request, env, forward);
+    if (setup) return setup;
     const enrollment = await routeEnrollment(request, env, (stub, req) => forward(stub, req));
     if (enrollment) return enrollment;
     if (url.pathname === "/v1/admin/pairings" && request.method === "POST") {
@@ -138,6 +144,27 @@ export class DeviceRelay {
 
   async fetch(request) {
     const path = new URL(request.url).pathname;
+    if (path.startsWith("/enroll-v2/"))
+      return handleBrowserEnrollment(request, this.ctx, this.env);
+    if (path.startsWith("/setup/"))
+      return handleDeviceSetup(request, this.ctx);
+    if (path === "/setup-register" && request.method === "POST") {
+      const b = await readJson(request);
+      if (!/^[a-f0-9]{32}$/.test(b.request_id || "") || !HASH.test(b.device_token_sha256) ||
+          typeof b.owner !== "string" || b.owner.length > 500)
+        return failure(400, "invalid_registration");
+      const registered = await this.ctx.storage.transaction(async txn => {
+        if (await txn.get("enrollment_revoked")) return false;
+        const existing = await txn.get("device_token_sha256");
+        if (existing) return fixedEqual(existing, b.device_token_sha256) &&
+          await txn.get("enrollment_request") === b.request_id &&
+          await txn.get("enrollment_owner") === b.owner;
+        await txn.put({ device_token_sha256: b.device_token_sha256,
+          enrollment_request: b.request_id, enrollment_owner: b.owner });
+        return true;
+      });
+      return registered ? json({ registered: true }, 201) : failure(409, "registration_conflict");
+    }
     if (path.startsWith("/enroll/") && path !== "/enroll/register")
       return handleEnrollmentHub(request, this.ctx, this.env);
     if (path === "/enroll/register" && request.method === "POST") {
@@ -196,17 +223,23 @@ export class DeviceRelay {
       return failure(403, "pairing_failed");
     }
     if (path === "/revoke" && request.method === "DELETE") {
-      await this.ctx.storage.delete([
-        "device_token_sha256", "pairing_token_sha256",
-        "pairing_expires_at", "pairing_attempts",
-      ]);
+      await this.ctx.storage.transaction(async txn => {
+        await txn.put("enrollment_revoked", true);
+        await txn.delete([
+          "device_token_sha256", "pairing_token_sha256", "pairing_expires_at",
+          "pairing_attempts", "enrollment_owner", "setup_proof", "setup_challenge",
+        ]);
+      });
       for (const ws of this.ctx.getWebSockets("device")) ws.close(4001, "device revoked");
       return json({ revoked: true });
     }
     if (path === "/register" && request.method === "PUT") {
       const body = await readJson(request);
       if (!HASH.test(body.device_token_sha256)) return failure(400, "invalid_token_hash");
-      await this.ctx.storage.put("device_token_sha256", body.device_token_sha256);
+      await this.ctx.storage.transaction(async txn => {
+        await txn.put("device_token_sha256", body.device_token_sha256);
+        await txn.delete(["enrollment_owner", "enrollment_request", "setup_proof", "setup_challenge"]);
+      });
       for (const ws of this.ctx.getWebSockets("device")) ws.close(4001, "device token rotated");
       return json({ registered: true });
     }

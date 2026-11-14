@@ -21,8 +21,9 @@ def _print_status(status: dict, *, as_json: bool) -> None:
         return
     if status["state"] == "needs_enrollment":
         print("UDB: This device is not yet enrolled in the private UDB relay.")
-        print("From a trusted local terminal: udb connect --setup")
-        print("A one-time private invitation is required from the relay owner.")
+        print("To request owner approval without an invite: udb connect --enroll")
+        print("The owner approves the request separately; cloud enrollment must be enabled.")
+        print("Legacy private invitations remain available: udb connect --setup")
         print("Never paste a shared administrator key or someone else's device token.")
         return
     if status["state"] == "invalid_pairing":
@@ -52,34 +53,48 @@ def run(
     opener: Callable[[str], object] | None = None,
     setup: bool = False,
     autostart: bool = False,
+    enroll: bool = False,
+    relay: str | None = None,
 ) -> int:
     """Optional owner-attended private setup; never bypass ChatGPT OAuth consent."""
-    if (setup or autostart) and as_json:
-        print("UDB: Setup/autostart cannot run in JSON mode.", file=sys.stderr)
+    if (setup or enroll or autostart) and as_json:
+        print("UDB: Enrollment/setup/autostart cannot run in JSON mode.", file=sys.stderr)
         return 2
-    if autostart and not setup:
+    if setup and enroll:
+        print("UDB: Choose --setup (invite) OR --enroll (owner approval).", file=sys.stderr)
+        return 2
+    if relay and not enroll:
+        print("UDB: --relay requires --enroll.", file=sys.stderr)
+        return 2
+    if autostart and not (setup or enroll):
         print(
-            "UDB: Use --setup --autostart from your own Windows console.",
+            "UDB: Use --enroll --autostart or --setup --autostart from Windows.",
             file=sys.stderr,
         )
         return 2
-    if setup:
-        from .onboarding import attended_console, setup_cloud
+    if setup or enroll:
+        from .onboarding import attended_console
 
         if not attended_console():
             print(
-                "UDB: Private enrollment must run in an attended Windows terminal.",
+                "UDB: Enrollment must run in an attended Windows terminal.",
                 file=sys.stderr,
             )
             return 2
-        # Reuse existing one-time code and Credential Manager pairing; never
-        # accept an admin token or invitation in command-line arguments.
         try:
-            if setup_cloud(settings):
+            if setup:
+                from .onboarding import setup_cloud
+
+                result = setup_cloud(settings)
+            else:
+                from .private_enrollment import PRIVATE_RELAY, run as run_enroll
+
+                result = run_enroll(settings, relay or PRIVATE_RELAY)
+            if result:
                 return 2
         except (OSError, ValueError, RuntimeError, KeyboardInterrupt):
             print(
-                "UDB: Private pairing failed or was canceled; no ChatGPT authorization.",
+                "UDB: Pairing incomplete; no ChatGPT authorization was performed.",
                 file=sys.stderr,
             )
             return 2

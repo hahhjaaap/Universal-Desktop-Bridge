@@ -28,19 +28,24 @@ in an enum. `list_devices` gives `device_id`, `display_name`, `connection`
 Display names are hints only; duplicated names do not affect routing.
 The target `device_id` is removed before forwarding tool arguments to Windows.
 
-The account gateway now provides a stable versioned catalog from its own
-Windows tool classifications and shared family action map, even when every
-machine is offline. Prior persisted `fleet_catalog` snapshots are ignored:
-an old or permission-limited Windows agent cannot narrow account discovery.
-Discovery does not grant Windows permissions; actual calls still revalidate
-ownership, online state, Access and the machine's local grant.
+The account gateway provides a stable versioned catalog even when every
+machine is offline. Its 40 public schemas are generated from the authoritative
+`udb.registry.catalog()` implementation, which introspects the actual Windows
+MCP handlers and merges the Companion schemas and shared action families.
+The generated projection is checked in at
+`cloudflare/src/fleet-tool-catalog.json`; regenerate after changing a tool
+signature with `python tools/export_fleet_catalog.py --write`. CI runs
+`python tools/export_fleet_catalog.py --check` and fails on schema drift.
+Fleet discovery appends only the required top-level `device_id`; a regression
+test verifies every other schema field remains identical to the generated
+Windows catalog, including action-specific family branches.
 
-**Known schema limitation (draft):** the canonical six read operations have
-precise argument schemas. Tool families expose shared action enums but general
-`params` records, and standalone privileged operations currently use permissive
-JSON object schemas. The Windows backend remains the argument-validation
-authority. A follow-up generated, build-verified full schema is required before
-this PR should be treated as complete production acceptance.
+Prior persisted `fleet_catalog` snapshots are ignored: an old or
+permission-limited Windows agent cannot narrow account discovery. Discovery is
+metadata, not a Windows permission grant. Every call still revalidates account
+ownership, device online state, Access identity and the actual local Windows
+permission on that selected machine. No automatic failover or mutation replay
+is introduced.
 
 ## Rollout switches and safety
 

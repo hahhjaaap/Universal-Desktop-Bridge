@@ -465,3 +465,111 @@ def test_agent_lost_during_oauth_never_reports_online_or_complete(
     )
     assert "Cloud Agent: pending" in capsys.readouterr().out
     assert setup.read_journal(selected.home)["phase"] == "cloud_agent"
+
+
+def test_account_fleet_setup_links_existing_device_and_uses_single_mcp_url(
+    selected, monkeypatch, capsys
+):
+    before = pair(selected)
+    report = {**remote(verified=False), "account_fleet": True}
+    monkeypatch.setattr(setup, "device_status", lambda *a: report)
+    calls = []
+
+    def relay(opener, url, **kw):
+        if url.endswith("/fleet/status"):
+            assert kw["proof"] == TOKEN
+            return 200, {"linked": False}
+        if url.endswith("/setup/challenge"):
+            return 200, {"challenge_ready": True}
+        pytest.fail("Unexpected relay request " + url)
+
+    monkeypatch.setattr(setup, "_request_json", relay)
+    monkeypatch.setattr(
+        setup,
+        "link_existing",
+        lambda home, relay, device_id, token, **kw: calls.append(
+            (home, relay, device_id, token)
+        ),
+    )
+    assert (
+        setup.run(
+            selected,
+            browser=lambda _: True,
+            prompt=lambda _: "n",
+            verification_wait=0,
+        )
+        == 2
+    )
+    assert calls == [(selected.home, RELAY, DEVICE, TOKEN)]
+    assert (selected.home / "cloud-pairing.json").read_bytes() == before
+    output = capsys.readouterr().out
+    assert RELAY + "/v1/account/mcp" in output
+    assert TOKEN not in output
+    assert not (selected.home / "state/computer-access.dpapi").exists()
+
+
+def test_fleet_setup_when_already_linked_never_reapproves_or_reenrolls(
+    selected, monkeypatch, capsys
+):
+    before = pair(selected)
+    report = {**remote(verified=True), "account_fleet": True}
+    monkeypatch.setattr(setup, "device_status", lambda *a: report)
+    monkeypatch.setattr(
+        setup,
+        "_request_json",
+        lambda opener, url, **kw: (200, {"linked": True}),
+    )
+    monkeypatch.setattr(
+        setup, "link_existing", lambda *a, **kw: pytest.fail("Already linked")
+    )
+    monkeypatch.setattr(setup, "enroll", lambda *a, **kw: pytest.fail("Already paired"))
+    assert setup.run(selected, prompt=lambda _: "n") == 0
+    assert (selected.home / "cloud-pairing.json").read_bytes() == before
+    assert RELAY + "/v1/account/mcp" in capsys.readouterr().out
+
+
+def test_fleet_link_resumes_same_challenge_without_rotating_credential(
+    selected, monkeypatch
+):
+    before = pair(selected)
+    saved = {}
+    opened = []
+
+    class Store:
+        def load(self):
+            return saved.get("value")
+
+        def save_new(self, value):
+            assert "value" not in saved
+            saved["value"] = dict(value)
+
+    def relay(opener, url, **kw):
+        if url.endswith("/v1/setup/enrollments"):
+            assert kw["proof"] == TOKEN
+            assert kw["data"]["mode"] == "link"
+            assert kw["data"]["device_id"] == DEVICE
+            assert "device_token_sha256" not in kw["data"]
+            return 201, {"device_id": kw["data"]["request_id"], "state": "pending"}
+        assert url.endswith("/status")
+        assert kw["proof"] == saved["value"]["proof"]
+        return 200, {"device_id": saved["value"]["id"], "state": "approved"}
+
+    monkeypatch.setattr(setup_enrollment, "_request_json", relay)
+    for _ in range(2):
+        assert (
+            setup_enrollment.link_existing(
+                selected.home,
+                RELAY,
+                DEVICE,
+                TOKEN,
+                store=Store(),
+                opener=object(),
+                browser=lambda url: opened.append(url) or True,
+            )
+            == DEVICE
+        )
+    assert len(opened) == 2
+    assert all(DEVICE not in value.split("/approval")[0] for value in opened)
+    assert (selected.home / "cloud-pairing.json").read_bytes() == before
+    assert saved["value"]["id"] != DEVICE
+    assert "token" not in saved["value"]

@@ -3,6 +3,7 @@ import { HASH, bearer, digest, fixedEqual, readJson } from "./auth.js";
 import { accessConfig } from "./access.js";
 import { enrollmentEnabled } from "./enrollment.js";
 import { authorizeEnrollmentOwner, ownerEnrollmentConfig } from "./enrollment-owner.js";
+import { fleetEnabled, registerEnrolledDevice } from "./account-fleet.js";
 
 const TTL = 600000, RETAIN = 86400000, HUB = "__udb_browser_enrollment_v2__";
 const json = (b, status = 200) => Response.json(b, { status, headers: {
@@ -49,12 +50,17 @@ export async function routeBrowserEnrollment(request, env, forward, fetchImpl = 
   if (path === "/v1/setup" && request.method === "GET")
     return json({ protocol: 2, browser_enrollment: enabled(env), device_diagnostics: true,
       chatgpt_client_attribution: false,
-      full_tool_catalog: enabled(env) && env.UDB_ENABLE_LOCAL_TOOL_SYNC === "true" });
+      full_tool_catalog: enabled(env) && env.UDB_ENABLE_LOCAL_TOOL_SYNC === "true",
+      account_fleet: fleetEnabled(env) });
   const connect = /^\/v1\/devices\/([a-f0-9]{32})\/connect-chatgpt$/.exec(path);
   if (connect && request.method === "GET") {
-    const endpoint = url.origin + "/v1/devices/" + connect[1] + "/mcp";
+    const account = fleetEnabled(env);
+    const endpoint = url.origin + (account ? "/v1/account/mcp" :
+      "/v1/devices/" + connect[1] + "/mcp");
     const nonce = crypto.randomUUID();
-    const response = page("<p>Copy this device MCP URL, then add a custom MCP server in ChatGPT Plugins and approve OAuth.</p>" +
+    const response = page("<p>" + (account ?
+      "One account MCP URL for all approved Windows devices. Add it once in ChatGPT Plugins and approve OAuth." :
+      "Copy this device MCP URL, then add a custom MCP server in ChatGPT Plugins and approve OAuth.") + "</p>" +
       "<p><code id=endpoint>" + escape(endpoint) + "</code></p><button id=copy>Copy MCP URL</button> " +
       "<a href='https://chatgpt.com/plugins' target=_blank rel='noopener noreferrer'>Open ChatGPT Plugins</a>" +
       "<p id=message></p><p>If custom MCP servers are unavailable for your account, ask your ChatGPT workspace administrator. Windows permissions remain separate.</p>" +
@@ -92,7 +98,7 @@ export async function routeBrowserEnrollment(request, env, forward, fetchImpl = 
         if (!r.ok) return page("<p>This request expired, was handled, or does not match the device.</p>", r.status);
         const b = await r.json();
         return page("<p>Approve only the Windows device in front of you.</p><p>Device: <b>" +
-          escape(b.name) + "</b><br>ID: <code>" + escape(approval[1]) +
+          escape(b.name) + "</b><br>ID: <code>" + escape(b.device_id) +
           "</code><br>Fingerprint: <code>" + escape(code) + "</code></p>" +
           "<form method=post><input type=hidden name=csrf value='" + escape(b.csrf) +
           "'><label><input type=checkbox name=status_only value=yes required> Allow this signed-in owner to read bridge status through MCP. " +
@@ -117,11 +123,26 @@ export async function routeBrowserEnrollment(request, env, forward, fetchImpl = 
     if (request.headers.has("Origin")) return fail(403, "browser_origin_not_supported");
     if (begin) {
       const b = await readJson(request);
+      const link = b.mode === "link";
       if (!ID.test(b.request_id) || !HASH.test(b.request_secret_sha256) ||
-          !HASH.test(b.device_token_sha256) || !label(b.device_name)) return fail(400, "invalid_request");
+          !label(b.device_name) || (link ? !ID.test(b.device_id) ||
+          !fleetEnabled(env) : !HASH.test(b.device_token_sha256) || b.mode !== undefined))
+        return fail(400, "invalid_request");
+      let tokenHash = b.device_token_sha256;
+      if (link) {
+        const token = bearer(request);
+        if (!token) return fail(401, "device_auth_required");
+        const verified = await forward(env.DEVICES.get(env.DEVICES.idFromName(b.device_id)),
+          new Request("https://internal/fleet/link-token", {
+            method: "POST", headers: { Authorization: "Bearer " + token },
+          }));
+        if (!verified.ok) return fail(403, "device_auth_failed");
+        tokenHash = await digest(token);
+      }
       const source = await digest(env.UDB_ADMIN_KEY + ":" + (request.headers.get("CF-Connecting-IP") || "unknown"));
       return forward(stub(env), new Request("https://internal/enroll-v2/request", {
-        method: "POST", body: JSON.stringify({ ...b, source }) }));
+        method: "POST", body: JSON.stringify({ ...b, device_token_sha256: tokenHash,
+          source }) }));
     }
     if (request.method !== "GET") return fail(405, "method_not_allowed");
     const proof = bearer(request);
@@ -134,13 +155,24 @@ async function finish(store, env, record) {
   // Only this exact idempotent registration may be retried after uncertainty.
   // A revocation tombstone in the device object permanently blocks recovery.
   let response;
+  const deviceId = record.mode === "link" ? record.deviceId : record.id;
   try {
-    response = await env.DEVICES.get(env.DEVICES.idFromName(record.id)).fetch(
-      new Request("https://internal/setup-register", { method: "POST",
+    response = await env.DEVICES.get(env.DEVICES.idFromName(deviceId)).fetch(
+      new Request(record.mode === "link" ? "https://internal/fleet/link-owner" :
+        "https://internal/setup-register", { method: "POST",
         body: JSON.stringify({ request_id: record.id, owner: record.owner,
           device_token_sha256: record.tokenHash }) }));
   } catch { return false; }
-  if (response.status !== 201) return false;
+  if (response.status !== (record.mode === "link" ? 200 : 201)) return false;
+  let requestId = record.id;
+  if (record.mode === "link") {
+    try { requestId = (await response.json()).request_id; }
+    catch { return false; }
+  }
+  // The device and account registry cannot share a transaction. An uncertain
+  // index write is reconciled only by this idempotent registering/status path.
+  if (!await registerEnrolledDevice(env, { id: deviceId, request_id: requestId,
+    owner: record.owner, name: record.name })) return false;
   await store.transaction(async txn => {
     const records = await txn.get("setup_enrollments") || [];
     const r = records.find(x => x.id === record.id);
@@ -154,8 +186,10 @@ export async function handleBrowserEnrollment(request, ctx, env) {
   const path = new URL(request.url).pathname, store = ctx.storage, now = Date.now();
   if (path === "/enroll-v2/request" && request.method === "POST") {
     const b = await readJson(request);
+    const link = b.mode === "link";
     if (!ID.test(b.request_id) || !HASH.test(b.request_secret_sha256) ||
-        !HASH.test(b.device_token_sha256) || !HASH.test(b.source) || !label(b.device_name))
+        !HASH.test(b.device_token_sha256) || !HASH.test(b.source) || !label(b.device_name) ||
+        (link ? !ID.test(b.device_id) : b.mode !== undefined || b.device_id !== undefined))
       return fail(400, "invalid_request");
     return store.transaction(async txn => {
       const records = (await txn.get("setup_enrollments") || []).filter(r => r.created > now - RETAIN);
@@ -166,7 +200,8 @@ export async function handleBrowserEnrollment(request, ctx, env) {
       const old = records.find(r => r.id === b.request_id);
       if (old) {
         if (!fixedEqual(old.secretHash, b.request_secret_sha256) ||
-            !fixedEqual(old.tokenHash, b.device_token_sha256) || old.name !== b.device_name)
+            !fixedEqual(old.tokenHash, b.device_token_sha256) || old.name !== b.device_name ||
+            old.mode !== b.mode || old.deviceId !== b.device_id)
           return fail(409, "request_conflict");
         // Only an expired, NEVER approved request can receive another approval
         // window. Identity/secrets stay unchanged; normal recovery is free.
@@ -181,7 +216,8 @@ export async function handleBrowserEnrollment(request, ctx, env) {
       }
       if (limited) return fail(429, "rate_limited");
       records.push({ id: b.request_id, name: b.device_name, secretHash: b.request_secret_sha256,
-        tokenHash: b.device_token_sha256, created: now, expires: now + TTL, state: "pending" });
+        tokenHash: b.device_token_sha256, ...(link ? { mode: "link", deviceId: b.device_id } : {}),
+        created: now, expires: now + TTL, state: "pending" });
       await txn.put("setup_enrollments", records);
       await txn.put("setup_rates", [...recent, { source: b.source, at: now }]);
       return json({ device_id: b.request_id, state: "pending" }, 201);
@@ -214,7 +250,7 @@ export async function handleBrowserEnrollment(request, ctx, env) {
       const csrf = crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "");
       r.csrf = { hash: await digest(csrf), owner: b.owner, expires: now + 120000 };
       await txn.put("setup_enrollments", records);
-      return { status: 200, csrf, name: r.name };
+      return { status: 200, csrf, name: r.name, device_id: r.deviceId || r.id };
     }
     if (!["approve", "reject"].includes(b.action) || !r.csrf || r.csrf.expires <= now ||
         r.csrf.owner !== b.owner || !fixedEqual(r.csrf.hash, await digest(b.csrf || "")) ||
@@ -226,7 +262,7 @@ export async function handleBrowserEnrollment(request, ctx, env) {
     return { status: 200, record: { ...r } };
   });
   if (result.status !== 200) return fail(result.status, "decision_rejected");
-  if (result.csrf) return json({ name: result.name, csrf: result.csrf });
+  if (result.csrf) return json({ name: result.name, csrf: result.csrf, device_id: result.device_id });
   if (result.record.state === "rejected") return json({ rejected: true });
   return await finish(store, env, result.record) ? json({ approved: true }) :
     fail(503, "registration_pending_resume_setup");

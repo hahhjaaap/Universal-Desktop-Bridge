@@ -195,3 +195,138 @@ def enroll(
             raise EnrollmentError("Unexpected enrollment state; saved request retained")
         pause(min(4, max(0, deadline - clock())))
     raise TimeoutError("Approval is still pending. Run udb setup again to resume.")
+
+
+class FleetLinkStore:
+    """Separate, durable owner-confirmation challenge; never stores a device token."""
+
+    def __init__(self, home):
+        identity = str(checked(home)).casefold()
+        self.target = (
+            "UniversalDesktopBridge/FleetLink/"
+            + hashlib.sha256(identity.encode()).hexdigest()
+        )
+
+    def load(self):
+        try:
+            encoded = credentials.load_key(target=self.target)
+        except Exception as error:
+            if missing_credential(error):
+                return None
+            raise
+        try:
+            value = json.loads(base64.urlsafe_b64decode(encoded).decode("ascii"))
+            if (
+                not isinstance(value, dict)
+                or set(value) != {"id", "proof", "device_id", "relay"}
+                or len(value["id"]) != 32
+                or len(value["proof"]) != 64
+                or any(
+                    char not in "0123456789abcdef"
+                    for char in value["id"] + value["proof"]
+                )
+            ):
+                raise ValueError()
+            validate_origin(value["relay"], value["device_id"])
+            return value
+        except (ValueError, TypeError, KeyError, UnicodeError):
+            raise EnrollmentError(
+                "Saved fleet linking challenge is invalid; owner repair required"
+            ) from None
+
+    def save_new(self, value):
+        if self.load() is not None:
+            raise EnrollmentError("Fleet linking is already pending; resume it")
+        encoded = base64.urlsafe_b64encode(
+            json.dumps(value, separators=(",", ":")).encode("ascii")
+        ).decode("ascii")
+        credentials.save_key(encoded, target=self.target)
+
+
+def link_existing(
+    home,
+    relay,
+    device_id,
+    token,
+    *,
+    opener=None,
+    store=None,
+    browser=None,
+    pause=time.sleep,
+    clock=time.monotonic,
+    wait=600,
+):
+    """Link an existing token after attended Access approval; no re-pairing."""
+
+    home = checked(home)
+    validate_origin(relay, device_id)
+    cloud_secrets.validate_token(token)
+    if paired_cloud(home) != (relay, device_id):
+        raise EnrollmentError("Existing pairing changed; refusing fleet link")
+    store = store or FleetLinkStore(home)
+    opener = opener or build_opener(NoRedirect())
+    pending = store.load()
+    if pending is None:
+        pending = {
+            "id": secrets.token_hex(16),
+            "proof": secrets.token_hex(32),
+            "device_id": device_id,
+            "relay": relay,
+        }
+        store.save_new(pending)
+    if pending["relay"] != relay or pending["device_id"] != device_id:
+        raise EnrollmentError(
+            "Saved fleet link belongs to another device; owner repair required"
+        )
+    fingerprint = hashlib.sha256(pending["proof"].encode("ascii")).hexdigest()
+    _, result = _request_json(
+        opener,
+        relay + "/v1/setup/enrollments",
+        method="POST",
+        proof=token,
+        data={
+            "mode": "link",
+            "request_id": pending["id"],
+            "request_secret_sha256": fingerprint,
+            "device_id": device_id,
+            "device_name": "Windows UDB",
+        },
+    )
+    if result.get("device_id") != pending["id"] or result.get("state") not in {
+        "pending",
+        "registering",
+        "approved",
+        "rejected",
+    }:
+        raise EnrollmentError("Fleet link response did not match saved challenge")
+    approval_url = (
+        relay
+        + "/v1/setup/enrollments/"
+        + pending["id"]
+        + "/approval?code="
+        + fingerprint[:10].upper()
+    )
+    if result["state"] == "pending":
+        print("Approve linking this existing Windows pairing to your fleet.")
+        print("Device: " + device_id + "  Fingerprint: " + fingerprint[:10].upper())
+        if browser and not browser(approval_url):
+            print("Open the owner approval page: " + approval_url)
+    deadline = clock() + wait
+    while clock() < deadline:
+        _, state = _request_json(
+            opener,
+            relay + "/v1/setup/enrollments/" + pending["id"] + "/status",
+            proof=pending["proof"],
+        )
+        if state.get("device_id") != pending["id"]:
+            raise EnrollmentError("Fleet link status did not match saved challenge")
+        if state.get("state") == "approved":
+            return device_id
+        if state.get("state") == "rejected":
+            raise EnrollmentError(
+                "Owner rejected fleet linking; existing pairing retained"
+            )
+        if state.get("state") not in {"pending", "registering"}:
+            raise EnrollmentError("Unexpected fleet link state; recovery retained")
+        pause(min(4, max(0, deadline - clock())))
+    raise TimeoutError("Fleet linking is pending. Run udb setup again to resume.")

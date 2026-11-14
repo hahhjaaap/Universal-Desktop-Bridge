@@ -617,3 +617,90 @@ test("rerun renews an expired unapproved window without changing identity, proof
   assert.equal(hub.get("setup_rates").length, 2, "Approved recovery does not renew approval");
   assert.equal((await (await status(f, p)).json()).state, "approved");
 });
+
+test("fleet onboarding indexes approved devices and links an existing token only after owner approval", async () => {
+  const f = fixture(); f.env.UDB_ENABLE_ACCOUNT_FLEET = "true";
+  f.env.UDB_ENABLE_LOCAL_TOOL_SYNC = "true";
+  const initial = await begin(f);
+  assert.equal((await approve(f, initial)).status, 200);
+  const first = await status(f, initial);
+  assert.equal((await first.json()).state, "approved");
+  const device = randomBytes(16).toString("hex");
+  const token = "legacy-device-" + randomBytes(40).toString("hex");
+  const created = await f.env.DEVICES.get(device).fetch(new Request("https://internal/register", {
+    method: "PUT", body: JSON.stringify({ device_token_sha256: hash(token) }),
+  }));
+  assert.equal(created.status, 200);
+  const before = f.objects.get(device).values.get("device_token_sha256");
+  const linkId = randomBytes(16).toString("hex"), proof = randomBytes(32).toString("hex");
+  const request = { mode: "link", request_id: linkId, device_id: device,
+    request_secret_sha256: hash(proof), device_name: "Existing Dell" };
+  const unauthorized = await f.route("/v1/setup/enrollments", "POST", request,
+    { Authorization: "Bearer wrong-token" });
+  assert.equal(unauthorized.status, 403);
+  assert.equal(f.objects.has("__udb_account_fleet_v1__"), false);
+  const start = await f.route("/v1/setup/enrollments", "POST", request,
+    { Authorization: "Bearer " + token });
+  assert.equal(start.status, 201);
+  const pending = { id: linkId, proof, path: "/v1/setup/enrollments/" + linkId };
+  const reviewed = await review(f, pending);
+  assert.equal(reviewed.response.status, 200);
+  assert.ok(reviewed.csrf);
+  assert.match(reviewed.html, /Existing Dell/);
+  assert.ok(reviewed.html.includes(device));
+  assert.equal((await decide(f, pending, reviewed.csrf)).status, 200);
+  assert.equal((await (await status(f, pending)).json()).state, "approved");
+  assert.equal(f.objects.get(device).values.get("device_token_sha256"), before);
+  assert.equal(f.objects.get(device).values.get("enrollment_owner"), TEAM + "#" + OWNER);
+  assert.equal(f.objects.get(device).values.get("enrollment_request"), linkId);
+  const linked = await f.route("/v1/devices/" + device + "/fleet/status", "GET",
+    undefined, { Authorization: "Bearer " + token });
+  assert.deepEqual(await linked.json(), { linked: true });
+  const account = await worker.fetch(new Request(ROOT + "/v1/account/mcp", {
+    method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1,
+      method: "tools/call", params: { name: "list_devices", arguments: {} } }),
+  }), f.env, { access: { aud: MCP, getIdentity: async () => ({ user_uuid: OWNER }) } });
+  assert.equal(account.status, 200);
+  const devices = (await account.json()).result.structuredContent.devices;
+  assert.ok(devices.some(value => value.device_id === initial.id));
+  assert.ok(devices.some(value => value.device_id === device));
+  assert.equal((await f.route("/v1/setup")).status, 200);
+  assert.equal((await (await f.route("/v1/setup")).json()).account_fleet, true);
+  const handoff = await f.route("/v1/devices/" + device + "/connect-chatgpt");
+  assert.ok((await handoff.text()).includes(ROOT + "/v1/account/mcp"));
+});
+
+test("fleet linking never steals a device already owned by a different identity", async () => {
+  const f = fixture(); f.env.UDB_ENABLE_ACCOUNT_FLEET = "true";
+  f.env.UDB_ENABLE_LOCAL_TOOL_SYNC = "true";
+  f.env.UDB_ENROLLMENT_OWNER_SUBJECTS = JSON.stringify([
+    TEAM + "#" + OWNER, TEAM + "#" + OTHER,
+  ]);
+  const device = randomBytes(16).toString("hex");
+  const token = "legacy-device-" + randomBytes(40).toString("hex");
+  await f.env.DEVICES.get(device).fetch(new Request("https://internal/setup-register", {
+    method: "POST", body: JSON.stringify({
+      request_id: device, owner: TEAM + "#" + OWNER, device_token_sha256: hash(token),
+    }),
+  }));
+  const requestId = randomBytes(16).toString("hex"), proof = randomBytes(32).toString("hex");
+  const started = await f.route("/v1/setup/enrollments", "POST", {
+    mode: "link", request_id: requestId, device_id: device,
+    request_secret_sha256: hash(proof), device_name: "Owned PC",
+  }, { Authorization: "Bearer " + token });
+  assert.equal(started.status, 201);
+  const pending = { id: requestId, proof, path: "/v1/setup/enrollments/" + requestId };
+  const examined = await review(f, pending, await jwt(APP, OTHER));
+  assert.equal(examined.response.status, 200);
+  const answer = await decide(f, pending, examined.csrf, "approve", await jwt(APP, OTHER));
+  assert.equal(answer.status, 503);
+  const after = await status(f, pending);
+  assert.equal((await after.json()).state, "registering");
+  assert.equal(f.objects.get(device).values.get("enrollment_owner"), TEAM + "#" + OWNER);
+  assert.equal(f.objects.get(device).values.get("device_token_sha256"), hash(token));
+  const other = await worker.fetch(new Request(ROOT + "/v1/account/mcp", {
+    method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1,
+      method: "tools/call", params: { name: "list_devices", arguments: {} } }),
+  }), f.env, { access: { aud: MCP, getIdentity: async () => ({ user_uuid: OTHER }) } });
+  assert.deepEqual((await other.json()).result.structuredContent.devices, []);
+});

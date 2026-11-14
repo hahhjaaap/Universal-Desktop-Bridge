@@ -523,6 +523,8 @@ def test_account_fleet_setup_links_existing_device_and_uses_single_mcp_url(
     assert (selected.home / "cloud-pairing.json").read_bytes() == before
     output = capsys.readouterr().out
     assert RELAY + "/v1/account/mcp" in output
+    assert "call list_devices" in output
+    assert "bridge_status with the chosen device_id" in output
     assert TOKEN not in output
     assert not (selected.home / "state/computer-access.dpapi").exists()
 
@@ -544,7 +546,10 @@ def test_fleet_setup_when_already_linked_never_reapproves_or_reenrolls(
     monkeypatch.setattr(setup, "enroll", lambda *a, **kw: pytest.fail("Already paired"))
     assert setup.run(selected, prompt=lambda _: "n") == 0
     assert (selected.home / "cloud-pairing.json").read_bytes() == before
-    assert RELAY + "/v1/account/mcp" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert RELAY + "/v1/account/mcp" in output
+    assert "call list_devices" in output
+    assert "bridge_status with the chosen device_id" in output
 
 
 def test_fleet_link_resumes_same_challenge_without_rotating_credential(

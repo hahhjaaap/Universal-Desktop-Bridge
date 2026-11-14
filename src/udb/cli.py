@@ -266,6 +266,18 @@ class _EverydayHelpAction(argparse.Action):
         parser.exit(0)
 
 
+def _exclusive_flags(parser, *names, inherit=False, hidden=False):
+    """Share flags without subcommands overwriting a parent's parsed values."""
+    group = parser.add_mutually_exclusive_group()
+    for name in names:
+        group.add_argument(
+            f"--{name}",
+            action="store_true",
+            default=argparse.SUPPRESS if inherit else False,
+            help=argparse.SUPPRESS if hidden else None,
+        )
+
+
 def _add_subcommands(parser: argparse.ArgumentParser) -> None:
     subcommands = parser.add_subparsers(dest="action", metavar="COMMAND")
     command_names = (
@@ -391,26 +403,8 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
                 help="Opt in to local-only startup at Windows sign-in",
             )
         if name == "start":
-            view = command.add_mutually_exclusive_group()
-            view.add_argument(
-                "--detach", action="store_true", default=argparse.SUPPRESS
-            )
-            view.add_argument(
-                "--follow", action="store_true", default=argparse.SUPPRESS
-            )
-            connection_mode = command.add_mutually_exclusive_group()
-            connection_mode.add_argument(
-                "--offline",
-                action="store_true",
-                default=argparse.SUPPRESS,
-                help=argparse.SUPPRESS,
-            )
-            connection_mode.add_argument(
-                "--online",
-                action="store_true",
-                default=argparse.SUPPRESS,
-                help=argparse.SUPPRESS,
-            )
+            _exclusive_flags(command, "detach", "follow", inherit=True)
+            _exclusive_flags(command, "offline", "online", inherit=True, hidden=True)
         if name == "status":
             command.add_argument(
                 "--watch",
@@ -658,19 +652,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--version", action="version", version=VERSION)
     add_settings(parser, hide_help=True)
     parser.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
-    view = parser.add_mutually_exclusive_group()
-    view.add_argument("--detach", action="store_true", help=argparse.SUPPRESS)
-    view.add_argument("--follow", action="store_true", help=argparse.SUPPRESS)
+    _exclusive_flags(parser, "detach", "follow", hidden=True)
     parser.add_argument("--wait", type=int, default=30, help=argparse.SUPPRESS)
-    connection_mode = parser.add_mutually_exclusive_group()
-    connection_mode.add_argument(
-        "--offline", action="store_true", help=argparse.SUPPRESS
-    )
-    connection_mode.add_argument(
-        "--online",
-        action="store_true",
-        help=argparse.SUPPRESS,
-    )
+    _exclusive_flags(parser, "offline", "online", hidden=True)
     _add_subcommands(parser)
     parser.add_argument("--access", choices=("computer",), help=argparse.SUPPRESS)
 

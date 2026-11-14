@@ -38,11 +38,8 @@ def _regular(path: Path):
 
 
 def _sha256(path):
-    result = hashlib.sha256()
     with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            result.update(block)
-    return result.hexdigest()
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def verified_assets(root):

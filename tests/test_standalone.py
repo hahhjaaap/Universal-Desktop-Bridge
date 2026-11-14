@@ -19,6 +19,18 @@ import pytest
 from udb import build, cli, components, config, desktop, headless, owner_command
 
 
+@pytest.mark.parametrize("size", [0, 1, 262143, 262144, 262145, 1048589])
+def test_file_hashes_preserve_empty_binary_and_multiblock_checksums(tmp_path, size):
+    from udb.companion.extensions import _sha256
+
+    payload = (bytes(range(256)) * (size // 256 + 1))[:size]
+    path = tmp_path / "binary-fixture.dat"
+    path.write_bytes(payload)
+    expected = hashlib.sha256(payload).hexdigest()
+    assert components._sha256(path) == _sha256(path) == expected
+    assert path.read_bytes() == payload
+
+
 @pytest.fixture
 def assets(tmp_path):
     root = tmp_path / "assets"

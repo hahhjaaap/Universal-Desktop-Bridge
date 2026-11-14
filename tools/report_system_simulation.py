@@ -112,11 +112,17 @@ def summarize(path: Path) -> dict:
         ]
         for name in matched or ["uncategorized"]:
             result["domains"][name][status] += 1
+    # Count a domain as exercised only when a real test passed; skipped
+    # and failing tests never establish coverage for that subsystem.
+    result["missing_domains"] = sorted(
+        name for name in DOMAINS if result["domains"][name]["passed"] == 0
+    )
     result["unverified"] = [
         "two real Windows PCs on different networks",
-        "production tunnel availability",
+        "live Cloudflare deployment and ChatGPT OAuth grant",
         "physical mouse/keyboard behavior",
         "Windows Sandbox guest boot",
+        "installed UDB CPU/RAM and antivirus impact",
     ]
     return result
 
@@ -125,12 +131,18 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--junitxml", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument(
+        "--require-domains",
+        action="store_true",
+        help="Fail CI if any required subsystem has zero passing tests",
+    )
     args = parser.parse_args(argv)
     report = summarize(args.junitxml)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=True))
-    return 1 if report["failed"] else 0
+    missing_required = bool(args.require_domains and report["missing_domains"])
+    return int(bool(report["failed"]) or missing_required)
 
 
 if __name__ == "__main__":

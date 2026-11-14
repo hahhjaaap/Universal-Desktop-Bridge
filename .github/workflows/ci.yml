@@ -54,7 +54,7 @@ jobs:
         run: dbus-run-session -- python -m pytest --junitxml="${{ runner.temp }}/udb-tests.xml"
       - name: Report simulated UDB subsystem coverage
         if: success()
-        run: python tools/report_system_simulation.py --junitxml "${{ runner.temp }}/udb-tests.xml" --output "${{ runner.temp }}/udb-simulation.json"
+        run: python tools/report_system_simulation.py --junitxml "${{ runner.temp }}/udb-tests.xml" --output "${{ runner.temp }}/udb-simulation.json" --require-domains
       - name: Benchmark local MCP stdio routing (informational)
         run: python tools/benchmark_rpc.py --calls 100 --parallel 4
       - name: Benchmark MCP startup and mailbox scans (informational)

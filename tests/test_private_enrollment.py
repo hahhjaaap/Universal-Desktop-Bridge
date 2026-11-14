@@ -4,7 +4,6 @@ import hashlib
 import io
 import json
 from types import SimpleNamespace
-from urllib.error import HTTPError
 
 import pytest
 

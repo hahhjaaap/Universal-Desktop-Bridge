@@ -3,6 +3,8 @@ import test from "node:test";
 import worker, { DeviceRelay } from "../src/index.js";
 import { registerEnrolledDevice } from "../src/account-fleet.js";
 import { ENROLLED_CATALOG } from "../src/local-permissions.js";
+import canonicalTools from "../src/fleet-tool-catalog.json" with { type: "json" };
+import { fleetCanonicalCatalog } from "../src/fleet-catalog.js";
 
 const BASE = "https://fleet-test.workers.dev";
 const TEAM = "https://fleet-test.cloudflareaccess.com";
@@ -101,6 +103,34 @@ function fixture() {
     { name: "list_devices", arguments: {} })).json()).result.structuredContent.devices;
   return f;
 }
+
+test("account discovery mirrors the authoritative Windows catalog and preserves exact schemas offline", async () => {
+  const f = fixture();
+  const canonical = fleetCanonicalCatalog();
+  const expected = new Map(canonicalTools.map(tool => [tool.name, tool]));
+  assert.equal(canonical.length, 40);
+  assert.deepEqual(canonical.map(tool => tool.name).sort(), [...expected.keys()].sort());
+  for (const tool of canonical) {
+    assert.deepEqual(tool.inputSchema, expected.get(tool.name).inputSchema, tool.name);
+    assert.ok(Array.isArray(tool.securitySchemes));
+    assert.ok(tool.annotations, "all public tools expose truthful annotations: " + tool.name);
+  }
+  const response = await f.call(OWNER);
+  const listed = (await response.json()).result.tools;
+  assert.equal(listed.length, canonicalTools.length + 1);
+  const byName = new Map(listed.map(tool => [tool.name, tool]));
+  for (const tool of canonicalTools) {
+    const discovered = byName.get(tool.name);
+    assert.ok(discovered, "missing canonical tool " + tool.name);
+    assert.ok(discovered.inputSchema.required.includes("device_id"), tool.name);
+    assert.equal(discovered.inputSchema.properties.device_id.pattern, "^[a-f0-9]{32}$");
+    const schema = structuredClone(discovered.inputSchema);
+    delete schema.properties.device_id;
+    schema.required = schema.required.filter(name => name !== "device_id");
+    if (!schema.required.length) delete schema.required;
+    assert.deepEqual(schema, tool.inputSchema, "device routing must not alter native schema: " + tool.name);
+  }
+});
 
 test("opt-in fleet discovery is a distinct protected resource and unauthenticated calls fail", async () => {
   const f = fixture();

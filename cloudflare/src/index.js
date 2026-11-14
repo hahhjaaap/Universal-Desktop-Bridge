@@ -212,7 +212,7 @@ export class DeviceRelay {
     if (path.startsWith("/enroll-v2/"))
       return handleBrowserEnrollment(request, this.ctx, this.env);
     if (path.startsWith("/setup/"))
-      return handleDeviceSetup(request, this.ctx);
+      return handleDeviceSetup(request, this.ctx, this.env);
     if (path === "/setup-register" && request.method === "POST") {
       const b = await readJson(request);
       if (!/^[a-f0-9]{32}$/.test(b.request_id || "") || !HASH.test(b.device_token_sha256) ||

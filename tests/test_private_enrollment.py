@@ -30,7 +30,9 @@ class FakeRelay:
         if request.method == "POST":
             body = json.loads(request.data)
             assert set(body) == {
-                "request_secret_sha256", "device_token_sha256", "device_name"
+                "request_secret_sha256",
+                "device_token_sha256",
+                "device_name",
             }
             self.request_hash = body["request_secret_sha256"]
             self.token_hash = body["device_token_sha256"]
@@ -54,7 +56,8 @@ def test_new_windows_device_enrolls_without_admin_key_or_invite(tmp_path, monkey
     monkeypatch.setattr(private_enrollment, "paired_cloud", lambda home: None)
     saved = []
     monkeypatch.setattr(
-        private_enrollment, "save_device_token",
+        private_enrollment,
+        "save_device_token",
         lambda home, ident, token: saved.append((ident, token)),
     )
     clock = [0.0]
@@ -63,9 +66,7 @@ def test_new_windows_device_enrolls_without_admin_key_or_invite(tmp_path, monkey
     def pause(seconds):
         clock[0] += seconds
 
-    ident = private_enrollment.enroll_device(
-        tmp_path, opener=relay, pause=pause
-    )
+    ident = private_enrollment.enroll_device(tmp_path, opener=relay, pause=pause)
     assert ident == "a" * 32
     assert len(saved) == 1
     assert saved[0][0] == ident
@@ -84,7 +85,8 @@ def test_no_registration_until_explicit_approval(tmp_path, monkeypatch, state):
     monkeypatch.setattr(private_enrollment, "attended_console", lambda: True)
     monkeypatch.setattr(private_enrollment, "paired_cloud", lambda home: None)
     monkeypatch.setattr(
-        private_enrollment, "save_device_token",
+        private_enrollment,
+        "save_device_token",
         lambda *args: pytest.fail("No token before approval"),
     )
     clock = [0.0]
@@ -112,7 +114,8 @@ def test_refuses_unattended_windows_session_before_network(tmp_path, monkeypatch
 def test_preexisting_pairing_cannot_be_replaced(tmp_path, monkeypatch):
     monkeypatch.setattr(private_enrollment, "attended_console", lambda: True)
     monkeypatch.setattr(
-        private_enrollment, "paired_cloud",
+        private_enrollment,
+        "paired_cloud",
         lambda home: ("https://a.workers.dev", "b" * 32),
     )
     with pytest.raises(ValueError, match="already paired"):
@@ -137,17 +140,44 @@ def test_ambiguous_network_outcome_does_not_persist_or_retry(tmp_path, monkeypat
 
 
 def test_connect_rejects_conflicting_or_json_enrollment(tmp_path, capsys):
-    assert cli.main([
-        "connect", "--home", str(tmp_path), "--enroll", "--setup",
-    ]) == 2
+    assert (
+        cli.main(
+            [
+                "connect",
+                "--home",
+                str(tmp_path),
+                "--enroll",
+                "--setup",
+            ]
+        )
+        == 2
+    )
     assert "OR --enroll" in capsys.readouterr().err
-    assert cli.main([
-        "connect", "--home", str(tmp_path), "--enroll", "--json",
-    ]) == 2
+    assert (
+        cli.main(
+            [
+                "connect",
+                "--home",
+                str(tmp_path),
+                "--enroll",
+                "--json",
+            ]
+        )
+        == 2
+    )
     assert "JSON mode" in capsys.readouterr().err
-    assert cli.main([
-        "connect", "--home", str(tmp_path), "--relay", "https://a.workers.dev",
-    ]) == 2
+    assert (
+        cli.main(
+            [
+                "connect",
+                "--home",
+                str(tmp_path),
+                "--relay",
+                "https://a.workers.dev",
+            ]
+        )
+        == 2
+    )
     assert "--relay requires" in capsys.readouterr().err
 
 
@@ -159,26 +189,33 @@ def test_connect_enrollment_opt_in_calls_client_only_after_attended_check(
     called = []
     monkeypatch.setattr(onboarding, "attended_console", lambda: True)
     monkeypatch.setattr(
-        private_enrollment, "run",
+        private_enrollment,
+        "run",
         lambda config, relay: called.append(relay) or 2,
     )
-    assert connect_chatgpt.run(
-        SimpleNamespace(home=tmp_path, enable_terminal=False),
-        enroll=True, open_browser=False,
-    ) == 2
+    assert (
+        connect_chatgpt.run(
+            SimpleNamespace(home=tmp_path, enable_terminal=False),
+            enroll=True,
+            open_browser=False,
+        )
+        == 2
+    )
     assert called == [private_enrollment.PRIVATE_RELAY]
 
 
-def test_private_client_never_sends_admin_key_or_credential_in_url(tmp_path, monkeypatch):
+def test_private_client_never_sends_admin_key_or_credential_in_url(
+    tmp_path, monkeypatch
+):
     relay = FakeRelay()
     monkeypatch.setattr(private_enrollment, "attended_console", lambda: True)
     monkeypatch.setattr(private_enrollment, "paired_cloud", lambda home: None)
-    monkeypatch.setattr(
-        private_enrollment, "save_device_token", lambda *args: None
-    )
+    monkeypatch.setattr(private_enrollment, "save_device_token", lambda *args: None)
     clock = [0.0]
     monkeypatch.setattr(private_enrollment.time, "monotonic", lambda: clock[0])
     private_enrollment.enroll_device(
-        tmp_path, opener=relay, pause=lambda delay: clock.__setitem__(0, clock[0] + delay),
+        tmp_path,
+        opener=relay,
+        pause=lambda delay: clock.__setitem__(0, clock[0] + delay),
     )
     assert all("?" not in url and "token" not in url for _, url in relay.calls)

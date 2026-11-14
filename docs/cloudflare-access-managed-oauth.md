@@ -17,8 +17,14 @@ tools described in [the project-read acceptance runbook](cloudflare-project-read
 
 ## Required authenticated identity boundary
 
-- The MCP endpoint is `/v1/devices/DEVICE_ID/mcp` on the existing Worker.
-- Set up a path-scoped Cloudflare Access application on that URL only.
+- In legacy per-device mode, the MCP endpoint is
+  `/v1/devices/DEVICE_ID/mcp` on the existing Worker. For the opt-in Fleet
+  candidate, the shared MCP resource is `/v1/account/mcp`; see
+  [account Fleet MCP](account-fleet-mcp.md) for its immutable owner-subject
+  binding and rollout requirements.
+- Set up a path-scoped Cloudflare Access application on the exact resource
+  URL being used; do not assume a device-path application covers the account
+  resource.
 - Configure an Access policy that allows **only the intended owner identity**.
 - Enable **Managed OAuth** under that application's Advanced settings.
 - ChatGPT or another MCP client must perform Access OAuth login and consent.

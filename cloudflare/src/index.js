@@ -2,6 +2,7 @@
 // The desktop retains all UDB owner-grant and tool policy enforcement.
 import { HASH, bearer, adminAuthorized, digest, readJson, validRpc, fixedEqual } from "./auth.js";
 import { newPairing, PAIRING_TTL_MS } from "./pairing.js";
+import { routeEnrollment, handleEnrollmentHub } from "./enrollment.js";
 import { handleMcp, protectedResource } from "./mcp.js";
 import { isParallelReadTool } from "./read-tools.js";
 
@@ -40,6 +41,8 @@ export default {
       response.headers.set("X-UDB-Project-Read-Capable", "1");
       return response;
     }
+    const enrollment = await routeEnrollment(request, env, (stub, req) => forward(stub, req));
+    if (enrollment) return enrollment;
     if (url.pathname === "/v1/admin/pairings" && request.method === "POST") {
       if (!adminAuthorized(request, env)) return failure(401, "admin_auth_required");
       const { device_id, pairing_code, pairing_token_sha256 } = await newPairing();
@@ -135,6 +138,20 @@ export class DeviceRelay {
 
   async fetch(request) {
     const path = new URL(request.url).pathname;
+    if (path.startsWith("/enroll/") && path !== "/enroll/register")
+      return handleEnrollmentHub(request, this.ctx, this.env);
+    if (path === "/enroll/register" && request.method === "POST") {
+      const body = await readJson(request);
+      if (!HASH.test(body.device_token_sha256))
+        return failure(400, "invalid_token_hash");
+      const success = await this.ctx.storage.transaction(async (txn) => {
+        if (await txn.get("device_token_sha256")) return false;
+        await txn.put("device_token_sha256", body.device_token_sha256);
+        return true;
+      });
+      return success ? json({ registered: true }, 201) :
+        failure(409, "already_registered");
+    }
     if (path === "/pair/issue" && request.method === "POST") {
       const body = await readJson(request);
       if (!HASH.test(body.pairing_token_sha256) ||

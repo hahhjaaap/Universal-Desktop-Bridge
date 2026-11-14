@@ -156,6 +156,29 @@ in order, without resetting credentials or loosening permissions:
 Verify the Cloud Agent process and a read-only invocation in ChatGPT.
 
 
+### Private device enrollment without administrator-issued invitations
+
+On a **new Windows machine** (once the reviewed Worker feature has been
+deployed and enabled), open an attended local terminal:
+
+```powershell
+udb connect --enroll
+```
+
+UDB creates a new per-device secret and waits for owner approval; it never
+ships a shared administrative key or reuses another device's identity. The
+trusted relay administrator uses
+`python tools/approve_private_enrollment.py --list` and
+`python tools/approve_private_enrollment.py --approve DEVICE_ID`,
+verifying the code displayed on the physical PC. This flow requires no
+invitation code on the new PC and does not bypass explicit Cloudflare Access,
+ChatGPT OAuth or Windows owner grants. The Worker option
+`UDB_ENABLE_PRIVATE_ENROLLMENT` is **disabled by default**.
+
+For setup and security gates, see
+[private enrollment (Vietnamese)](docs/private-device-enrollment-vi.md).
+The existing attended invitation flow remains compatible.
+
 ### ChatGPT app connection (pilot status)
 
 `udb connect` opens the ChatGPT Plugins page **only after existing

@@ -161,8 +161,11 @@ Provision the following in an isolated staging environment before rollout:
 - Existing DEVICES Durable Object namespace, strong UDB_ADMIN_KEY and private
   enrollment opt-in. No new DO class, binding or namespace migration is needed.
 - UDB_AUTH_MODE=cloudflare-access with the pinned UDB_ACCESS_TEAM_DOMAIN and a
-  managed OAuth Access application for the per-device MCP resources. The
-  existing single-device Access path does not cover newly enrolled devices.
+  managed OAuth Access application/policy covering the exact MCP resource in
+  use: `/v1/account/mcp` for Fleet, or the per-device MCP path for legacy mode.
+  The existing single-device Access path does not automatically cover newly
+  enrolled devices or the account resource. Never apply Access to the WebSocket
+  `/connect` route.
 - A separate browser-login Access application protecting
   /v1/setup/enrollments/*/approval with a distinct application audience. Configure
   UDB_ENROLLMENT_ACCESS_AUD to that audience.

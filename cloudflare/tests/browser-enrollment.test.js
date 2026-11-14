@@ -244,6 +244,11 @@ test("revocation tombstone prevents uncertain enrollment recovery from resurrect
   assert.equal((await (await status(f, p)).json()).state, "registering");
   assert.equal((await deviceStatus(f, p)).status, 403);
   assert.equal(f.objects.get(p.id).values.has("device_token_sha256"), false);
+  const lateLegacy = await f.env.DEVICES.get(p.id).fetch(new Request("https://internal/enroll/register", {
+    method: "POST", body: JSON.stringify({ device_token_sha256: hash(p.token) }),
+  }));
+  assert.equal(lateLegacy.status, 409, "A late v1 enrollment cannot revive a revoked device");
+
 });
 
 test("two devices and accounts cannot share owner grants, device tokens or setup proofs", async () => {

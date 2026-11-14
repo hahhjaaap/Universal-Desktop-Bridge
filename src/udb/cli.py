@@ -128,7 +128,7 @@ SIMPLE_COMMAND_HELP = {
 
 
 SIMPLE_COMMAND_HELP_VI = {
-    "setup": "Tự thiết lập Windows, Cloudflare và kết nối ChatGPT",
+    "setup": "Ghép nối tự động Windows, Cloudflare và ChatGPT",
     "connect": "Kết nối UDB riêng tư với ChatGPT",
     "start": "Khởi động UDB (cũng có thể chỉ gõ udb)",
     "stop": "Dừng UDB",

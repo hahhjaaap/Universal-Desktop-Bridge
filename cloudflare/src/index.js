@@ -172,7 +172,7 @@ export class DeviceRelay {
       if (!HASH.test(body.device_token_sha256))
         return failure(400, "invalid_token_hash");
       const success = await this.ctx.storage.transaction(async (txn) => {
-        if (await txn.get("device_token_sha256")) return false;
+        if (await txn.get("device_token_sha256") || await txn.get("enrollment_revoked")) return false;
         await txn.put("device_token_sha256", body.device_token_sha256);
         return true;
       });
@@ -204,6 +204,7 @@ export class DeviceRelay {
       if (!HASH.test(body.device_token_sha256)) return failure(400, "invalid_token_hash");
       const codeHash = await digest(code);
       const result = await this.ctx.storage.transaction(async (txn) => {
+        if (await txn.get("enrollment_revoked")) return "pairing_revoked";
         if (await txn.get("device_token_sha256")) return "already_registered";
         const expiry = await txn.get("pairing_expires_at");
         const expected = await txn.get("pairing_token_sha256");

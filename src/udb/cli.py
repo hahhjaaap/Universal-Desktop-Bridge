@@ -114,7 +114,7 @@ def add_settings(
 # existing shortcuts, installers, scripts and unattended recovery workflows.
 # A command missing from this table is intentionally *not* advertised in -h.
 SIMPLE_COMMAND_HELP = {
-    "setup": "Pair this Windows device with Cloudflare",
+    "setup": "Set up this Windows device and connect to ChatGPT",
     "connect": "Open ChatGPT authorization for an enrolled UDB device",
     "start": "Start UDB (also the default: udb)",
     "stop": "Stop the UDB headless agent",
@@ -128,7 +128,7 @@ SIMPLE_COMMAND_HELP = {
 
 
 SIMPLE_COMMAND_HELP_VI = {
-    "setup": "Ghép nối máy Windows với Cloudflare",
+    "setup": "Ghép nối tự động Windows, Cloudflare và ChatGPT",
     "connect": "Kết nối UDB riêng tư với ChatGPT",
     "start": "Khởi động UDB (cũng có thể chỉ gõ udb)",
     "stop": "Dừng UDB",
@@ -318,6 +318,21 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         else:
             command = subcommands.add_parser(name)
         add_settings(command, suppress=True)
+        if name == "setup":
+            command.add_argument(
+                "--status", action="store_true", help="Read-only setup diagnostics"
+            )
+            command.add_argument(
+                "--no-browser",
+                action="store_true",
+                help="Inspect only; make no setup changes",
+            )
+            command.add_argument(
+                "--json",
+                action="store_true",
+                default=argparse.SUPPRESS,
+                help="Read-only JSON diagnostics",
+            )
         if name == "connect":
             command.add_argument(
                 "--enroll",
@@ -491,23 +506,26 @@ def _initialize_config(args: argparse.Namespace, settings: Settings) -> int:
 
 
 def _run_setup(args: argparse.Namespace, settings: Settings) -> int:
-    if args.json or args.access or args.offline or args.online:
-        raise ValueError(
-            "Use udb setup directly in your own terminal without --json/--access/--offline"
-        )
+    if args.access or args.offline or args.online:
+        raise ValueError("Use udb setup without --access/--offline/--online")
     if getattr(args, "edit", False):
         print(
-            "UDB: --edit is obsolete; using the normal Cloudflare setup.",
+            "UDB: --edit is obsolete; using automatic Cloudflare setup.",
             file=sys.stderr,
         )
-    from .onboarding import setup_cloud
-
+    readonly = (
+        args.json
+        or getattr(args, "status", False)
+        or getattr(args, "no_browser", False)
+    )
     with _settings_scope(settings):
-        try:
-            return setup_cloud(settings)
-        except KeyboardInterrupt:
-            print("\nSetup canceled.", file=sys.stderr)
-            return 130
+        if readonly:
+            from .setup import run
+
+            return run(settings, readonly=True, json_output=args.json)
+        from .onboarding import setup_cloud
+
+        return setup_cloud(settings)
 
 
 def _prepare_startup(args: argparse.Namespace, settings: Settings) -> int | None:
@@ -526,9 +544,7 @@ def _prepare_startup(args: argparse.Namespace, settings: Settings) -> int | None
     if not (args.detach or args.json or args.access) and onboarding.attended_console():
         with _settings_scope(settings):
             try:
-                result = onboarding.setup_cloud(settings)
-                if result:
-                    return result
+                return onboarding.setup_cloud(settings)
             except KeyboardInterrupt:
                 print("\nSetup canceled.", file=sys.stderr)
                 return 130

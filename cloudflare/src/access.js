@@ -84,7 +84,7 @@ function emailSubject(subject) {
 
 // This function does not trust a client-supplied header. The header must be a
 // valid RS256 JWT signed by the pinned Cloudflare Access team signing key.
-async function verifiedAccessIdentity(request, env, fetchImpl = fetch) {
+export async function verifiedAccessIdentity(request, env, fetchImpl = fetch) {
   const config = accessConfig(env);
   if (!config?.team) throw new AuthError();
   const token = request?.headers?.get("Cf-Access-Jwt-Assertion") || "";
@@ -130,7 +130,7 @@ export async function verifyAccessAssertion(request, env, fetchImpl = fetch) {
 }
 
 export async function authorizeAccess(access, env, deviceId, request = null,
-    fetchImpl = fetch) {
+    fetchImpl = fetch, enrolledGrant = null) {
   const cfg = accessConfig(env);
   if (!cfg) throw new AuthError();
   const mode = env?.UDB_ACCESS_PRINCIPAL_MODE === undefined
@@ -182,6 +182,7 @@ export async function authorizeAccess(access, env, deviceId, request = null,
     }
   }
   let readTools = deviceGrant(env, deviceId, subject);
+  let enrolledStatusOnly = false;
   let stagingFixtureProject;
   const fixtureGrant = env?.UDB_STAGING_FIXTURE_READ_GRANT;
   if (readTools.length === 0 && mode === "email" &&
@@ -196,8 +197,17 @@ export async function authorizeAccess(access, env, deviceId, request = null,
     }
   }
   // Owner tools never replace the independently granted read identity.
+  if (readTools.length === 0 && enrolledGrant && env.UDB_TENANT_POLICY === undefined) {
+    try {
+      const verified = await verifiedAccessIdentity(request, env, fetchImpl);
+      if (verified.email !== (mode === "email" ? subject : verified.email))
+        throw new AuthError();
+      readTools = await enrolledGrant(verified);
+      enrolledStatusOnly = readTools.length === 1 && readTools[0] === "bridge_status";
+    } catch { readTools = []; }
+  }
   if (readTools.length === 0) throw new AuthError("device_grant_missing");
-  const ownerTools = [
+  const ownerTools = enrolledStatusOnly ? [] : [
     ...ownerToolGrant(env, deviceId, subject),
     ...companionToolGrant(env, deviceId, subject),
   ];

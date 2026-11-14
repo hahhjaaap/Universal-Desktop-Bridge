@@ -31,14 +31,13 @@ def route(monkeypatch, *, interactive=True):
     return calls, setups
 
 
-def test_first_interactive_start_opens_setup_without_creating_home(
-    tmp_path, monkeypatch
-):
+def test_first_interactive_start_delegates_lifecycle_to_setup(tmp_path, monkeypatch):
     calls, setups = route(monkeypatch)
     home = tmp_path / "first run"
     previous = config._active
     assert cli.main(["start", "--home", str(home)]) == 0
-    assert len(calls) == 1 and "--offline" in calls[0]
+    # Setup now owns support-process and Cloud Agent startup.
+    assert calls == []
     assert len(setups) == 1 and setups[0].home == home
     assert config._active is previous and not home.exists()
 
@@ -68,7 +67,7 @@ def test_old_tunnel_metadata_never_selects_a_connection(tmp_path, monkeypatch):
     connection = home / "state/connection.json"
     connection.write_text(data)
     assert cli.main(["start", "--home", str(home)]) == 0
-    assert len(calls) == 1 and setups and "--offline" in calls[0]
+    assert calls == [] and len(setups) == 1
     assert connection.read_text() == data
 
 

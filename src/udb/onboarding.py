@@ -28,21 +28,9 @@ def paired_cloud(home):
 
 
 def setup_cloud(settings):
-    if not console_input():
-        raise ValueError("Cloudflare setup requires an attended Windows terminal.")
-    from .connection import cloud_mcp_url
+    from .setup import run
 
-    if not paired_cloud(settings.home):
-        from .cloud_pair import run as pair
-
-        result = pair(settings)
-        if result:
-            return result
-    endpoint = cloud_mcp_url(settings.home)
-    print("Cloudflare MCP: " + endpoint)
-    print("UDB Live activity: udb live or udb live --gui")
-    print("Start the Windows agent with 'udb start'. Use OAuth in " + CHATGPT_URL)
-    return 0
+    return run(settings)
 
 
 def _console_stream(stream):

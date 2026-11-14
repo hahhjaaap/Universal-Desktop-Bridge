@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import uuid
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
@@ -175,7 +176,7 @@ def main():
             "--home",
             str(refused),
             expect_success=False,
-            error_contains="attended Windows terminal",
+            error_contains="attended Windows console",
         )
         assert not refused.exists()
         run("setup", "--local", expect_success=False, error_contains="--local")
@@ -184,7 +185,7 @@ def main():
         paired = root / "paired-home"
         paired.mkdir()
         relay = "https://example.workers.dev"
-        device_id = "a" * 32
+        device_id = uuid.uuid4().hex
         (paired / "cloud-pairing.json").write_text(
             json.dumps({"relay": relay, "device_id": device_id}), encoding="utf-8"
         )
@@ -196,6 +197,16 @@ def main():
                 }
             }
         }
+        pairing_before = (paired / "cloud-pairing.json").read_bytes()
+        setup_report = json.loads(
+            run("setup", "--json", "--home", str(paired), expect_success=False)
+        )
+        assert setup_report["paired"] is True
+        assert setup_report["credential_valid"] is False
+        assert setup_report["failure"] == "credential_unavailable"
+        assert setup_report["chatgpt_connected"] is False
+        assert (paired / "cloud-pairing.json").read_bytes() == pairing_before
+        assert set(path.name for path in paired.iterdir()) == {"cloud-pairing.json"}
         catalog = json.loads(run("tools"))
         manifest = json.loads(run("manifest"))
         info = json.loads(run("build-info"))
@@ -551,6 +562,7 @@ def main():
                         live_activity_logs=True,
                         parallel_capacity=10,
                         cloud_only_mcp_config=True,
+                        setup_readonly_diagnostics=True,
                         bundled_components=list(runtime.get("component_probes", {})),
                     )
                 )

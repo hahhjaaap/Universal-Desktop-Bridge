@@ -124,12 +124,12 @@ async function approve(f, p) {
   assert.equal(r.response.status, 200); assert.ok(r.csrf);
   return decide(f, p, r.csrf);
 }
-async function mcp(f, p, assertion, method = "tools/list", params = {}) {
+async function mcp(f, p, assertion, method = "tools/list", params = {}, access = null) {
   return handleMcp(new Request(ROOT + "/v1/devices/" + p.id + "/mcp", {
     method: "POST", headers: { "Cf-Access-Jwt-Assertion": assertion,
       "Content-Type": "application/json", "MCP-Protocol-Version": "2025-11-25" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-  }), f.env, p.id, f.env.DEVICES.get(p.id), keys);
+  }), f.env, p.id, f.env.DEVICES.get(p.id), keys, access);
 }
 
 test("browser enrollment is opt-in and requires separate pinned owner application", async () => {
@@ -251,6 +251,22 @@ test("native Access owner identity needs no second JWKS request and ignores clie
     assert.equal(fetched, false);
     assert.equal(f.objects.has(p.id), false);
   }
+});
+
+test("native MCP identity binds a newly enrolled device to its owner UUID and status-only grant", async () => {
+  const f = fixture(), p = await begin(f);
+  assert.equal((await approve(f, p)).status, 200);
+  const response = await mcp(f, p, "untrusted-header", "tools/list", {}, runtimeOwner(OWNER, MCP));
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).result.tools.map(t => t.name), ["bridge_status"]);
+  for (const access of [runtimeOwner(OTHER, MCP), runtimeOwner(OWNER, APP),
+    { aud: MCP, getIdentity: async () => ({ email: "synthetic-owner@example.test" }) },
+  ]) {
+    // Even a valid owner JWT cannot override the native account/app identity.
+    assert.equal((await mcp(f, p, await jwt(MCP), "tools/list", {}, access)).status, 403);
+  }
+  assert.equal((await mcp(f, p, "untrusted-header", "tools/call",
+    { name: "computer_execute", arguments: {} }, runtimeOwner(OWNER, MCP))).status, 403);
 });
 
 test("client headers cannot inject runtime approval identity", async () => {

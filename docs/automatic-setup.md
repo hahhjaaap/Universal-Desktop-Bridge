@@ -118,6 +118,9 @@ it is authoritative and request identity headers are ignored. This path needs
 no duplicate signing-key fetch. A wrong application, missing or disallowed
 runtime UUID fails closed, even with an otherwise valid assertion. Without
 native identity, a signed assertion must pass every verification step.
+New-device MCP status grants use the same native account UUID when available,
+with the MCP application's distinct audience, and check the device's stored
+owner. Existing grants and the strict issuer-sub pilot keep their own rules.
 Device fingerprint, short-lived owner/device-bound
 one-use CSRF and same-origin POST remain required. No administrator secret goes
 to the browser or PC.

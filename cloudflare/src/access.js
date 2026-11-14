@@ -155,6 +155,7 @@ export async function authorizeAccess(access, env, deviceId, request = null,
   if (access && access.aud !== cfg.aud) throw new AuthError("access_audience_mismatch");
 
   let subject = null;
+  let runtimeIdentity = null;
   if (mode === "issuer-sub") {
     // Opt-in staging pilot: require the signed assertion even when ctx.access
     // supplies a valid email. The authenticated issuer + account-scoped sub
@@ -183,7 +184,10 @@ export async function authorizeAccess(access, env, deviceId, request = null,
       try {
         if (typeof access.getIdentity === "function") {
           const identity = await access.getIdentity();
-          if (emailSubject(identity?.email)) subject = identity.email;
+          if (emailSubject(identity?.email)) {
+            subject = identity.email;
+            runtimeIdentity = identity;
+          }
         }
       } catch { /* WARP/runtime identity may be unavailable: verify signed header */ }
     }
@@ -213,7 +217,14 @@ export async function authorizeAccess(access, env, deviceId, request = null,
   // Owner tools never replace the independently granted read identity.
   if (readTools.length === 0 && enrolledGrant && env.UDB_TENANT_POLICY === undefined) {
     try {
-      const verified = await verifiedAccessIdentity(request, env, fetchImpl);
+      let verified;
+      if (mode === "email" && runtimeIdentity) {
+        // Native Access is already authenticated. Bind the dynamic grant to
+        // its account UUID, never to email or an overriding request header.
+        if (!cfg.team || typeof runtimeIdentity.user_uuid !== "string" ||
+            !ACCESS_SUB.test(runtimeIdentity.user_uuid)) throw new AuthError();
+        verified = { email: runtimeIdentity.email, sub: runtimeIdentity.user_uuid };
+      } else verified = await verifiedAccessIdentity(request, env, fetchImpl);
       if (verified.email !== (mode === "email" ? subject : verified.email))
         throw new AuthError();
       readTools = await enrolledGrant(verified);

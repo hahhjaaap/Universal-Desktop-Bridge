@@ -50,7 +50,8 @@ export async function routeEnrollment(request, env, forward) {
       const deviceId = crypto.randomUUID().replaceAll("-", "");
       // Cloudflare normally sets CF-Connecting-IP; its hash stays inside the
       // DO and is never returned, logged or persisted outside the hour window.
-      const source = await digest(request.headers.get("CF-Connecting-IP") || "unknown");
+      const source = await digest(env.UDB_ADMIN_KEY + ":" +
+        (request.headers.get("CF-Connecting-IP") || "unknown"));
       return forward(hub(env), new Request("https://internal/enroll/request", {
         method: "POST",
         body: JSON.stringify({ device_id: deviceId, ...body, source }),

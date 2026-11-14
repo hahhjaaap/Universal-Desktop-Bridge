@@ -185,6 +185,16 @@ def test_private_setup_cannot_enable_terminal_at_logon(tmp_path, monkeypatch, ca
     monkeypatch.setattr(onboarding, "attended_console", lambda: True)
     monkeypatch.setattr(onboarding, "setup_cloud", lambda config: 0)
     monkeypatch.setattr(
+        connect_chatgpt,
+        "paired_cloud",
+        lambda home: ("https://unit.workers.dev", "a" * 32),
+    )
+    monkeypatch.setattr(
+        connect_chatgpt,
+        "cloud_mcp_url",
+        lambda home: "https://unit.workers.dev/mcp",
+    )
+    monkeypatch.setattr(
         autostart,
         "run",
         lambda *args, **kwargs: pytest.fail("must not enable autostart"),
@@ -306,3 +316,23 @@ def test_existing_pairing_autostart_cannot_run_in_json_mode(
     )
     assert connect_chatgpt.run(settings(tmp_path), autostart=True, as_json=True) == 2
     assert "cannot run in JSON mode" in capsys.readouterr().err
+
+
+def test_cli_connect_existing_autostart_flag_dispatches_without_setup(
+    tmp_path, monkeypatch
+):
+    recorded = []
+    monkeypatch.setattr(
+        connect_chatgpt,
+        "run",
+        lambda config, **kwargs: recorded.append(kwargs) or 0,
+    )
+    assert (
+        cli.main(["connect", "--home", str(tmp_path), "--autostart", "--no-browser"])
+        == 0
+    )
+    assert len(recorded) == 1
+    assert recorded[0]["autostart"] is True
+    assert recorded[0]["setup"] is False
+    assert recorded[0]["enroll"] is False
+    assert recorded[0]["open_browser"] is False

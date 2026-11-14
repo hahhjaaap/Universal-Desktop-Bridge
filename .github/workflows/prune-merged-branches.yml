@@ -1,0 +1,116 @@
+name: Prune merged feature branches safely
+
+# Never delete tags, history on main, backup branches or active PR heads.
+# Old merged PR heads require a deliberately triggered dry-run/apply.
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Delete verified old merged feature branches (false = audit only)"
+        required: true
+        type: boolean
+        default: false
+      confirmation:
+        description: "For apply=true type PRUNE-MERGED-BRANCHES"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  prune:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Safely prune only unchanged, merged, same-repository PR heads
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const slug = owner + '/' + repo;
+            const inputs = context.payload.inputs || {};
+            const automatic = context.eventName === 'pull_request';
+            const requested = String(inputs.apply) === 'true';
+            const confirmed = inputs.confirmation === 'PRUNE-MERGED-BRANCHES';
+            if (!automatic && requested && !confirmed) {
+              throw new Error('Refusing bulk deletion: confirmation does not match');
+            }
+            const apply = automatic || (requested && confirmed);
+            const allowed = /^(?:chore|ci|cleanup|codex|dependabot|docs|feat|feature|fix|integrate|maintenance|migration|perf|refactor|security|udb)\//;
+            const protectedPrefixes = ['backup/', 'release/', 'hotfix/', 'support/', 'stable/'];
+            const open = await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: 'open', per_page: 100
+            });
+            const openHeads = new Set(open.filter(
+              p => p.head.repo && p.head.repo.full_name === slug
+            ).map(p => p.head.ref));
+            const merged = automatic
+              ? [context.payload.pull_request]
+              : await github.paginate(github.rest.pulls.list, {
+                  owner, repo, state: 'closed', per_page: 100
+                });
+            const candidates = new Map();
+            for (const pr of merged) {
+              if (!pr.merged_at || pr.base.ref !== 'main') continue;
+              if (!pr.head.repo || pr.head.repo.full_name !== slug) continue;
+              const name = pr.head.ref;
+              if (!allowed.test(name) || protectedPrefixes.some(p => name.startsWith(p))) continue;
+              if (name === 'main' || name === 'master' || openHeads.has(name)) continue;
+              if (!candidates.has(name)) candidates.set(name, new Set());
+              candidates.get(name).add(pr.head.sha);
+            }
+            let removed = 0, ready = 0, skipped = 0;
+            for (const [name, heads] of candidates) {
+              const ref = 'heads/' + name;
+              let current;
+              try {
+                current = await github.rest.git.getRef({owner, repo, ref});
+              } catch (error) {
+                if (error.status === 404) { skipped++; continue; }
+                throw error;
+              }
+              if (current.data.object.type !== 'commit' ||
+                  !heads.has(current.data.object.sha)) {
+                console.log('SKIP changed/unmatched ref: ' + name);
+                skipped++;
+                continue;
+              }
+              const branch = await github.rest.repos.getBranch({
+                owner, repo, branch: name
+              });
+              if (branch.data.protected) {
+                console.log('SKIP protected ref: ' + name);
+                skipped++;
+                continue;
+              }
+              ready++;
+              if (!apply) {
+                console.log('DRY RUN would delete verified merged ref: ' + name);
+                continue;
+              }
+              try {
+                await github.rest.git.deleteRef({owner, repo, ref});
+                removed++;
+                console.log('REMOVED merged ref: ' + name);
+              } catch (error) {
+                if (error.status === 404 || error.status === 422) {
+                  console.log('SKIP already removed/protected: ' + name);
+                  skipped++;
+                  continue;
+                }
+                throw error;
+              }
+            }
+            console.log(JSON.stringify({
+              mode: apply ? 'apply' : 'dry-run',
+              candidates: candidates.size,
+              verified: ready,
+              removed,
+              skipped
+            }));

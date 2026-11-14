@@ -34,6 +34,14 @@
   and previously installed Windows releases have not been bulk-deleted.
 - Developer CI for Windows runs `tools/run_windows_pytest.py` to clean up
   test-only Qt resources without overriding failure exit codes.
+- [GitHub merged-branch cleanup](../.github/workflows/prune-merged-branches.yml)
+  keeps `main`, backup/release/protected refs and active PR branches untouched.
+  After review and merge, use **Actions → Prune merged feature branches safely
+  → Run workflow** with `apply=false` first to preview old merged refs. To
+  actually prune only verified unchanged heads, set `apply=true` and enter
+  `PRUNE-MERGED-BRANCHES`. Future merged PR heads are checked one at a time
+  for safe automatic deletion. This does **not** rewrite commits/tags, erase
+  published releases or purge GitHub's historical PR records.
 
 ## Controlled staging and security review (not production enablement)
 
@@ -46,18 +54,23 @@
 
 ## Historical research / dated engineering evidence (not current setup)
 
-The repository retains records useful for regression analysis and threat
+The remaining historical records support regression analysis and threat
 model review. They do **not** supersede the current Cloudflare pairing flow:
 [earlier Cloudflare relay prototype](cloudflare-relay-prototype.md),
-[Tailscale Multi-PC experiment](multi-pc-tailscale.md),
 [enterprise GUI design roadmap](gui-enterprise-roadmap.md),
 [old public-release proposal](public-release-plan.md),
 [staging migration design](cloudflare-staging-deployment.md),
 [current tool families and migration](tool-families.md),
-[historical 59-tool catalog](cloudflare-unified-59.md),
-[simulation evidence](simulation-report.md),
-[dated performance benchmarks](performance.md) and
-[2026-11-09 audit](audit-status-2026-11-09.md).
+[simulation evidence](simulation-report.md) and
+[dated performance benchmarks](performance.md).
+
+Three **unreferenced historical-only** Markdown pages were pruned from the
+active checkout (not from Git history): the discontinued Tailscale Multi-PC
+experiment, the obsolete 59-tool catalog and the 2026-11-09 audit snapshot.
+For investigation, their immutable versions remain accessible in the
+[2026-11-14 pre-cleanup source tree](https://github.com/hahhjaaap/Universal-Desktop-Bridge/tree/9b06d611f62a4c71eb190c872c52d0b3653590bc/docs).
+Cleanup does **not** remove release tags, security audits embedded in
+commits, migration checkpoints, or user rollback data.
 
 UDB Aura Chrome extension and its installation instructions have been retired
 from source. Browser automation uses an owner-scoped private browser; opening

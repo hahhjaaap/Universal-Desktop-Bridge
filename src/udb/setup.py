@@ -358,7 +358,11 @@ def run(
             configure_autostart(safe, state, prompt)
             phase = "chatgpt_authorization"
             state["phase"] = phase
-            endpoint = relay + (\n                "/v1/account/mcp"\n                if fleet\n                else "/v1/devices/" + device_id + "/mcp"\n            )
+            endpoint = relay + (
+                "/v1/account/mcp"
+                if fleet
+                else "/v1/devices/" + device_id + "/mcp"
+            )
             if remote.get("authenticated_mcp_verified") is not True:
                 state.setdefault("challenge", secrets.token_hex(32))
                 save_journal(settings.home, state)

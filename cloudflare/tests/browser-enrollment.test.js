@@ -305,3 +305,25 @@ test("rate limits, public routing and handoff do not expose internal operations 
   assert.ok(!html.includes(ADMIN));
   assert.match(handoff.headers.get("content-security-policy"), /script-src 'nonce-/);
 });
+
+
+test("rerun renews an expired unapproved window without changing identity, proof or token", async () => {
+  const f = fixture(), p = await begin(f);
+  const oldReview = await review(f, p);
+  const hub = f.objects.get("__udb_browser_enrollment_v2__").values;
+  hub.get("setup_enrollments")[0].expires = Date.now() - 1;
+  assert.equal((await status(f, p)).status, 410);
+  const retry = await f.route("/v1/setup/enrollments", "POST", p.data);
+  assert.equal(retry.status, 201);
+  assert.equal((await retry.json()).device_id, p.id);
+  assert.equal((await (await status(f, p)).json()).state, "pending");
+  assert.equal(hub.get("setup_rates").length, 2, "Renewal consumes a rate slot");
+  assert.equal((await decide(f, p, oldReview.csrf)).status, 403);
+  assert.equal(f.objects.has(p.id), false, "Renewal is never approval");
+  assert.equal((await approve(f, p)).status, 200);
+  const stored = f.objects.get(p.id).values.get("device_token_sha256");
+  assert.equal(stored, hash(p.token));
+  await f.route("/v1/setup/enrollments", "POST", p.data);
+  assert.equal(hub.get("setup_rates").length, 2, "Approved recovery does not renew approval");
+  assert.equal((await (await status(f, p)).json()).state, "approved");
+});

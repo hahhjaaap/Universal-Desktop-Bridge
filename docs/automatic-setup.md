@@ -61,10 +61,12 @@ credentials stop setup for owner repair; they never trigger automatic enrollment
 
 Approval expires after 10 minutes, CSRF after 2 minutes, recovery registration
 records after 24 hours, and MCP evidence after 5 minutes within a 30-minute
-challenge. Rejected or expired enrollment remains available for owner diagnosis;
-it is not silently replaced with another identity. Run udb setup again after
-network loss, restart or terminal cancellation. For expired/denied requests,
-contact the relay owner before creating another request.
+challenge. Rejected enrollment remains denied for owner diagnosis. Rerunning setup can
+renew an expired, never-approved request within the normal rate limit, preserving
+the exact device ID, proof and token and invalidating the previous CSRF nonce.
+Renewal never approves a device or revives a revoked credential. Run udb setup
+again after expiry, network loss, restart or terminal cancellation. A rejected
+request requires owner review; setup never silently replaces its identity.
 
 ~~~powershell
 udb setup --status

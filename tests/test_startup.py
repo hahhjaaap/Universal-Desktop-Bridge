@@ -31,9 +31,7 @@ def route(monkeypatch, *, interactive=True):
     return calls, setups
 
 
-def test_first_interactive_start_delegates_lifecycle_to_setup(
-    tmp_path, monkeypatch
-):
+def test_first_interactive_start_delegates_lifecycle_to_setup(tmp_path, monkeypatch):
     calls, setups = route(monkeypatch)
     home = tmp_path / "first run"
     previous = config._active

@@ -141,14 +141,27 @@ export async function handleBrowserEnrollment(request, ctx, env) {
       return fail(400, "invalid_request");
     return store.transaction(async txn => {
       const records = (await txn.get("setup_enrollments") || []).filter(r => r.created > now - RETAIN);
-      const old = records.find(r => r.id === b.request_id);
-      if (old) return fixedEqual(old.secretHash, b.request_secret_sha256) &&
-        fixedEqual(old.tokenHash, b.device_token_sha256) && old.name === b.device_name
-        ? json({ device_id: old.id, state: old.state }, 201) : fail(409, "request_conflict");
       const recent = (await txn.get("setup_rates") || []).filter(r => r.at > now - 3600000);
-      if (records.length >= 200 || records.filter(r => r.state === "pending" && r.expires > now).length >= 20 ||
-          recent.length >= 50 || recent.filter(r => r.source === b.source).length >= 4)
-        return fail(429, "rate_limited");
+      const limited = records.length >= 200 ||
+        records.filter(r => r.state === "pending" && r.expires > now).length >= 20 ||
+        recent.length >= 50 || recent.filter(r => r.source === b.source).length >= 4;
+      const old = records.find(r => r.id === b.request_id);
+      if (old) {
+        if (!fixedEqual(old.secretHash, b.request_secret_sha256) ||
+            !fixedEqual(old.tokenHash, b.device_token_sha256) || old.name !== b.device_name)
+          return fail(409, "request_conflict");
+        // Only an expired, NEVER approved request can receive another approval
+        // window. Identity/secrets stay unchanged; normal recovery is free.
+        if (old.state === "pending" && old.expires <= now) {
+          if (limited) return fail(429, "rate_limited");
+          old.expires = now + TTL;
+          delete old.csrf;
+          await txn.put("setup_enrollments", records);
+          await txn.put("setup_rates", [...recent, { source: b.source, at: now }]);
+        }
+        return json({ device_id: old.id, state: old.state }, 201);
+      }
+      if (limited) return fail(429, "rate_limited");
       records.push({ id: b.request_id, name: b.device_name, secretHash: b.request_secret_sha256,
         tokenHash: b.device_token_sha256, created: now, expires: now + TTL, state: "pending" });
       await txn.put("setup_enrollments", records);

@@ -491,10 +491,15 @@ def test_account_fleet_setup_links_existing_device_and_uses_single_mcp_url(
             (home, relay, device_id, token)
         ),
     )
-    assert setup.run(
-        selected, browser=lambda _: True, prompt=lambda _: "n",
-        verification_wait=0,
-    ) == 2
+    assert (
+        setup.run(
+            selected,
+            browser=lambda _: True,
+            prompt=lambda _: "n",
+            verification_wait=0,
+        )
+        == 2
+    )
     assert calls == [(selected.home, RELAY, DEVICE, TOKEN)]
     assert (selected.home / "cloud-pairing.json").read_bytes() == before
     output = capsys.readouterr().out
@@ -510,15 +515,14 @@ def test_fleet_setup_when_already_linked_never_reapproves_or_reenrolls(
     report = {**remote(verified=True), "account_fleet": True}
     monkeypatch.setattr(setup, "device_status", lambda *a: report)
     monkeypatch.setattr(
-        setup, "_request_json",
+        setup,
+        "_request_json",
         lambda opener, url, **kw: (200, {"linked": True}),
     )
     monkeypatch.setattr(
         setup, "link_existing", lambda *a, **kw: pytest.fail("Already linked")
     )
-    monkeypatch.setattr(
-        setup, "enroll", lambda *a, **kw: pytest.fail("Already paired")
-    )
+    monkeypatch.setattr(setup, "enroll", lambda *a, **kw: pytest.fail("Already paired"))
     assert setup.run(selected, prompt=lambda _: "n") == 0
     assert (selected.home / "cloud-pairing.json").read_bytes() == before
     assert RELAY + "/v1/account/mcp" in capsys.readouterr().out
@@ -545,20 +549,25 @@ def test_fleet_link_resumes_same_challenge_without_rotating_credential(
             assert kw["data"]["mode"] == "link"
             assert kw["data"]["device_id"] == DEVICE
             assert "device_token_sha256" not in kw["data"]
-            return 201, {
-                "device_id": kw["data"]["request_id"], "state": "pending"
-            }
+            return 201, {"device_id": kw["data"]["request_id"], "state": "pending"}
         assert url.endswith("/status")
         assert kw["proof"] == saved["value"]["proof"]
         return 200, {"device_id": saved["value"]["id"], "state": "approved"}
 
     monkeypatch.setattr(setup_enrollment, "_request_json", relay)
     for _ in range(2):
-        assert setup_enrollment.link_existing(
-            selected.home, RELAY, DEVICE, TOKEN,
-            store=Store(), opener=object(),
-            browser=lambda url: opened.append(url) or True,
-        ) == DEVICE
+        assert (
+            setup_enrollment.link_existing(
+                selected.home,
+                RELAY,
+                DEVICE,
+                TOKEN,
+                store=Store(),
+                opener=object(),
+                browser=lambda url: opened.append(url) or True,
+            )
+            == DEVICE
+        )
     assert len(opened) == 2
     assert all(DEVICE not in value.split("/approval")[0] for value in opened)
     assert (selected.home / "cloud-pairing.json").read_bytes() == before

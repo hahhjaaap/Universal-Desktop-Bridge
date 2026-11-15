@@ -37,6 +37,7 @@ def fake_desktop(
                 "reply": "" if incomplete else "Hello! 👋",
                 "truncated": False,
                 "elapsed_ms": 850,
+                "first_reply_ms": 360,
             }
         raise AssertionError(action)
 

@@ -12,6 +12,10 @@ from pathlib import Path
 from udb.companion.processes import ManagedProcess
 
 
+class _LastInputInfo(ctypes.Structure):
+    _fields_ = [("size", w.UINT), ("time", w.DWORD)]
+
+
 class VirtualPointer:
     def __init__(self):
         if os.name != "nt":

@@ -39,7 +39,7 @@ Các hiệu năng đã được cải tiến **ngoài 100-step ledger**:
 - [#173](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/173): memory build hashing, GUI sandbox hint cache, bounded activity metadata.
 - [#176](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/176): đơn giản hóa MCP dispatch path, hashing và admission.
 
-**[#192](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/192) vẫn là draft độc lập** về host mailbox; **không tính cho 31–40**.
+**[#192](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/192) đã merge**, là tối ưu host mailbox độc lập; **không tính cho 31–40**.
 
 ## 3. Ma trận kiểm kê đầy đủ 41 công cụ public
 

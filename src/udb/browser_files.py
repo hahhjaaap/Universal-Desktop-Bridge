@@ -31,11 +31,13 @@ def check_origin(browser, tab, expected):
 
 
 def upload(browser, tab, selector, source, data, expected_origin):
-    check_origin(browser, tab, expected_origin)
+    # Reject invalid local input before paying the CDP origin round trip.
+    # Valid transfers still freshly verify origin before any tab mutation.
     if not isinstance(data, (bytes, bytearray)) or len(data) > MAX_BYTES:
         raise PolicyError("Upload exceeds the 8 MiB browser transfer limit")
     if not isinstance(selector, str) or not selector or len(selector) > 500:
         raise PolicyError("Upload requires one CSS file-input selector")
+    check_origin(browser, tab, expected_origin)
     session = browser.sid(tab)
     browser.call("DOM.getDocument", {"depth": 0}, session)
     expression = Browser._locator_expression(

@@ -14,8 +14,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from udb import browser_batch
-from udb import host_client
+from udb import browser_batch, host_client
 from udb.core import Agent, PolicyError
 from udb.fastpath import compile_plan, gate, matches
 from udb.host_service import HostService

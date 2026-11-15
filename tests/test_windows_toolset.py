@@ -193,7 +193,8 @@ def test_open_chatgpt_mcp_routes_only_fixed_desktop_operation():
         "login_verified": False,
     }
     assert invoked == [("desktop", {"action": "open_chatgpt"})]
-    assert mcp.annotations["open_chatgpt"].model_dump(by_alias=True)["readOnlyHint"] is False
-    assert mcp.annotations["open_chatgpt"].model_dump(by_alias=True)["idempotentHint"] is False
+    annotations = mcp.annotations["open_chatgpt"].model_dump(by_alias=True)
+    assert annotations["readOnlyHint"] is False
+    assert annotations["idempotentHint"] is False
     with pytest.raises(TypeError):
         mcp.functions["open_chatgpt"](url="https://another-site.example")

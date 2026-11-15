@@ -116,7 +116,8 @@ try {
         if([string]::IsNullOrWhiteSpace([string]$r.text) -or
             ([string]$r.text).Length -gt 5000 -or
             [int]$r.wait_ms -lt 500 -or [int]$r.wait_ms -gt 10000 -or
-            [int]$r.limit -lt 1 -or [int]$r.limit -gt 5000) {
+            [int]$r.limit -lt 1 -or [int]$r.limit -gt 5000 -or
+            $r.condition -notin @('exists','first_text')) {
             throw 'Invalid ChatGPT reply observation limits'
         }
         $expected=[string]$r.text
@@ -128,6 +129,7 @@ try {
         )
         $timer=[Diagnostics.Stopwatch]::StartNew()
         $response=''
+        $bestResponse=''
         $complete=$false
         $firstReplyMs=$null
         do {
@@ -138,6 +140,8 @@ try {
             $items=$root.FindAll([Windows.Automation.TreeScope]::Descendants,$condition)
             $sent=$false
             $assistant=$false
+            $sentCount=0
+            $assistantCount=0
             $done=$false
             $response=''
             foreach($node in $items) {
@@ -146,9 +150,11 @@ try {
                 if($value -in @('Đã hoàn tất phản hồi','Response complete','Response finished')) {
                     $done=$true
                 }
-                if($value -ceq $expected) { $sent=$true; continue }
+                if($value -ceq $expected) {
+                    $sentCount++; $sent=$true; continue
+                }
                 if($sent -and $value -in @('ChatGPT đã nói:','ChatGPT said:')) {
-                    $assistant=$true; continue
+                    $assistantCount++; $assistant=$true; continue
                 }
                 if($assistant -and !$response -and $value -and
                     $value -notin @('Hỏi ChatGPT','Ask ChatGPT','Sao chép',
@@ -156,24 +162,31 @@ try {
                     $response=$value
                 }
             }
-            if($sent -and $assistant -and $response -and $null -eq $firstReplyMs){
-                $firstReplyMs=$timer.ElapsedMilliseconds
+            if($sentCount -gt 1 -or $assistantCount -gt 1) {
+                throw 'Ambiguous ChatGPT conversation; do not return a reply'
             }
-            if($sent -and $assistant -and $response -and $done) {
-                $complete=$true; break
+            if($sent -and $assistant -and $response){
+                $bestResponse=$response
+                if($null -eq $firstReplyMs){
+                    $firstReplyMs=$timer.ElapsedMilliseconds
+                }
+                if($done){$complete=$true; break}
+                if($r.condition -eq 'first_text'){break}
             }
             if($timer.ElapsedMilliseconds -ge $wait){break}
             Start-Sleep -Milliseconds 120
         } while($true)
-        $truncated=$response.Length -gt $maxText
+        # Even after a timeout, preserve the last UI-visible answer fragment.
+        # Incomplete text must NEVER be described as a completed answer.
+        $truncated=$bestResponse.Length -gt $maxText
         if($truncated) {
             $n=$maxText
-            if($n -gt 0 -and [char]::IsHighSurrogate($response[$n-1]) -and
-                [char]::IsLowSurrogate($response[$n])) {$n--}
-            $response=$response.Substring(0,$n)
+            if($n -gt 0 -and [char]::IsHighSurrogate($bestResponse[$n-1]) -and
+                [char]::IsLowSurrogate($bestResponse[$n])) {$n--}
+            $bestResponse=$bestResponse.Substring(0,$n)
         }
-        @{ok=$true;completed=$complete;reply=$(if($complete){$response}else{''});
-          elapsed_ms=$timer.ElapsedMilliseconds;
+        @{ok=$true;completed=$complete;partial=(!$complete -and !!$bestResponse);
+          reply=$bestResponse;elapsed_ms=$timer.ElapsedMilliseconds;
           first_reply_ms=$(if($null -eq $firstReplyMs){-1}else{$firstReplyMs});
           truncated=$truncated;
           timeout=(!$complete);replay_safe=$false} |

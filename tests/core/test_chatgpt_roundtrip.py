@@ -175,9 +175,12 @@ def test_roundtrip_auto_discovers_foreground_chrome_without_window_id():
         42 if window_id == "current-window" else None
     )
     desktop.chatgpt_roundtrip = lambda *args: args
-    assert desktop._dispatch(
-        "chatgpt_roundtrip", text="Hello", wait_ms=6000
-    ) == (42, "current-window", "Hello", 6000)
+    assert desktop._dispatch("chatgpt_roundtrip", text="Hello", wait_ms=6000) == (
+        42,
+        "current-window",
+        "Hello",
+        6000,
+    )
 
 
 @pytest.mark.parametrize("wrong_binary", [True, False])

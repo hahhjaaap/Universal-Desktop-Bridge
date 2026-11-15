@@ -17,7 +17,7 @@ function Test-ChatGPTReplyCandidate([string]$value) {
     # Never report this UI chrome as the first assistant response.
     if([string]::IsNullOrWhiteSpace($value)){return $false}
     $trimmed=$value.Trim()
-    if($trimmed -match '^(ChatGPT có thể mắc lỗi|ChatGPT can make mistakes)([.!?:\\s]|$)'){
+    if($trimmed -match '^(ChatGPT có thể mắc lỗi|ChatGPT can make mistakes)([.!?:\s]|$)'){
         return $false
     }
     if($trimmed -in @(

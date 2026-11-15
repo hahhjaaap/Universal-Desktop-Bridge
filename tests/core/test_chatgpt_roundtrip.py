@@ -63,6 +63,7 @@ def test_two_uia_phases_with_one_guarded_input_and_one_reply_poll():
     assert result["replay_safe"] is False
     assert result["response_observed_in_ui"] is True
     assert result["timings_ms"]["reply_wait"] == 850
+    assert result["timings_ms"]["reply_first_text"] == 360
     assert [op[:2] for op in calls] == [
         ("uia", "chatgpt_prepare"),
         ("desktop", "type"),

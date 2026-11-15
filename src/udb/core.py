@@ -540,29 +540,28 @@ class Agent(AutonomyMixin):
             visited += 1
             if visited > 2000:
                 raise PolicyError("Source tree too large; register a narrower folder")
+            # Build the parent Path once per directory, not per candidate
+            # file. Check inexpensive suffixes before scoped authorization;
+            # every traversed folder and accepted file remains revalidated.
+            parent_path = Path(parent)
             safe_dirs = []
             for d in dirs:
                 try:
-                    self.path(project, (Path(parent) / d).relative_to(root).as_posix())
+                    self.path(project, (parent_path / d).relative_to(root).as_posix())
                     safe_dirs.append(d)
                 except PolicyError:
                     pass
             dirs[:] = safe_dirs
             for name in files:
-                if Path(name).suffix.lower() not in SOURCE_EXT:
+                if os.path.splitext(name)[1].lower() not in SOURCE_EXT:
                     continue
-                rel = (Path(parent) / name).relative_to(root).as_posix()
-                # Do not read a 2001st eligible source once the manifest
-                # capacity has been reached. All accepted files still pass
-                # through fresh owner/project path validation.
-                if len(manifest) >= 2000:
-                    raise PolicyError("Source snapshot limit: 16 MiB / 2000 files")
+                rel = (parent_path / name).relative_to(root).as_posix()
                 try:
                     data = self.read_bytes(project, rel)
                 except (PolicyError, UnicodeError):
                     continue
                 total += len(data)
-                if total > 16 * 1024 * 1024:
+                if total > 16 * 1024 * 1024 or len(manifest) >= 2000:
                     raise PolicyError("Source snapshot limit: 16 MiB / 2000 files")
                 manifest[rel] = digest(data)
         return manifest

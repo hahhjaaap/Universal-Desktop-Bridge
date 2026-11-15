@@ -54,7 +54,10 @@ async function getKeys(url, fetchImpl, refresh = false) {
   let response;
   let stage = "fetch";
   try {
-    response = await fetchImpl(url, { redirect: "error", signal: AbortSignal.timeout(3000),
+    // Cloudflare Workers does not implement Request.redirect="error". It throws
+    // TypeError before the network request. Manual mode never follows a
+    // redirect; the strict HTTP 200 + JSON check below rejects 3xx safely.
+    response = await fetchImpl(url, { redirect: "manual", signal: AbortSignal.timeout(3000),
       headers: { accept: "application/json" } });
     stage = "response";
     if (response.status !== 200 ||

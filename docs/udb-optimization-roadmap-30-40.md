@@ -16,7 +16,7 @@
 | 33 | Preserve POSIX case-sensitive `.json` detection | Regression test added, executed by Linux CI when green |
 | 34 | Keep exactly one directory listing and do not open/execute pending commands | Regression tests for one `os.listdir` and no `Path.open` added |
 | 35 | Replace repeated reply glob/stat with bounded-on-entry `os.scandir` metadata | `_prune_replies` updated |
-| 36 | Refuse redirected reply entries during cleanup | `DirEntry.is_file(follow_symlinks=False)`; regression ensures external target is untouched |
+| 36 | Refuse redirected reply entries during cleanup | `DirEntry.is_file(follow_symlinks=False)` and `reject_links(folder)`; regressions cover both linked files and a replaced linked directory |
 | 37 | Preserve 120-second reply expiry and cleanup error isolation | Regression covers stale/fresh replies, unrelated names, directories and a missing folder |
 | 38 | Compare old vs new mixed-inbox paths without user files | Informational benchmark now includes both latencies and exact result parity |
 | 39 | Pass full Windows/Linux Python CI, lint, packaging and security regressions | **Pending** GitHub Actions; never claim success from merely adding tests |

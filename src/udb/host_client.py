@@ -8,6 +8,7 @@ import re
 import time
 import uuid
 from pathlib import Path
+from time import perf_counter_ns
 
 from . import hyperspeed_perf as perf
 from .core import PolicyError, reject_links
@@ -113,7 +114,8 @@ def status(agent):
 
 
 def command(agent, op, **args):
-    perf.configure(agent.state)
+    if hasattr(agent, "state"):
+        perf.configure(agent.state)
     s = status(agent)
     if op == "computer" and args.get("mode") == "status" and not s.get("worker_ready"):
         from .computer import status_report
@@ -162,7 +164,7 @@ def command(agent, op, **args):
     if len(list(inbox.iterdir())) >= 8:
         raise PolicyError("Host command queue full; retry later")
     rid = uuid.uuid4().hex
-    mailbox_started = time.perf_counter_ns()
+    mailbox_started = perf_counter_ns()
     until = time.time() + 25
     wait_deadline = time.monotonic() + 27
     payload = dict(id=rid, expires=until, op=op, args=args)

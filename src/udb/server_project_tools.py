@@ -25,10 +25,14 @@ def register_project_tools(mcp, agent, read, propose):
 
     @mcp.tool(annotations=read)
     def list_files(
-        project: str, path: str = ".", offset: int = 0, limit: int = 100
+        project: str,
+        path: str = ".",
+        offset: int = 0,
+        limit: int = 100,
+        after: str = "",
     ) -> dict:
-        """List a project folder, excluding protected data and credentials."""
-        return agent.listing(project, path, offset, limit)
+        """List safe project files. Use next_after for stable keyset pagination."""
+        return agent.listing(project, path, offset, limit, after)
 
     @mcp.tool(annotations=read)
     def read_file(project: str, path: str) -> dict:

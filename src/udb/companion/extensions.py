@@ -9,6 +9,7 @@ from __future__ import annotations
 import fnmatch
 import hashlib
 import os
+import stat
 import time
 from pathlib import Path
 from typing import Any
@@ -55,15 +56,13 @@ def _source_file(files, value: str, expected_sha256: str = "") -> Path:
 
 def _file_stat(rt, a):
     p = rt.files.path(a["path"])
-    stat = p.stat()
+    metadata = p.stat()
     relative = str(p.relative_to(rt.files.root))
-    if p.is_file():
-        if stat.st_size > MAX_HASH:
-            return (
-                f"File: {relative}\nBytes: {stat.st_size}\nSHA256: skipped (>256 MiB)"
-            )
-        return f"File: {relative}\nBytes: {stat.st_size}\nSHA256: {_sha256(p)}"
-    if p.is_dir():
+    if stat.S_ISREG(metadata.st_mode):
+        if metadata.st_size > MAX_HASH:
+            return f"File: {relative}\nBytes: {metadata.st_size}\nSHA256: skipped (>256 MiB)"
+        return f"File: {relative}\nBytes: {metadata.st_size}\nSHA256: {_sha256(p)}"
+    if stat.S_ISDIR(metadata.st_mode):
         return f"Directory: {relative}"
     return f"Other: {relative}"
 
@@ -153,16 +152,24 @@ def _file_read_lines(rt, a):
         raise ValueError("Read-lines limit: 8 MiB; use file_read byte paging")
     start = max(0, int(a.get("offset", 0)))
     length = max(1, min(250, int(a.get("length", 50))))
-    lines = p.read_text(encoding="utf-8").splitlines()
-    selected = lines[start : start + length]
-    numbered = [f"{start + n + 1}: {line[:1000]}" for n, line in enumerate(selected)]
-    data = "\n".join(numbered)
+    selected = []
+    total = 0
+    # Retain str.splitlines() semantics for CRLF and Unicode separators,
+    # without loading an 8-MiB document and all its lines into memory.
+    with p.open("r", encoding="utf-8") as stream:
+        for physical in stream:
+            for line in physical.splitlines():
+                if start <= total < start + length:
+                    selected.append(f"{total + 1}: {line[:1000]}")
+                total += 1
+    data = "\n".join(selected)
     cropped = len(data) > 11000
     if cropped:
         data = data[:11000]
     return (
-        f"Lines: {start + 1}-{start + len(selected)} of {len(lines)} | "
-        f"Next offset: {start + len(selected)} | Output clipped: {cropped}\n" + data
+        f"Lines: {start + 1}-{start + min(length, max(0, total - start))} "
+        f"of {total} | Next offset: {start + len(selected)} | "
+        f"Output clipped: {cropped}\n" + data
     )
 
 

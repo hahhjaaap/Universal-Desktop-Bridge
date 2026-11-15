@@ -65,7 +65,7 @@
   },
   {
     "name": "list_files",
-    "description": "List a project folder, excluding protected data and credentials.",
+    "description": "List safe project files. Use next_after for stable keyset pagination.",
     "inputSchema": {
       "properties": {
         "project": {
@@ -86,6 +86,11 @@
           "default": 100,
           "title": "Limit",
           "type": "integer"
+        },
+        "after": {
+          "default": "",
+          "title": "After",
+          "type": "string"
         }
       },
       "required": [

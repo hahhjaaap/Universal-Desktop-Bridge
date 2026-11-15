@@ -15,7 +15,9 @@ from udb import host_service
 from udb.host_service import HostService, pending_inbox_commands
 
 
-def test_pending_filters_before_sort_but_preserves_os_suffix_rules(tmp_path, monkeypatch):
+def test_pending_filters_before_sort_but_preserves_os_suffix_rules(
+    tmp_path, monkeypatch
+):
     folder = tmp_path / "inbox"
     folder.mkdir()
     for name in (

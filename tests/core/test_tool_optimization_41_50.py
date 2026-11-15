@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import struct
+import time
 import tracemalloc
 import zlib
 
@@ -17,8 +18,7 @@ from udb import desktop_vm as vm
 from udb import sandbox
 from udb.core import Agent, PolicyError
 from udb.server_project_tools import register_project_tools
-
-from .test_desktop_vm import desktop as guest_desktop_fixture
+from udb.sandbox import reserve_vm
 
 
 @pytest.fixture
@@ -29,6 +29,32 @@ def project(tmp_path):
     agent.register_local("demo", str(root), True)
     (root / "hello.py").write_text("x = 1\n", encoding="utf-8")
     return agent, root
+
+
+@pytest.fixture
+def guest_desktop_fixture(tmp_path):
+    agent = Agent(tmp_path / "bridge")
+    root = tmp_path / "source"
+    root.mkdir()
+    (root / "hello.py").write_text("x=1\n", encoding="utf-8")
+    agent.register_local("demo", str(root), True)
+    sid = "c" * 32
+    source = agent.state / "desktops" / sid / "input"
+    output = source.parent / "output"
+    (source / "commands").mkdir(parents=True)
+    (output / "replies").mkdir(parents=True)
+    info = {
+        "kind": "desktop",
+        "expires": time.time() + 60,
+        "task": "Guest fixture",
+        "permissions": {},
+        "project": "demo",
+    }
+    reserve_vm(agent, sid, info)
+    (output / "ready.json").write_text(
+        json.dumps({"session_id": sid, "state": {"width": 800, "height": 600}})
+    )
+    return agent, sid, source, output
 
 
 @pytest.mark.parametrize(

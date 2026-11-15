@@ -11,6 +11,23 @@ function Observe-State([scriptblock]$Check) {
         Start-Sleep -Milliseconds 25
     } while($true)
 }
+function Test-ChatGPTReplyCandidate([string]$value) {
+    # A ChatGPT accessibility tree can expose its persistent footer after
+    # the assistant speaker label but before any real generated text.
+    # Never report this UI chrome as the first assistant response.
+    if([string]::IsNullOrWhiteSpace($value)){return $false}
+    $trimmed=$value.Trim()
+    if($trimmed -match '^(ChatGPT có thể mắc lỗi|ChatGPT can make mistakes)([.!?:\s]|$)'){
+        return $false
+    }
+    if($trimmed -in @(
+        'Hỏi ChatGPT','Ask ChatGPT','Sao chép','Copy',
+        'Phản hồi mới nhất','Latest response',
+        'Chính sách quyền riêng tư','Privacy Policy',
+        'Điều khoản sử dụng','Terms of Use'
+    )){return $false}
+    return $true
+}
 try {
     Add-Type -AssemblyName UIAutomationClient
     Add-Type -AssemblyName UIAutomationTypes
@@ -156,9 +173,7 @@ try {
                 if($sent -and $value -in @('ChatGPT đã nói:','ChatGPT said:')) {
                     $assistantCount++; $assistant=$true; continue
                 }
-                if($assistant -and !$response -and $value -and
-                    $value -notin @('Hỏi ChatGPT','Ask ChatGPT','Sao chép',
-                                    'Copy','Phản hồi mới nhất','Latest response')) {
+                if($assistant -and !$response -and (Test-ChatGPTReplyCandidate $value)) {
                     $response=$value
                 }
             }

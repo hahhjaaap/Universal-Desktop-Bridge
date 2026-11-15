@@ -59,11 +59,29 @@ new chat, or wake an inactive second ChatGPT instance.
 ```json
 {
   "action": "chatgpt_roundtrip",
-  "window_id": "current-id-from-computer_desktop-list",
   "text": "Hello",
   "wait_ms": 6000
 }
 ```
+
+Implementation detail: the optimized path uses a targeted UI Automation
+**prepare** (verify exact page, blank editor and focus) and **commit**
+(verify exact typed text and invoke one Send button) around UDB's guarded
+SendInput. It avoids the generic full UI snapshot and repeated UIA
+read/focus/invoke processes. It still checks the same current-user access,
+desktop readiness and foreground window. These optimizations affect UDB
+overhead, not ChatGPT's reply-generation time. The timing report now separates
+first visible reply text from full response completion; only the latter sets
+`status=complete`.
+
+For lowest remote latency, omit `window_id`: UDB locates a **single
+currently foreground** window whose title is exactly `ChatGPT - Google
+Chrome`, verifies its process is genuine Chrome, and binds that local
+observation to this one request. If Chrome is in the background, the window
+is ambiguous, or the binary cannot be verified, UDB refuses without moving
+focus or submitting. A fresh `window_id` from `computer_desktop(list)` is
+still supported for explicit targeting. Do not use a different URL or
+browser title as a fallback.
 
 The operation:
 1. Verifies that UI Automation exposes an untruncated `ChatGPT`

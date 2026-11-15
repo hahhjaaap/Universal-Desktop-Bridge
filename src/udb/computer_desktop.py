@@ -342,35 +342,24 @@ class Desktop:
             raise PolicyError("ChatGPT reply wait_ms must be 500..10000")
 
         started = time.monotonic()
-        observed = self.uia(hwnd, "snapshot")
-        rows = observed.get("elements", [])
-        if observed.get("truncated") or not isinstance(rows, list):
-            raise PolicyError("ChatGPT page cannot be confirmed; nothing sent")
-        document = any(
-            row.get("control_type") == "ControlType.Document"
-            and row.get("name") == "ChatGPT"
-            for row in rows
-        )
-        editor = [
-            row
-            for row in rows
-            if row.get("control_type") == "ControlType.Edit"
-            and row.get("name") == "Hỏi ChatGPT"
-            and not row.get("offscreen")
-        ]
-        previous_response = any(
-            row.get("control_type") == "ControlType.Text"
-            and row.get("name") in ("ChatGPT đã nói:", "ChatGPT said:")
-            for row in rows
-        )
-        if not document or len(editor) != 1 or previous_response:
-            raise PolicyError(
-                "Expected an empty Vietnamese ChatGPT conversation; "
-                "existing messages and other websites are refused"
-            )
-        # The existing exact-match submit path checks owner pause, draft
-        # emptiness, focus and exact post-typing UIA readback before Invoke.
-        sent = self.verified_submit(hwnd, window_id, text, "Hỏi ChatGPT", "", "Gửi")
+        # One targeted UIA pass checks this exact ChatGPT document, blank
+        # editor, and absent prior assistant messages, then focuses the editor.
+        # A second pass verifies *exact* text and invokes Send once.
+        # Physical typing still uses the original owner-guarded SendInput.
+        self.uia(hwnd, "chatgpt_prepare", text=text)
+        self._dispatch("type", window_id=window_id, text=text)
+        control = getattr(self, "control", None)
+        if control:
+            control.check()
+        if self.gui.GetForegroundWindow() != hwnd:
+            raise PolicyError("Foreground changed; nothing submitted")
+        confirmed = self.uia(hwnd, "chatgpt_commit", text=text)
+        sent = {
+            "submit_requested": confirmed.get("invoked") is True,
+            "verified_text": confirmed.get("verified_text") is True,
+        }
+        if not sent["submit_requested"] or not sent["verified_text"]:
+            raise PolicyError("ChatGPT submit not verified; do not retry")
         submitted_ms = round((time.monotonic() - started) * 1000)
         # One UIA process polls locally instead of one remote MCP RPC/poll.
         # If UIA fails after sending, outcome is unknown and not replay-safe.
@@ -393,6 +382,7 @@ class Desktop:
                 "desktop_operation": total_ms,
                 "verified_submit": submitted_ms,
                 "reply_wait": round(reply.get("elapsed_ms", 0)),
+                "reply_first_text": round(reply.get("first_reply_ms", -1)),
             },
             "replay_safe": False,
             "login_verified": False,
@@ -625,6 +615,23 @@ class Desktop:
             return self.open_chrome_tab(text)
         if action == "open_chatgpt":
             return self.open_chatgpt()
+        if action == "chatgpt_roundtrip" and not window_id:
+            # Resolve only an already-foreground, visible, real Chrome window.
+            # A unique local observation avoids another remote list RPC.
+            rows = self.listing()["windows"]
+            candidates = [
+                row
+                for row in rows
+                if row["title"] == "ChatGPT - Google Chrome"
+                and row["foreground"]
+                and not row["minimized"]
+                and self._chrome_image_path(row["pid"]) is not None
+            ]
+            if len(candidates) != 1:
+                raise PolicyError(
+                    "No unique foreground ChatGPT Chrome window; nothing sent"
+                )
+            window_id = candidates[0]["window_id"]
         hwnd = self.resolve(
             window_id,
             focus=action

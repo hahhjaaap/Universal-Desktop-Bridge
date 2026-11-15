@@ -17,7 +17,7 @@ try {
     $raw=[Console]::In.ReadToEnd()
     if($raw.Length -gt 100000){throw 'Request too large'}
     $r=$raw|ConvertFrom-Json
-    if($r.mode -notin @('snapshot','set_value','invoke','uia_focus','wait_for','read_text','set_checked','select','expand','collapse','scroll_into_view','poll_chatgpt_reply')){throw 'Unsupported UIA mode'}
+    if($r.mode -notin @('snapshot','set_value','invoke','uia_focus','wait_for','read_text','set_checked','select','expand','collapse','scroll_into_view','poll_chatgpt_reply','chatgpt_prepare','chatgpt_commit')){throw 'Unsupported UIA mode'}
     $root=[Windows.Automation.AutomationElement]::FromHandle([IntPtr][long]$r.hwnd)
     if(!$root -or $root.Current.ProcessId -ne [int]$r.pid){throw 'Observed window changed'}
     # Initialize AutomationElement before registering the standard .NET proxies.
@@ -29,6 +29,87 @@ try {
     # created before the standard Win32 proxies were available.
     $root=[Windows.Automation.AutomationElement]::FromHandle([IntPtr][long]$r.hwnd)
     if(!$root -or $root.Current.ProcessId -ne [int]$r.pid){throw 'Observed window changed'}
+    if($r.mode -in @('chatgpt_prepare','chatgpt_commit')) {
+        # Targeted two-pass ChatGPT form automation. Only one exact editor
+        # and the fixed Send button; no generic selectors or cookie access.
+        if($r.text -isnot [string] -or $r.text.Length -lt 1 -or
+            $r.text.Length -gt 5000) {
+            throw 'Invalid ChatGPT text'
+        }
+        $docFilter=[Windows.Automation.PropertyCondition]::new(
+            [Windows.Automation.AutomationElement]::ControlTypeProperty,
+            [Windows.Automation.ControlType]::Document
+        )
+        $documents=$root.FindAll([Windows.Automation.TreeScope]::Descendants,$docFilter)
+        $chatCount=0
+        foreach($doc in $documents) {
+            if($doc.Current.Name -ceq 'ChatGPT'){$chatCount++}
+        }
+        if($chatCount -ne 1){throw 'ChatGPT document not unique'}
+        $editFilter=[Windows.Automation.AndCondition]::new(
+            [Windows.Automation.PropertyCondition]::new(
+                [Windows.Automation.AutomationElement]::ControlTypeProperty,
+                [Windows.Automation.ControlType]::Edit
+            ),
+            [Windows.Automation.PropertyCondition]::new(
+                [Windows.Automation.AutomationElement]::NameProperty,'Hỏi ChatGPT'
+            )
+        )
+        $editors=$root.FindAll([Windows.Automation.TreeScope]::Descendants,$editFilter)
+        if($editors.Count -ne 1){throw 'ChatGPT editor ambiguous or missing'}
+        $editor=$editors[0]
+        if(!$editor.Current.IsEnabled -or $editor.Current.IsOffscreen -or
+            $editor.Current.IsPassword){throw 'ChatGPT editor unavailable'}
+        $textFilter=[Windows.Automation.PropertyCondition]::new(
+            [Windows.Automation.AutomationElement]::ControlTypeProperty,
+            [Windows.Automation.ControlType]::Text
+        )
+        $texts=$root.FindAll([Windows.Automation.TreeScope]::Descendants,$textFilter)
+        foreach($entry in $texts) {
+            if($entry.Current.Name -in @('ChatGPT đã nói:','ChatGPT said:')){
+                throw 'Existing conversation; do not submit'
+            }
+        }
+        $pattern=$null
+        if($editor.TryGetCurrentPattern([Windows.Automation.TextPattern]::Pattern,[ref]$pattern)){
+            $value=[string]$pattern.DocumentRange.GetText(5001)
+        } elseif($editor.TryGetCurrentPattern([Windows.Automation.ValuePattern]::Pattern,[ref]$pattern)){
+            $value=[string]$pattern.Current.Value
+        } else {
+            throw 'ChatGPT editor cannot be read'
+        }
+        if($r.mode -eq 'chatgpt_prepare'){
+            $initial=$value.TrimEnd([char]13,[char]10)
+            if($initial -cne '' -and $initial -cne 'Hỏi ChatGPT'){
+                throw 'Existing draft preserved; no input injected'
+            }
+            $editor.SetFocus()
+            @{ok=$true;prepared=$true;replay_safe=$false}|ConvertTo-Json -Compress
+            exit 0
+        }
+        if($value -cne [string]$r.text){
+            throw 'ChatGPT text does not match exact request; no submit'
+        }
+        $sendFilter=[Windows.Automation.AndCondition]::new(
+            [Windows.Automation.PropertyCondition]::new(
+                [Windows.Automation.AutomationElement]::ControlTypeProperty,
+                [Windows.Automation.ControlType]::Button
+            ),
+            [Windows.Automation.PropertyCondition]::new(
+                [Windows.Automation.AutomationElement]::NameProperty,'Gửi'
+            )
+        )
+        $buttons=$root.FindAll([Windows.Automation.TreeScope]::Descendants,$sendFilter)
+        if($buttons.Count -ne 1){throw 'ChatGPT send button ambiguous or missing'}
+        $send=$buttons[0]
+        if(!$send.Current.IsEnabled -or $send.Current.IsOffscreen -or
+            $send.Current.IsPassword){throw 'ChatGPT send button unavailable'}
+        $invoke=$send.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern)
+        $invoke.Invoke()
+        @{ok=$true;invoked=$true;verified_text=$true;replay_safe=$false} |
+            ConvertTo-Json -Compress
+        exit 0
+    }
     if($r.mode -eq 'poll_chatgpt_reply') {
         # Dedicated read-only post-submit observer. No browser CDP, cross-tab
         # search, credentials, arbitrary selectors, clipboard or user input.
@@ -48,6 +129,7 @@ try {
         $timer=[Diagnostics.Stopwatch]::StartNew()
         $response=''
         $complete=$false
+        $firstReplyMs=$null
         do {
             # Re-validate observed window and process before each UIA read.
             if(!$root.Current.IsEnabled -or $root.Current.ProcessId -ne [int]$r.pid) {
@@ -74,6 +156,9 @@ try {
                     $response=$value
                 }
             }
+            if($sent -and $assistant -and $response -and $null -eq $firstReplyMs){
+                $firstReplyMs=$timer.ElapsedMilliseconds
+            }
             if($sent -and $assistant -and $response -and $done) {
                 $complete=$true; break
             }
@@ -88,7 +173,9 @@ try {
             $response=$response.Substring(0,$n)
         }
         @{ok=$true;completed=$complete;reply=$(if($complete){$response}else{''});
-          elapsed_ms=$timer.ElapsedMilliseconds;truncated=$truncated;
+          elapsed_ms=$timer.ElapsedMilliseconds;
+          first_reply_ms=$(if($null -eq $firstReplyMs){-1}else{$firstReplyMs});
+          truncated=$truncated;
           timeout=(!$complete);replay_safe=$false} |
             ConvertTo-Json -Compress -Depth 3
         exit 0

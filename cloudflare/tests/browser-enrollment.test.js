@@ -91,7 +91,7 @@ function fixture() {
   f.route = async (path, method = "GET", body, headers = {}, access = null) => {
     const request = new Request(ROOT + path, { method, headers,
       body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body) });
-    return await routeBrowserEnrollment(request, env, (stub, req) => stub.fetch(req), keys, access) ??
+    return await routeBrowserEnrollment(request, env, (stub, req) => stub.fetch(req), f.keyFetch || keys, access) ??
       worker.fetch(request, env);
   };
   return f;
@@ -183,18 +183,35 @@ test("owner approval rejects missing, forged, expired, other-account and MCP-aud
   assert.equal(f.objects.has(p.id), false);
 });
 
-test("Access runtime outage leaves device approval pending without asking for new consent", async () => {
+test("unverifiable Access runtime identity requires reauthentication without changing approval", async () => {
   const f = fixture();
   const p = await begin(f);
   const url = p.path + "/approval?code=" + hash(p.proof).slice(0, 10).toUpperCase();
   const access = { aud: APP, getIdentity: async () => {
-    throw new Error("synthetic Access identity outage");
+    throw new Error("synthetic expired or unavailable Access identity");
   } };
   const page = await f.route(url, "GET", undefined, {}, access);
-  assert.equal(page.status, 503);
+  assert.equal(page.status, 403);
   const html = await page.text();
-  assert.match(html, /temporarily unavailable/);
+  assert.match(html, /Sign in through the configured Cloudflare Access application/);
   assert.match(html, /owner_runtime_unavailable/);
+  assert.doesNotMatch(html, /Approve device/);
+  assert.equal((await (await status(f, p)).json()).state, "pending");
+});
+
+test("temporary Access JWKS outage returns 503 and preserves pending owner approval", async () => {
+  const f = fixture(), p = await begin(f);
+  const team = "https://udb-approval-jwks-outage.cloudflareaccess.com";
+  f.env.UDB_ACCESS_TEAM_DOMAIN = team;
+  f.env.UDB_ENROLLMENT_OWNER_SUBJECTS = JSON.stringify([team + "#" + OWNER]);
+  f.keyFetch = async () => Response.json({ error: "synthetic certs outage" }, { status: 503 });
+  const url = p.path + "/approval?code=" + hash(p.proof).slice(0, 10).toUpperCase();
+  const response = await f.route(url, "GET", undefined,
+    { "Cf-Access-Jwt-Assertion": await jwt(APP, OWNER, { iss: team }) });
+  assert.equal(response.status, 503);
+  const html = await response.text();
+  assert.match(html, /temporarily unavailable/);
+  assert.match(html, /owner_keys_unavailable/);
   assert.doesNotMatch(html, /Approve device/);
   assert.equal((await (await status(f, p)).json()).state, "pending");
 });

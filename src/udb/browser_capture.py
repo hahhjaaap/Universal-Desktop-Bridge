@@ -23,7 +23,11 @@ class CaptureCache:
         return self.status(sid, tab)
 
     def stop(self, sid, tab=None):
-        keys = [k for k in self.streams if k[0] == sid and (tab is None or k[1] == tab)]
+        # Closing a single tab is the common case: no need to copy/scan the
+        # capture dictionary. Session-wide cleanup still removes every stream.
+        if tab is not None:
+            return {"stopped": self.streams.pop((sid, tab), None) is not None}
+        keys = [key for key in self.streams if key[0] == sid]
         for key in keys:
             self.streams.pop(key)
         return {"stopped": bool(keys)}

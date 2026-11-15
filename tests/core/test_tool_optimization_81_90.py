@@ -159,7 +159,8 @@ def test_85_create_only_file_copy_preserves_tree_and_rejects_overwrite(bg, files
     assert (files.root / "output" / "part.txt").read_text(
         "utf-8"
     ) == "unicode: Việt Nam"
-    assert observed[0]["tool"] == "file_operation"
+    # Directory copies cannot be automatically resumed after an unknown outcome.
+    assert observed == [None]
     with pytest.raises(FileExistsError):
         bg.file_operation("copy", source="input", destination="output")
 

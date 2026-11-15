@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import threading
 import time
+import tracemalloc
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -68,7 +69,7 @@ def test_single_source_read_decodes_once_and_never_executes(project, monkeypatch
     monkeypatch.setattr(Path, "open", observed_open)
     read = agent.read("demo", "demo.py")
     assert read["text"] == 'raise RuntimeError("not executed")\n'
-    assert read["sha256"] == hashlib.sha256(source.read_bytes()).hexdigest()
+    assert read["sha256"] == hashlib.sha256(read["text"].encode()).hexdigest()
     assert calls == ["rb"]
     assert agent.syntax_check("demo", "demo.py") == {
         "valid": True,
@@ -109,9 +110,7 @@ def test_batched_reads_bounded_parallel_order_and_fresh_permissions(project, mon
     monkeypatch.setattr(agent, "read", observed)
     result = read_files(agent, "demo", names)
     assert [r["path"] for r in result["files"]] == names
-    assert result["bytes"] == sum(
-        len((root / name).read_bytes()) for name in names
-    )
+    assert result["bytes"] == sum(len((root / name).read_bytes()) for name in names)
     assert 1 < highest <= 4
 
     (root / "oversize.py").write_bytes(b"x" * (MAX_TEXT + 1))
@@ -185,8 +184,6 @@ def test_large_line_reads_remain_bounded(tmp_path):
     source.write_text("A\n" * 200000, encoding="utf-8")
     files = ScopedFiles(str(tmp_path))
     rt = SimpleNamespace(files=files)
-    import tracemalloc
-
     tracemalloc.start()
     try:
         row = _file_read_lines(rt, {"path": "large.txt", "offset": 199998})

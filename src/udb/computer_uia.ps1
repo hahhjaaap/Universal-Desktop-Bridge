@@ -414,14 +414,21 @@ public static class UDBEdit {
 # command surface. Strictly one JSON request/reply per line in worker mode.
 # No UIA elements, passwords, request payloads or owner permissions are cached.
 if($Persistent) {
+    [int]$script:UdbSequence=0
     while($true) {
         $line=[Console]::In.ReadLine()
         if($null -eq $line){break}
+        $script:UdbSequence++
         $response=Invoke-UdbUia $line
-        if($response -isnot [string] -or $response.Length -gt 262144) {
+        if($response -isnot [string] -or $response.Length -gt 260000) {
             $response='{"ok":false,"error":"UIA worker produced an invalid response"}'
         }
-        [Console]::Out.WriteLine($response)
+        # The private, ordered IPC channel uses a monotonically increasing
+        # sequence to prevent a stale/duplicate response being accepted for
+        # a later mutation. Python validates this before using the result.
+        [Console]::Out.WriteLine(
+            '{"sequence":'+$script:UdbSequence+',"result":'+$response+'}'
+        )
         [Console]::Out.Flush()
     }
 } else {

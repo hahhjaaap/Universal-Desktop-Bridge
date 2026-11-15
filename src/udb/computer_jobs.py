@@ -254,6 +254,17 @@ class Jobs:
                     except Exception:
                         self._finish(row, "failed")
 
+    def usage(self):
+        """Bounded job counts without copying identifiers or process outputs."""
+        with self.lock:
+            return {
+                "known_computer_jobs": len(self.rows),
+                "active_computer_jobs": sum(
+                    row["status"] in ("running", "cleanup_failed")
+                    for row in self.rows.values()
+                ),
+            }
+
     def process(self, action, job_id="", offset=0):
         with self.lock:
             if action == "list":

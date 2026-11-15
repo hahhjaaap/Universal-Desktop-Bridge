@@ -115,3 +115,21 @@ def test_pending_empty_mailbox_remains_empty(tmp_path):
     inbox = tmp_path / "inbox"
     inbox.mkdir()
     assert pending_inbox_commands(inbox) == []
+
+
+def test_prune_refuses_replaced_reply_folder_symlink(tmp_path):
+    host = _service(tmp_path)
+    replies = host.folder / "replies"
+    replies.rmdir()
+    external = tmp_path / "external-replies"
+    external.mkdir()
+    protected = external / "protected.json"
+    protected.write_text("never delete", encoding="utf-8")
+    past = time.time() - 200
+    os.utime(protected, (past, past))
+    try:
+        replies.symlink_to(external, target_is_directory=True)
+    except OSError:
+        pytest.skip("Directory symlink privilege unavailable")
+    host._prune_replies()
+    assert protected.read_text(encoding="utf-8") == "never delete"

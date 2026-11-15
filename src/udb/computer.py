@@ -17,7 +17,11 @@ def status_report(agent, processes=None, *, worker_ready=True, usage=None, brief
     """
     from .desktop_control import browser_handoff, paused
 
-    if usage is None and processes is not None and isinstance(processes.get("jobs"), list):
+    if (
+        usage is None
+        and processes is not None
+        and isinstance(processes.get("jobs"), list)
+    ):
         jobs = processes["jobs"]
         usage = {
             "known_computer_jobs": len(jobs),
@@ -28,7 +32,9 @@ def status_report(agent, processes=None, *, worker_ready=True, usage=None, brief
     active = usage["active_computer_jobs"] if usage is not None else None
     capacity = {
         "available": usage is not None,
-        "known_computer_jobs": usage["known_computer_jobs"] if usage is not None else None,
+        "known_computer_jobs": usage["known_computer_jobs"]
+        if usage is not None
+        else None,
         "active_computer_jobs": active,
         "remaining_shared_slots_upper_bound": (
             max(0, MAX_CONCURRENT - active) if active is not None else None

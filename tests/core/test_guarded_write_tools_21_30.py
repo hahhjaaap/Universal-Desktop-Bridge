@@ -153,6 +153,32 @@ def test_copy_is_streamed_verified_and_never_replaces_other_owner(
     assert not (tmp_path / "raced.txt").exists()
 
 
+def test_supplied_copy_hash_does_not_rehash_source(tmp_path, monkeypatch):
+    source = tmp_path / "source.txt"
+    source.write_bytes(b"same-volume-transfer" * 256)
+    expected = hashlib.sha256(source.read_bytes()).hexdigest()
+    files = ScopedFiles(str(tmp_path))
+    rt = SimpleNamespace(files=files)
+    original_hash = extensions._sha256
+    seen = []
+
+    def counted(path):
+        seen.append(path)
+        return original_hash(path)
+
+    monkeypatch.setattr(extensions, "_sha256", counted)
+    extensions._file_copy(
+        rt,
+        {
+            "source": "source.txt",
+            "destination": "copy.txt",
+            "expected_sha256": expected,
+        },
+    )
+    assert seen.count(source) == 1
+    assert seen.count(tmp_path / "copy.txt") == 1
+
+
 def test_computer_files_shared_bounds_and_recovery_are_verified(project):
     agent, root = project
     files = Files(agent)

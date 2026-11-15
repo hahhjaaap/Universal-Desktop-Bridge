@@ -226,10 +226,29 @@ def analyze_samples(samples, *, mode="synthetic", traces=None):
     grouped = defaultdict(list)
     cold = defaultdict(list)
     warm = defaultdict(list)
+    resources = defaultdict(list)
+    paths = defaultdict(list)
     for sample in samples:
         name = sample["scenario"]
         grouped[name].append(sample["elapsed_ms"])
-        (cold if sample["startup"] == "cold" else warm)[name].append(sample["elapsed_ms"])
+        resources[name].append(sample)
+        paths[name].append(sample["critical_path"]["duration_ms"])
+        (cold if sample["startup"] == "cold" else warm)[name].append(
+            sample["elapsed_ms"]
+        )
+    stage_groups = defaultdict(list)
+    for event in traces or []:
+        if event.get("phase") in TRACE_PHASES:
+            stage_groups[event["phase"]].append(event["duration_ns"] / 1e6)
+
+    def optional_max(rows, key):
+        known = [r[key] for r in rows if r.get(key) is not None]
+        return max(known) if known else None
+
+    def optional_total(rows, key):
+        known = [r[key] for r in rows if r.get(key) is not None]
+        return sum(known) if known else None
+
     return {
         "schema": 1,
         "mode": mode,
@@ -241,14 +260,25 @@ def analyze_samples(samples, *, mode="synthetic", traces=None):
                 **summarize(values),
                 "cold": summarize(cold[name]) if cold[name] else None,
                 "warm": summarize(warm[name]) if warm[name] else None,
+                "critical_path_ms": summarize(paths[name]),
+                "resources": {
+                    "cpu_ms": summarize([r["cpu_ms"] for r in resources[name]]),
+                    "observed_rss_bytes": optional_max(resources[name], "rss_bytes"),
+                    "child_processes": optional_max(resources[name], "child_processes"),
+                    "thread_count": optional_max(resources[name], "thread_count"),
+                    "read_bytes_total": optional_total(resources[name], "read_bytes"),
+                    "write_bytes_total": optional_total(resources[name], "write_bytes"),
+                    "allocation_peak_bytes": optional_max(
+                        resources[name], "allocation_peak_bytes"
+                    ),
+                },
             }
             for name, values in sorted(grouped.items())
         },
+        "observed_trace_stages": {
+            phase: summarize(values) for phase, values in sorted(stage_groups.items())
+        },
         "diagnostics": diagnostics(samples, traces),
-        "resource_fields": [
-            "cpu_ms", "rss_bytes", "child_processes", "thread_count",
-            "read_bytes", "write_bytes", "allocation_peak_bytes",
-        ],
         "disclaimer": (
             "Synthetic in-memory fixture overhead only; not browser, desktop, "
             "network, cloud, model or installed-Windows latency."

@@ -1,8 +1,9 @@
 # Compact tool families and compatibility
 
-The reviewed source groups the previous 59 public interfaces into **40 public
-tools**, retaining **all 67 native implementations** and their old callable
-names. Check `udb tools` for the catalog of an installed build. Source changes
+The reviewed source groups the 60 native/legacy public interfaces into **41 public
+tools**, retaining **all 68 backend implementations** and their old callable
+names. The newly added `open_chatgpt` is an independent owner-gated action, not
+an alias that grants additional browser or computer permissions. Check `udb tools` for the catalog of an installed build. Source changes
 do not replace the immutable v0.12.0 release, upgrade Windows or deploy a Worker.
 
 | Public family | Actions | Original operations retained |

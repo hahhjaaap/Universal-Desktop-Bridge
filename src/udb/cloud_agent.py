@@ -18,11 +18,11 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from . import hyperspeed_perf as perf
 from ._version import VERSION
 from .cloud_secrets import load_device_token, read_token_file
 from .config import serve_options
 from .launcher import child_environment, command
-from . import hyperspeed_perf as perf
 
 CLOUD_USER_AGENT = f"UniversalDesktopBridge/{VERSION}"
 

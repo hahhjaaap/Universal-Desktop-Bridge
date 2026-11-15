@@ -28,11 +28,11 @@ def test_cloudflare_legacy_grants_cover_the_compact_public_catalog() -> None:
     allowed = read + [x for x in owner if x not in LEGACY_ALIASES] + companion
     compact = (set(allowed) - FAMILY_MEMBERS) | FAMILY_NAMES
 
-    assert listing["tool_count"] == 40
-    assert listing["core_count"] == 36
+    assert listing["tool_count"] == 41
+    assert listing["core_count"] == 37
     assert listing["companion_count"] == 31
-    assert len(public) == len(set(public)) == 40
-    assert len(allowed) == len(set(allowed)) == 59
+    assert len(public) == len(set(public)) == 41
+    assert len(allowed) == len(set(allowed)) == 60
     assert set(public) == compact
     assert set(companion).isdisjoint(owner + read)
     assert not set(public).intersection(HIDDEN_ALIASES)

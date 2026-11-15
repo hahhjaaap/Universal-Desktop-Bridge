@@ -32,6 +32,7 @@ class PersistentUIA:
         self._process = None
         self._replies = None
         self._reader = None
+        self._sequence = 0
         self._idle = None
         self._idle_token = None
 
@@ -125,6 +126,7 @@ class PersistentUIA:
             raise OSError("PowerShell IPC pipes unavailable")
         self._process = process
         self._replies = queue.Queue(maxsize=2)
+        self._sequence = 0
         self._reader = threading.Thread(
             target=self._receive,
             args=(process, self._replies),
@@ -153,6 +155,7 @@ class PersistentUIA:
             try:
                 self._begin()
                 process = self._process
+                expected_sequence = self._sequence + 1
                 process.stdin.write(wire + "\n")
                 process.stdin.flush()
                 line = self._replies.get(timeout=timeout)
@@ -162,9 +165,17 @@ class PersistentUIA:
                     or len(line) > MAX_RESPONSE_CHARS
                 ):
                     raise ValueError("Invalid UIA worker reply framing")
-                reply = json.loads(line)
+                envelope = json.loads(line)
+                if (
+                    not isinstance(envelope, dict)
+                    or type(envelope.get("sequence")) is not int
+                    or envelope["sequence"] != expected_sequence
+                ):
+                    raise ValueError("Stale or unexpected UIA worker response")
+                reply = envelope.get("result")
                 if not isinstance(reply, dict) or type(reply.get("ok")) is not bool:
                     raise ValueError("Invalid UIA worker reply schema")
+                self._sequence = expected_sequence
                 # A response of ok=false is a rejected action, NOT a retry signal.
                 return reply
             except (

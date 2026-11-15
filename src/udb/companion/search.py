@@ -127,6 +127,7 @@ def search_worker():
 
     try:
         rx = re.compile(query, flags) if config["regex"] else None
+
         def allowed(p):
             try:
                 files.path(str(p))

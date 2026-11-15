@@ -269,24 +269,25 @@ test("issuer-sub Fleet works with a signed JWT when Cloudflare omits ctx.access"
   assert.ok((await success.json()).result.content?.length);
   assert.equal(f.invocations.filter(x => x.rpc.params?.name === "bridge_status").length, 1);
   assert.equal(fetched, 1, "Access JWKS is cached across the two verification layers");
+  const dispatched = f.invocations.length;
 
   // The internal owner delegation must not rely only on the forwarded string.
   const wrongOwner = await handleMcp(send(valid), f.env, deviceA,
     f.env.DEVICES.get(deviceA), fetchKeys, null, principal(OTHER));
   assert.equal(wrongOwner.status, 401);
-  assert.equal(f.invocations.length, 1);
+  assert.equal(f.invocations.length, dispatched);
 
   const mismatched = await handleAccountMcp(send(await sign(OTHER)), f.env,
     null, fetchKeys);
   assert.equal(mismatched.status, 403, "different Access owner cannot access device");
-  assert.equal(f.invocations.length, 1);
+  assert.equal(f.invocations.length, dispatched);
   const unsigned = await handleAccountMcp(send(), f.env, null, fetchKeys);
   assert.equal(unsigned.status, 401);
   const parts = valid.split(".");
   const forged = parts[0] + "." + parts[1] + "." +
     (parts[2][0] === "A" ? "B" : "A") + parts[2].slice(1);
   assert.equal((await handleAccountMcp(send(forged), f.env, null, fetchKeys)).status, 401);
-  assert.equal(f.invocations.length, 1);
+  assert.equal(f.invocations.length, dispatched);
 });
 
 test("issuer-sub native Access Fleet delegation reaches Windows without weakening per-device JWT", async () => {

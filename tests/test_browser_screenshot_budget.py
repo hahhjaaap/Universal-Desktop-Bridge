@@ -8,7 +8,7 @@ from udb.host_browser import Browser
 
 def _browser_without_process():
     browser = Browser.__new__(Browser)
-    browser._show_identity = lambda tab: None
+    browser._show_identity = lambda tab, *, session=None: None
     browser.sid = lambda tab: "owned-session"
     return browser
 

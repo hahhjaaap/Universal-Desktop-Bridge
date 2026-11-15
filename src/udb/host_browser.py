@@ -33,6 +33,21 @@ from .resources import LIMITS
 
 _STARTUP_TIMEOUT = 20
 _ENDPOINT_TIMEOUT = 15
+_LOCATOR_PATTERN = re.compile(
+    "|".join(
+        re.escape(key)
+        for key in (
+            "__TRAVERSAL__",
+            "__SELECTOR__",
+            "__ROLE__",
+            "__NAME__",
+            "__EXACT__",
+            "__VISIBLE_ONLY__",
+            "__UNIQUE__",
+            "__BODY__",
+        )
+    )
+)
 
 
 def _browser_endpoint(endpoint, process, timeout):
@@ -699,6 +714,7 @@ class Browser(BrowserInputMixin):
                 getattr(self, "_identity_contexts", {}).pop(tab, None)
         # Only HTTP(S) pages in our own profile are interactive. Do not adopt
         # browser-internal pages or targets with an unsupported destination URL.
+        safe_pages = {}
         for target in page_targets:
             tab = target["targetId"]
             safe_url = self._safe_page_url(target.get("url", ""))
@@ -710,6 +726,7 @@ class Browser(BrowserInputMixin):
                 except Exception:
                     pass
                 continue
+            safe_pages[tab] = safe_url
             if tab in self.tabs:
                 continue
             # Popups created by pages in our private profile are adopted up to
@@ -731,12 +748,12 @@ class Browser(BrowserInputMixin):
             dict(
                 tab_id=t["targetId"],
                 title=t.get("title", "")[:500],
-                url=self._safe_page_url(t.get("url", "")),
+                url=safe_pages[t["targetId"]],
                 owner="UDB",
                 background=True,
             )
             for t in page_targets
-            if t["targetId"] in self.tabs and self._safe_page_url(t.get("url", ""))
+            if t["targetId"] in self.tabs and t["targetId"] in safe_pages
         ]
 
     def new(self, url="about:blank"):
@@ -793,8 +810,9 @@ class Browser(BrowserInputMixin):
             "__UNIQUE__": "true" if unique else "false",
             "__BODY__": body,
         }
-        pattern = re.compile("|".join(re.escape(key) for key in replacements))
-        return pattern.sub(lambda match: replacements[match.group(0)], LOCATOR_SCRIPT)
+        return _LOCATOR_PATTERN.sub(
+            lambda match: replacements[match.group(0)], LOCATOR_SCRIPT
+        )
 
     def snapshot(self, tab):
         return snapshot_browser(self, tab)
@@ -869,9 +887,10 @@ class Browser(BrowserInputMixin):
     def identity_script(self):
         return identity_script(getattr(self, "visible", False))
 
-    def _show_identity(self, tab, x=None, y=None):
+    def _show_identity(self, tab, x=None, y=None, *, session=None):
         """Install identity once per document and cache its isolated-world context."""
-        session = self.sid(tab)
+        if session is None:
+            session = self.sid(tab)
         contexts = getattr(self, "_identity_contexts", None)
         if contexts is None:
             contexts = {}
@@ -1204,14 +1223,15 @@ class Browser(BrowserInputMixin):
         return dict(ok=True, action=action, url=safe_url)
 
     def screenshot(self, tab):
-        self._show_identity(tab)
+        session = self.sid(tab)
+        self._show_identity(tab, session=session)
         # Software rendering on a loaded Windows runner can exceed the usual
         # 10-second CDP budget. Keep one bounded attempt; never replay an
         # uncertain capture or relax the underlying response-size limit.
         result = self.call(
             "Page.captureScreenshot",
             dict(format="png", captureBeyondViewport=False),
-            self.sid(tab),
+            session,
             timeout=20,
         )
         if len(result["data"]) > 8 * 1048576:
@@ -1225,12 +1245,13 @@ class Browser(BrowserInputMixin):
         errors = 0
         for tab in list(self.tabs):
             try:
+                session = self.sid(tab)
                 if frozen:
-                    self.call("Page.stopLoading", session=self.sid(tab), timeout=2)
+                    self.call("Page.stopLoading", session=session, timeout=2)
                 self.call(
                     "Page.setWebLifecycleState",
                     dict(state="frozen" if frozen else "active"),
-                    self.sid(tab),
+                    session,
                     timeout=2,
                 )
             except Exception:

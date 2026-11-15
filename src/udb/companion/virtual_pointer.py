@@ -12,6 +12,10 @@ from pathlib import Path
 from udb.companion.processes import ManagedProcess
 
 
+class _LastInputInfo(ctypes.Structure):
+    _fields_ = [("size", w.UINT), ("time", w.DWORD)]
+
+
 class VirtualPointer:
     def __init__(self):
         if os.name != "nt":
@@ -276,11 +280,10 @@ class VirtualPointer:
         return [p.x, p.y]
 
     def input_stamp(self):
-        class Info(ctypes.Structure):
-            _fields_ = [("size", w.UINT), ("time", w.DWORD)]
-
-        info = Info()
-        info.size = ctypes.sizeof(info)
+        # The Win32 LASTINPUTINFO layout is immutable; constructing its type
+        # for every pre/post-gesture check added avoidable Python allocations.
+        info = _LastInputInfo()
+        info.size = ctypes.sizeof(_LastInputInfo)
         return int(info.time) if self.u.GetLastInputInfo(ctypes.byref(info)) else None
 
     def send(self, hwnd, msg, wp, lp):

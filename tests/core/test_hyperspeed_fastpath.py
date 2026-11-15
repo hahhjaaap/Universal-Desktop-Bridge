@@ -114,9 +114,10 @@ def test_11_14_fastpath_dispatches_three_steps_in_one_owned_batch(owned, monkeyp
     assert all("verify" not in call.args[1] for call in dispatch.call_args_list)
     assert all("when" not in call.args[1] for call in dispatch.call_args_list)
     assert "fixture-value" not in json.dumps(result)
-    assert "fixture-value" not in next(
-        (service.folder / "batches" / SID).glob("*.json")
-    ).read_text()
+    assert (
+        "fixture-value"
+        not in next((service.folder / "batches" / SID).glob("*.json")).read_text()
+    )
     assert service.dispatch("browser", payload(steps))["cached_result"]
     assert dispatch.call_count == 3
 
@@ -155,12 +156,19 @@ def test_13_invalid_dag_or_unknown_fields_rejected_before_any_browser_io(
     monkeypatch.setattr(browser_batch, "dispatch_browser", dispatch)
     forbidden = [
         [{"action": "click", "selector": "#a", "depends_on": ["next"]}],
-        [{"action": "click", "selector": "#a", "step_id": "A"},
-         {"action": "fill", "selector": "#b", "step_id": "A"}],
+        [
+            {"action": "click", "selector": "#a", "step_id": "A"},
+            {"action": "fill", "selector": "#b", "step_id": "A"},
+        ],
         [{"action": "click", "selector": "#a", "run_shell": "powershell"}],
         [{"action": "batch"}],
         [{"action": "read", "verify": {"field": "arbitrary_html", "equals": "x"}}],
-        [{"action": "read", "when": {"step_id": "future", "field": "ok", "equals": True}}],
+        [
+            {
+                "action": "read",
+                "when": {"step_id": "future", "field": "ok", "equals": True},
+            }
+        ],
         [{"action": "read", "depends_on": [False]}],
         [{"action": "read", "return_result": 1}],
         [{"action": "read", "verify": {"field": "ok", "equals": {"evil": 1}}}],
@@ -196,7 +204,9 @@ def test_18_19_mutation_verify_mismatch_is_unknown_and_never_replayed(
     monkeypatch.setattr(browser_batch, "dispatch_browser", dispatch)
     steps = [
         {
-            "action": "fill", "selector": "#input", "value": "once",
+            "action": "fill",
+            "selector": "#input",
+            "value": "once",
             "verify": {"field": "changed", "equals": True},
         },
         {"action": "press", "key": "ENTER"},
@@ -270,12 +280,8 @@ def test_20_owner_handoff_and_revoke_stop_at_next_boundary(owned, monkeypatch):
 
 
 def test_strict_result_evidence_never_treats_true_as_one():
-    assert not matches(
-        {"ok": True}, {"field": "ok", "equals": 1}
-    )
-    assert matches(
-        {"ok": True}, {"field": "ok", "equals": True}
-    )
+    assert not matches({"ok": True}, {"field": "ok", "equals": 1})
+    assert matches({"ok": True}, {"field": "ok", "equals": True})
     with pytest.raises(PolicyError):
         matches({"ok": True}, {"field": "visible", "equals": True})
 
@@ -286,7 +292,9 @@ def test_compile_plan_requires_prior_dependencies_and_no_unlisted_action():
         [
             {"action": "read", "step_id": "first"},
             {
-                "action": "click", "selector": "#go", "step_id": "second",
+                "action": "click",
+                "selector": "#go",
+                "step_id": "second",
                 "depends_on": ["first"],
                 "when": {"step_id": "first", "field": "ok", "equals": True},
             },

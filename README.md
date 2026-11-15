@@ -339,6 +339,26 @@ For native desktop control, UDB yields to recent user input. **Ctrl+Alt+Shift+Ba
 
 The unified `computer_desktop` tool also provides text clipboard read/write with version checks, UDB notifications, and Start Menu app discovery/launch. Its UIA actions can read text, set a checkbox state, select an item, expand/collapse and scroll an item into view. `computer_process(action="start")` launches an owned job; list/read/stop use the same tool. Legacy `computer_utilities` and `computer_execute` calls remain supported. Existing `udb --access computer` activation is required. See [Windows control tools](docs/windows-control-tools.md) for the consolidated interfaces and examples.
 
+## New tool: open ChatGPT with one UDB call
+
+`open_chatgpt()` requests a **visible browser tab at
+https://chatgpt.com/** on the chosen Windows device. No URL, prompt or account
+parameters are accepted. If Chrome is already running, it uses the existing
+`open_chrome_tab` action; if Chrome has no open window, it asks the Windows
+default browser to open the official ChatGPT URL.
+
+Requires owner-enabled `udb --access computer`, an unlocked interactive
+desktop and the desktop pause/yield checks. It **does not** log into ChatGPT,
+open private sessions, read conversations or send messages. The reply reports
+only what opening was requested or observed, never assumes login succeeded.
+For multi-PC connections, choose the device ID explicitly and grant
+`open_chatgpt` separately in the owner tool allowlist.
+
+This is an MCP **source feature**; an already installed frozen UDB
+executable or deployed Cloudflare Worker must be upgraded separately before
+the new tool appears in ChatGPT. See
+[Windows control tools](docs/windows-control-tools.md).
+
 ## Visible tab in an existing Chrome window (owner computer access)
 
 Use this separate option only when explicitly asking for a **visible personal Chrome tab**; it can activate Chrome and is not background automation. For a tab in a Chrome window that is already open, call
@@ -553,7 +573,7 @@ Compatibility launchers and import aliases are intentionally retained. Generated
 - Source work, document reviews and browser pages can contain untrusted content. Review outputs before acting.
 - This project is a local bridge, **not ChatGPT Work**, a tax-compliance service or an autonomous account administrator.
 
-The source now offers [40 public tool interfaces](docs/tool-families.md), grouped
+The source now offers [41 public tool interfaces](docs/tool-families.md), grouped
 by task while retaining the original operations and per-action permissions.
 Use `udb tools` to inspect the installed build.
 

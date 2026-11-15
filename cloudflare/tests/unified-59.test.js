@@ -65,17 +65,17 @@ function relay() {
   return { stub, calls };
 }
 
-test("legacy grant inventory keeps 59 distinct names and no duplicate Companion names", () => {
+test("legacy grant inventory keeps 60 distinct names and no duplicate Companion names", () => {
   assert.equal(READ_TOOLS.length, 6);
-  assert.equal(OWNER_TOOLS.length, 30);
+  assert.equal(OWNER_TOOLS.length, 31);
   assert.equal(COMPANION_TOOLS.length, 27);
-  assert.equal(allPublicNames.length, 59);
-  assert.equal(new Set(allPublicNames).size, 59);
+  assert.equal(allPublicNames.length, 60);
+  assert.equal(new Set(allPublicNames).size, 60);
   for (const name of COMPANION_TOOLS)
     assert.ok(!READ_TOOLS.includes(name) && !OWNER_TOOLS.includes(name));
 });
 
-test("40 tools discovered through one MCP endpoint without auto-executing them", async () => {
+test("41 tools discovered through one MCP endpoint without auto-executing them", async () => {
   const e = env();
   const { stub, calls } = relay();
   const initialize = await handleMcp(request("initialize"), e, DEVICE, stub,
@@ -87,7 +87,7 @@ test("40 tools discovered through one MCP endpoint without auto-executing them",
     DEVICE, stub, fetch, identity());
   assert.equal(result.status, 200);
   const tools = (await result.json()).result.tools;
-  assert.equal(tools.length, 40);
+  assert.equal(tools.length, 41);
   assert.deepEqual(new Set(tools.map(tool => tool.name)), new Set(publicToolNames(allPublicNames)));
   assert.ok(tools.every(tool => tool.inputSchema.type === "object"));
   for (const tool of tools) {

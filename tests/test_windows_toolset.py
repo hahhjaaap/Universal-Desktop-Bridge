@@ -82,7 +82,7 @@ def test_discovery_consolidates_windows_interfaces_without_understating_launch_e
 
     data = catalog()
     tools = {row["name"]: row for row in data["tools"]}
-    assert data["tool_count"] == 40 and data["backend_count"] == 67
+    assert data["tool_count"] == 41 and data["backend_count"] == 68
     assert "computer_execute" not in tools and "computer_utilities" not in tools
     assert tools["computer_process"]["annotations"]["destructiveHint"] is True
     assert tools["computer_process"]["annotations"]["openWorldHint"] is True
@@ -93,6 +93,7 @@ def test_discovery_consolidates_windows_interfaces_without_understating_launch_e
         "close_window",
         "clipboard_get",
         "launch_app",
+        "open_chatgpt",
     } <= set(tools["computer_desktop"]["inputSchema"]["properties"]["action"]["enum"])
 
 
@@ -159,3 +160,41 @@ def test_window_close_is_a_single_request_without_force_or_focus(closed):
     assert result == dict(
         requested=True, closed_observed=closed, replay_safe=False, forced=False
     )
+
+
+def test_open_chatgpt_mcp_routes_only_fixed_desktop_operation():
+    """New tool never accepts a URL, credentials or a browser profile."""
+
+    from udb.server_computer_tools import register_computer_tools
+
+    class RecordingMCP:
+        def __init__(self):
+            self.functions = {}
+            self.annotations = {}
+
+        def tool(self, *, annotations, **kwargs):
+            def register(func):
+                self.functions[func.__name__] = func
+                self.annotations[func.__name__] = annotations
+                return func
+
+            return register
+
+    mcp = RecordingMCP()
+    invoked = []
+
+    def computer_call(mode, arguments=None):
+        invoked.append((mode, arguments))
+        return {"requested": True, "login_verified": False}
+
+    register_computer_tools(mcp, computer_call, None)
+    assert mcp.functions["open_chatgpt"]() == {
+        "requested": True,
+        "login_verified": False,
+    }
+    assert invoked == [("desktop", {"action": "open_chatgpt"})]
+    annotations = mcp.annotations["open_chatgpt"].model_dump(by_alias=True)
+    assert annotations["readOnlyHint"] is False
+    assert annotations["idempotentHint"] is False
+    with pytest.raises(TypeError):
+        mcp.functions["open_chatgpt"](url="https://another-site.example")

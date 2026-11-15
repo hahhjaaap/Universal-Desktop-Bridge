@@ -15,6 +15,7 @@ TOOL_LABELS = {
     "host_close_session": "Đóng phiên riêng",
     "host_status": "Trạng thái tác nhân",
     "computer_desktop": "Điều khiển Windows",
+    "open_chatgpt": "Mở ChatGPT",
     "computer_files": "Tệp trên máy",
     "computer_process": "Tiến trình trên máy",
     "computer_status": "Quyền điều khiển",

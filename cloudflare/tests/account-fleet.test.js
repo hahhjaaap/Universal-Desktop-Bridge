@@ -109,7 +109,7 @@ test("account discovery mirrors the authoritative Windows catalog and preserves 
   const f = fixture();
   const canonical = fleetCanonicalCatalog();
   const expected = new Map(canonicalTools.map(tool => [tool.name, tool]));
-  assert.equal(canonical.length, 40);
+  assert.equal(canonical.length, 41);
   assert.deepEqual(canonical.map(tool => tool.name).sort(), [...expected.keys()].sort());
   for (const tool of canonical) {
     assert.deepEqual(tool.inputSchema, expected.get(tool.name).inputSchema, tool.name);

@@ -119,6 +119,18 @@ def register_computer_tools(mcp, computer_call, read):
     @mcp.tool(
         annotations=ToolAnnotations(
             readOnlyHint=False,
+            destructiveHint=False,
+            idempotentHint=False,
+            openWorldHint=True,
+        )
+    )
+    def open_chatgpt() -> dict:
+        """Open https://chatgpt.com/ on the selected owner's Windows desktop. Reuses a visible tab in existing Chrome, otherwise asks Windows to open the default browser. Requires the existing owner computer grant and interactive desktop pause/yield checks. Does not log in, read chats, collect cookies or send messages. A launch request does not prove page load or login; inspect before retrying."""
+        return computer_call("desktop", {"action": "open_chatgpt"})
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            readOnlyHint=False,
             destructiveHint=True,
             idempotentHint=False,
             openWorldHint=True,

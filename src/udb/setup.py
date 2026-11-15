@@ -30,7 +30,6 @@ from .private_enrollment import (
 )
 from .setup_enrollment import EnrollmentError, enroll, link_existing, prepare_pending
 
-
 # Legacy callers use setup.PRIVATE_RELAY; keep that exported while the
 # isolated canary setup origin is selected explicitly through setup_relay().
 __all__ = ["PRIVATE_RELAY"]

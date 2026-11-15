@@ -105,7 +105,8 @@ def _record(operation: str, phase: str, started_ns: int, ended_ns: int, ok: bool
                 "startup": "cold" if cold else "warm",
                 "started_ns": started_ns,
                 "duration_ns": max(0, ended_ns - started_ns),
-                "cpu_ns": time.process_time_ns(),
+                # Absolute process CPU counter, not a per-operation delta.
+                "process_cpu_total_ns": time.process_time_ns(),
                 "ok": ok,
                 "pid": os.getpid(),
             }
@@ -134,9 +135,26 @@ def span(operation: str, phase: str):
         _record(operation, phase, started, time.perf_counter_ns(), ok)
 
 
-def interval(operation: str, phase: str, started_ns: int, *, ok: bool = True):
-    """Measure queue delay from enqueue to worker entry without recording RPC data."""
-    _record(operation, phase, started_ns, time.perf_counter_ns(), ok)
+def interval(
+    operation: str,
+    phase: str,
+    started_ns: int,
+    *,
+    ok: bool = True,
+    rpc_id=None,
+):
+    """Measure a completed phase, optionally correlating with its JSON-RPC ID."""
+    if rpc_id is None:
+        _record(operation, phase, started_ns, time.perf_counter_ns(), ok)
+    else:
+        with rpc_scope(rpc_id):
+            _record(operation, phase, started_ns, time.perf_counter_ns(), ok)
+
+
+def timed_call(operation, phase, callback, *args, **kwargs):
+    """Measure a callable without changing its return value or exceptions."""
+    with span(operation, phase):
+        return callback(*args, **kwargs)
 
 
 def read_trace(path: Path, limit=10000):

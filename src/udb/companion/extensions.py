@@ -9,7 +9,6 @@ from __future__ import annotations
 import fnmatch
 import hashlib
 import os
-import shutil
 import time
 from pathlib import Path
 from typing import Any
@@ -95,9 +94,20 @@ def _file_copy(rt, a):
     try:
         with source.open("rb") as src, destination.open("xb") as dst:
             created = True
-            stat = os.fstat(dst.fileno())
-            identity = (stat.st_dev, stat.st_ino)
-            shutil.copyfileobj(src, dst, 1024 * 1024)
+            metadata = os.fstat(dst.fileno())
+            identity = (metadata.st_dev, metadata.st_ino)
+            copied = 0
+            hasher = hashlib.sha256()
+            # A source can grow after the initial metadata check. Do not
+            # turn a bounded copy into unlimited I/O, even during a race.
+            for block in iter(lambda: src.read(1024 * 1024), b""):
+                copied += len(block)
+                if copied > MAX_HASH:
+                    raise ValueError("File exceeds 256 MiB verification limit")
+                hasher.update(block)
+                dst.write(block)
+            if hasher.hexdigest() != expected:
+                raise IOError("Source changed during copy; destination not published")
             dst.flush()
             os.fsync(dst.fileno())
         if _sha256(destination) != expected:

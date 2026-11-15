@@ -206,7 +206,10 @@ class Agent(AutonomyMixin):
 
     def connect(self):
         reject_links(self.db)
-        c = sqlite3.connect(self.db, timeout=10, factory=ScopedConnection)
+        # Separate Windows Agent processes can contend for their shared audit
+        # journal. SQLite's built-in busy wait is bounded and does not replay a
+        # write with an uncertain outcome; retain a single INSERT transaction.
+        c = sqlite3.connect(self.db, timeout=45, factory=ScopedConnection)
         c.row_factory = sqlite3.Row
         return c
 

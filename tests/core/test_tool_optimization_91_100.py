@@ -7,6 +7,7 @@ Cloudflare deployment, browser authorization or installer is invoked.
 from __future__ import annotations
 
 import json
+import os
 from contextlib import nullcontext
 from types import SimpleNamespace
 
@@ -61,7 +62,7 @@ def test_92_process_listing_keeps_filtered_order_and_page(tmp_path, monkeypatch)
     ]
     monkeypatch.setattr(
         processes,
-        "_windows" if fleet.os.name == "nt" else "_linux",
+        "_windows" if os.name == "nt" else "_linux",
         lambda: [dict(row) for row in rows],
     )
     result = processes.list(match="eDiToR", offset=1, limit=1)

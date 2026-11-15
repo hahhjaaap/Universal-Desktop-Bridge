@@ -533,7 +533,6 @@ def word_document(files, a, output):
     if action == "inspect":
         return dict(paragraphs=len(doc.paragraphs), tables=len(doc.tables))
     if action == "read":
-        rows = list(paragraphs(doc))
         offset = a.get("offset", 0)
         limit = a.get("limit", 100)
         if (
@@ -543,15 +542,23 @@ def word_document(files, a, output):
             or not 1 <= limit <= 200
         ):
             raise ValueError("Paragraph offset >=0, limit 1..200")
+        # Count once without materializing all body/table paragraphs.
+        # Access the text of only selected rows, exactly once each.
+        selected = []
+        truncated = []
+        total = 0
+        for index, paragraph in enumerate(paragraphs(doc)):
+            if offset <= index < offset + limit:
+                content = paragraph.text
+                selected.append(content[:4000])
+                if len(content) > 4000:
+                    truncated.append(index)
+            total = index + 1
         return dict(
-            paragraphs=[p.text[:4000] for p in rows[offset : offset + limit]],
-            truncated_paragraphs=[
-                offset + i
-                for i, p in enumerate(rows[offset : offset + limit])
-                if len(p.text) > 4000
-            ],
-            next_offset=offset + min(limit, len(rows[offset:])),
-            total=len(rows),
+            paragraphs=selected,
+            truncated_paragraphs=truncated,
+            next_offset=offset + min(limit, max(0, total - offset)),
+            total=total,
             scope="body paragraphs and tables",
         )
     if action == "write":
@@ -599,6 +606,17 @@ def pdf_document(files, a, output):
     from pypdf import PdfReader, PdfWriter
 
     action = a["action"]
+    # Local paging limits can be rejected before PDF parser/permission work.
+    if action == "read":
+        start = a.get("start_page", 1)
+        limit = a.get("limit", 3)
+        if (
+            type(start) is not int
+            or start < 1
+            or type(limit) is not int
+            or not 1 <= limit <= 10
+        ):
+            raise ValueError("Page range invalid; read at most 10 pages")
 
     def reader(name):
         value = PdfReader(files.path(name))
@@ -610,21 +628,16 @@ def pdf_document(files, a, output):
 
     if action in ("inspect", "read", "extract"):
         source = reader(a["path"])
+        source_pages = source.pages
+        total_pages = len(source_pages)
         if action == "inspect":
-            return dict(pages=len(source.pages))
+            return dict(pages=total_pages)
         if action == "read":
-            start = a.get("start_page", 1)
-            limit = a.get("limit", 3)
-            if (
-                type(start) is not int
-                or not 1 <= start <= len(source.pages)
-                or type(limit) is not int
-                or not 1 <= limit <= 10
-            ):
+            if start > total_pages:
                 raise ValueError("Page range invalid; read at most 10 pages")
             values = []
-            for i in range(start - 1, min(len(source.pages), start - 1 + limit)):
-                value = source.pages[i].extract_text() or ""
+            for i in range(start - 1, min(total_pages, start - 1 + limit)):
+                value = source_pages[i].extract_text() or ""
                 values.append(
                     dict(
                         page=i + 1,
@@ -632,7 +645,7 @@ def pdf_document(files, a, output):
                         text_truncated=len(value) > 16000,
                     )
                 )
-            return dict(pages=values, total_pages=len(source.pages), ocr=False)
+            return dict(pages=values, total_pages=total_pages, ocr=False)
     if action == "write":
         from xml.sax.saxutils import escape
 
@@ -673,11 +686,11 @@ def pdf_document(files, a, output):
         if action == "merge":
             pages = 0
             for name in a["inputs"]:
-                source = reader(name)
-                pages += len(source.pages)
+                source_pages = reader(name).pages
+                pages += len(source_pages)
                 if pages > 200:
                     raise ValueError("Merged PDF limit 200 pages")
-                for page in source.pages:
+                for page in source_pages:
                     writer.add_page(page)
         else:
             selected = a.get("pages", [])

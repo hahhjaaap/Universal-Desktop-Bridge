@@ -15,8 +15,8 @@
 | 22 ✅ Code + regression added; CI pending | Search result determinism | Same unchanged project tree yields stable matches and line numbers without materializing an unbounded directory listing. |
 | 23 ✅ Regression added; CI pending | Search error isolation | Failed UTF-8 decoding, disappeared files and permission revocation never expose forbidden content or abort unrelated safe matches. |
 | 24 | Batch read deduplication | Repeated paths retain repeated ordered output while avoiding redundant physical reads **only if** project policy and audits remain per-request and revocation-safe. |
-| 25 | Batch read output budget | Exact UTF-8 byte count, preflight + post-read limits, and no partial response on overflow or revocation. |
-| 26 | File listing pagination | Stable offset and keyset behavior on mixed-case names, ties and insertions, with explicit 10k scan truncation. |
+| 25 ✅ Regression added; CI pending | Batch read output budget | Exact UTF-8 byte count, preflight + post-read limits, and no partial response on overflow or revocation. |
+| 26 ✅ Regression added; CI pending | File listing pagination | Stable offset and keyset behavior on mixed-case names, ties and insertions, with explicit 10k scan truncation. |
 | 27 | UTF-8 page boundaries | Exact byte offsets across 1–4 byte characters; reject continuation-byte offsets and malformed content. |
 | 28 | Line reader scalability | Stream bounded-memory line pages including CRLF, Unicode separators, very long lines and large offsets. |
 | 29 | Source edit concurrency | Expected SHA and occurrence count gate writes; no partial writes on mismatch; preserve owner approvals/backups. |

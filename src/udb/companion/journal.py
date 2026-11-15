@@ -204,13 +204,19 @@ class WorkRecovery:
                 ],
                 automatic_replay=False,
             )
-        key = kind + "-" + work_id
-        row = journal.load(key)
+        if action not in ("inspect", "resume"):
+            raise ValueError("action list, inspect or resume")
+        # Already-owned live sessions have their authoritative state in
+        # memory. Avoid decrypting/parsing a stale journal record merely to
+        # discard it. Interrupted work still loads and leases its record.
         if action == "inspect":
             if kind == "job" and work_id in bg.tasks:
                 return bg.tasks[work_id].read()
             if kind == "terminal" and work_id in self.rt.sessions:
                 return self.rt.sessions[work_id].read(None, 0)
+        key = kind + "-" + work_id
+        row = journal.load(key)
+        if action == "inspect":
             if row["state"] == "running":
                 try:
                     lease = journal.lease(key)

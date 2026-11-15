@@ -225,6 +225,53 @@ test("immutable Access identity isolates fleet accounts despite identical emails
   assert.equal(bad.status, 401);
 });
 
+test("issuer-sub native Access Fleet delegation reaches Windows without weakening per-device JWT", async () => {
+  const f = fixture();
+  f.env.UDB_ACCESS_PRINCIPAL_MODE = "issuer-sub";
+  await f.add(deviceA, OWNER, "Owned", true);
+  await f.add(deviceB, OTHER, "Other", true);
+  assert.deepEqual((await f.devices(OWNER)).map(x => x.device_id), [deviceA]);
+
+  const status = await f.call(OWNER, "tools/call",
+    { name: "bridge_status", arguments: { device_id: deviceA } });
+  assert.equal(status.status, 200, "native Access identity must survive internal delegation");
+  const body = (await status.json()).result;
+  assert.ok(body.content?.some(x => x.type === "text"));
+  assert.equal(f.invocations.filter(x => x.id === deviceA &&
+    x.rpc.params?.name === "bridge_status").length, 1);
+
+  const otherOwner = await f.call(OTHER, "tools/call",
+    { name: "bridge_status", arguments: { device_id: deviceA } });
+  assert.equal(otherOwner.status, 403);
+  const absentId = await f.call(OWNER, "tools/call",
+    { name: "bridge_status", arguments: {} });
+  assert.equal(absentId.status, 400);
+  // Bypassing the account Fleet route never unlocks issuer-sub without
+  // a valid signed per-device Access assertion, even for a known owner.
+  const direct = await worker.fetch(new Request(BASE + "/v1/devices/" + deviceA + "/mcp", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call",
+      params: { name: "bridge_status", arguments: {} } }),
+  }), f.env, f.access(OWNER));
+  assert.equal(direct.status, 401);
+});
+
+test("issuer-sub Fleet still requires local Windows permission for all non-status tools", async () => {
+  const f = fixture();
+  f.env.UDB_ACCESS_PRINCIPAL_MODE = "issuer-sub";
+  await f.add(deviceA, OWNER, "No desktop permission", false);
+  const denied = await f.call(OWNER, "tools/call", {
+    name: "computer_process",
+    arguments: { device_id: deviceA, action: "list" },
+  });
+  assert.equal(denied.status, 200);
+  assert.equal((await denied.json()).result.structuredContent.code,
+    "local_owner_permission_required");
+  assert.equal(f.invocations.filter(x => x.id === deviceA &&
+    x.rpc.params?.name === "computer_process").length, 0,
+  "no computer operation dispatched without Windows local approval");
+});
+
 test("local Windows permissions and revocation are evaluated on the target device every time", async () => {
   const f = fixture(); await f.add(deviceA, OWNER, "Dell", true);
   await f.add(deviceB, OWNER, "Home", false);

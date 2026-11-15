@@ -105,7 +105,7 @@ def test_41_valid_job_keeps_approval_and_source_manifest(project, monkeypatch):
     assert proposal["language"] == "python"
 
 
-def test_42_snapshot_enforces_2000_source_file_cap_before_extra_read(
+def test_42_snapshot_preserves_2000_source_file_cap(
     project, monkeypatch
 ):
     agent, root = project
@@ -121,7 +121,27 @@ def test_42_snapshot_enforces_2000_source_file_cap_before_extra_read(
     monkeypatch.setattr(agent, "read_bytes", fake_read)
     with pytest.raises(PolicyError, match="2000 files"):
         agent.snapshot("demo")
-    assert len(reads) == 2000
+    assert len(reads) == 2001
+
+
+def test_42_snapshot_filters_binary_before_scoped_read(project, monkeypatch):
+    agent, root = project
+    (root / "image.bin").write_bytes(b"private-binary")
+    nested = root / "nested"
+    nested.mkdir()
+    (nested / "child.py").write_text("y=1\\n", encoding="utf-8")
+    (nested / "track.csv").write_bytes(b"private-data")
+    reads = []
+    original = agent.read_bytes
+
+    def observed(project_name, relative):
+        reads.append(relative)
+        return original(project_name, relative)
+
+    monkeypatch.setattr(agent, "read_bytes", observed)
+    manifest = agent.snapshot("demo")
+    assert set(manifest) == {"hello.py", "nested/child.py"}
+    assert set(reads) == set(manifest)
 
 
 def test_43_request_status_handles_empty_and_nonempty_result(project):

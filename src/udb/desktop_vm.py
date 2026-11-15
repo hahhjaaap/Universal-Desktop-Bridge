@@ -75,12 +75,14 @@ def guest_source():
 
 
 def propose(agent, project, task, duration_seconds=600):
-    if not available():
-        raise PolicyError("Windows Sandbox unavailable; no host desktop fallback")
+    # Reject malformed task envelopes before probing the VM or walking a
+    # project snapshot. Bool/float durations are not valid clock budgets.
     if not isinstance(task, str) or not 1 <= len(task) <= 2000:
         raise PolicyError("Describe the desktop task (1–2000 characters)")
-    if not 60 <= duration_seconds <= 1800:
+    if type(duration_seconds) is not int or not 60 <= duration_seconds <= 1800:
         raise PolicyError("Session duration must be 60–1800 seconds")
+    if not available():
+        raise PolicyError("Windows Sandbox unavailable; no host desktop fallback")
     payload = {
         "project": project,
         "root": str(agent.project(project)[1]),
@@ -186,8 +188,11 @@ def read_json(path, max_bytes=65536):
     return result
 
 
-def status(agent, sid):
-    result = session(agent, sid)
+def status(agent, sid, *, session_row=None, include_progress=True):
+    # A dispatch already has a freshly authorized session row. Reusing it
+    # within the same call avoids another SQLite connection and JSON decode.
+    # Standalone desktop_status always performs its own fresh lookup.
+    result = session(agent, sid) if session_row is None else session_row
     _, output = paths(agent, sid)
     ready = output / "ready.json"
     result["ready"] = False
@@ -199,14 +204,15 @@ def status(agent, sid):
             result["mailbox_protocol"] = 1 if proof.get("mailbox_protocol") == 1 else 0
             result["guest_state_untrusted"] = proof.get("state", {})
             result["capabilities"] = proof.get("capabilities", [])
-    progress = output / "progress.json"
-    if progress.is_file():
-        try:
-            p = read_json(progress)
-            if p.get("session_id") == sid:
-                result["progress_untrusted"] = p
-        except (OSError, ValueError):
-            pass
+    if include_progress:
+        progress = output / "progress.json"
+        if progress.is_file():
+            try:
+                p = read_json(progress)
+                if p.get("session_id") == sid:
+                    result["progress_untrusted"] = p
+            except (OSError, ValueError):
+                pass
     result["remaining_seconds"] = max(0, int(result["info"]["expires"] - time.time()))
     return result
 
@@ -375,7 +381,8 @@ def command(agent, sid, action, **arguments):
         value["info"]["project"], value["info"]["root"], value["info"]["authorization"]
     ):
         raise PolicyError("Sandbox autonomy revoked")
-    guest_status = status(agent, sid)
+    # Avoid re-reading the session row and unrelated guest progress data.
+    guest_status = status(agent, sid, session_row=value, include_progress=False)
     if not guest_status["ready"]:
         raise PolicyError("Sandbox desktop is still starting; poll desktop_status")
     mailbox_enabled = guest_status.get("mailbox_protocol") == 1
@@ -398,9 +405,8 @@ def command(agent, sid, action, **arguments):
     reply = output / "replies" / (rid + ".json")
     with agent.connect() as c:
         c.execute("BEGIN IMMEDIATE")
-        c.execute(
-            "CREATE TABLE IF NOT EXISTS desktop_control(session TEXT PRIMARY KEY, request_id TEXT, expires REAL)"
-        )
+        # desktop_control is initialized by Agent.__init__; avoid a schema
+        # lookup/DDL statement on each bounded guest desktop action.
         current = c.execute(
             "SELECT expires FROM desktop_control WHERE session=?", (sid,)
         ).fetchone()
@@ -508,11 +514,11 @@ def validate_png(data):
         end = position + 8 + length
         if end + 4 > len(data):
             raise PolicyError("Truncated guest PNG")
-        body = data[position + 8 : end]
-        if (
-            zlib.crc32(kind + body) & 0xFFFFFFFF
-            != struct.unpack("!I", data[end : end + 4])[0]
-        ):
+        # A PNG IDAT can be many MiB. Hash via views instead of allocating
+        # kind+chunk on every iteration; bytewise checksum semantics unchanged.
+        body = memoryview(data)[position + 8 : end]
+        crc = zlib.crc32(body, zlib.crc32(kind)) & 0xFFFFFFFF
+        if crc != struct.unpack("!I", data[end : end + 4])[0]:
             raise PolicyError("Guest PNG checksum mismatch")
         if first:
             if kind != b"IHDR" or len(body) != 13:

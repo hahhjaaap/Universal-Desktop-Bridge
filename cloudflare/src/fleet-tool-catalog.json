@@ -424,9 +424,15 @@
   },
   {
     "name": "list_jobs",
-    "description": "List the last 30 bridge-owned jobs; does not inspect unrelated host processes.",
+    "description": "List 1..30 newest bridge-owned jobs. Optional limit reduces status payload; default stays 30.",
     "inputSchema": {
-      "properties": {},
+      "properties": {
+        "limit": {
+          "default": 30,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
       "title": "list_jobsArguments",
       "type": "object"
     },

@@ -103,7 +103,7 @@ def test_parallel_action_lock_is_enforced(desktop):
     agent, sid, _, _ = desktop
     with agent.connect() as c:
         c.execute(
-            "CREATE TABLE desktop_control(session TEXT PRIMARY KEY,request_id TEXT,expires REAL)"
+            "CREATE TABLE IF NOT EXISTS desktop_control(session TEXT PRIMARY KEY,request_id TEXT,expires REAL)"
         )
         c.execute(
             "INSERT INTO desktop_control VALUES (?,?,?)",

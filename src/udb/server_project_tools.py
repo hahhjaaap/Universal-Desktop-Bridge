@@ -85,12 +85,16 @@ def register_project_tools(mcp, agent, read, propose):
         return agent.job_status(job_id, output_offset, output_limit)
 
     @mcp.tool(annotations=read)
-    def list_jobs() -> list[dict]:
-        """List the last 30 bridge-owned jobs; does not inspect unrelated host processes."""
+    def list_jobs(limit: int = 30) -> list[dict]:
+        """List 1..30 newest bridge-owned jobs. Optional limit reduces status payload; default stays 30."""
+        if type(limit) is not int or not 1 <= limit <= 30:
+            raise ValueError("Job list limit must be 1..30")
         with agent.connect() as c:
             return [
                 dict(r)
-                for r in c.execute("SELECT * FROM jobs ORDER BY rowid DESC LIMIT 30")
+                for r in c.execute(
+                    "SELECT * FROM jobs ORDER BY rowid DESC LIMIT ?", (limit,)
+                )
             ]
 
     @mcp.tool(annotations=propose)

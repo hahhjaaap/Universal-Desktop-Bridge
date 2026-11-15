@@ -79,7 +79,9 @@ def test_41_sandbox_script_preflight_blocks_before_io(
 
     monkeypatch.setattr(sandbox, "available", forbidden)
     monkeypatch.setattr(
-        agent, "snapshot", lambda *_: pytest.fail("No source traversal on invalid input")
+        agent,
+        "snapshot",
+        lambda *_: pytest.fail("No source traversal on invalid input"),
     )
     with pytest.raises(PolicyError):
         agent.propose_job("demo", language, script, timeout)
@@ -183,12 +185,12 @@ def test_45_list_jobs_still_returns_only_last_30_in_order(project):
     register_project_tools(mcp, agent, None, None)
     rows = mcp.tools["list_jobs"]()
     assert len(rows) == 30
-    assert [json.loads(row["info"])["order"] for row in rows] == list(
-        range(34, 4, -1)
-    )
+    assert [json.loads(row["info"])["order"] for row in rows] == list(range(34, 4, -1))
 
 
-@pytest.mark.parametrize("task,duration", [("", 600), ("good", True), ("good", 60.5), ("a" * 2001, 600)])
+@pytest.mark.parametrize(
+    "task,duration", [("", 600), ("good", True), ("good", 60.5), ("a" * 2001, 600)]
+)
 def test_46_invalid_desktop_task_fails_before_sandbox_probe(
     project, monkeypatch, task, duration
 ):
@@ -248,9 +250,7 @@ def _png_chunk(kind, body):
 
 
 def test_48_guest_png_crc_verification_uses_bounded_extra_memory():
-    header = _png_chunk(
-        b"IHDR", struct.pack("!IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
-    )
+    header = _png_chunk(b"IHDR", struct.pack("!IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
     image = (
         b"\x89PNG\r\n\x1a\n"
         + header

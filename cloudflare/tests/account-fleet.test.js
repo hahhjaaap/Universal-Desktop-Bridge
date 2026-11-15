@@ -269,3 +269,56 @@ test("modern account catalog and tool call retain per-request metadata", async (
     arguments: { device_id: deviceA } }, 8)).status, 200);
   assert.equal(ENROLLED_CATALOG.includes("list_projects"), true);
 });
+
+test("list_devices change-only revision retains fresh owner and connection checks", async () => {
+  const f = fixture();
+  await f.add(deviceA, OWNER, "Office");
+  await f.add(deviceB, OWNER, "Laptop");
+  const call = async args => (await (await f.call(OWNER, "tools/call",
+    { name: "list_devices", arguments: args })).json()).result.structuredContent;
+  const first = await call({});
+  assert.equal(first.devices.length, 2);
+  assert.match(first.revision, /^[a-f0-9]{64}$/);
+  const same = await call({ if_revision: first.revision });
+  assert.deepEqual(same, { revision: first.revision, unchanged: true });
+  f.state.get(deviceB).online = false;
+  const changed = await call({ if_revision: first.revision });
+  assert.notEqual(changed.revision, first.revision);
+  assert.equal(changed.devices[1].connection, "offline");
+  const oldOwner = await f.call(OTHER, "tools/call",
+    { name: "list_devices", arguments: { if_revision: changed.revision } });
+  const deniedList = (await oldOwner.json()).result.structuredContent;
+  assert.deepEqual(deniedList.devices, [], "one owner's revision never grants another's inventory");
+  for (const argumentsValue of [{ if_revision: "bad" }, { unexpected: true }]) {
+    assert.equal((await f.call(OWNER, "tools/call",
+      { name: "list_devices", arguments: argumentsValue })).status, 400);
+  }
+});
+
+test("list_devices limits fleet verification fanout without changing device order", async () => {
+  const f = fixture();
+  const ids = Array.from({ length: 26 }, (_, i) => i.toString(16).padStart(32, "0"));
+  for (const [i, id] of ids.entries()) await f.add(id, OWNER, "Device " + i);
+  const originalGet = f.env.DEVICES.get.bind(f.env.DEVICES);
+  let inFlight = 0, maximum = 0, checked = 0;
+  f.env.DEVICES.get = id => {
+    const stub = originalGet(id);
+    return { fetch: async request => {
+      if (new URL(request.url).pathname !== "/fleet/verify")
+        return stub.fetch(request);
+      inFlight++;
+      maximum = Math.max(maximum, inFlight);
+      try {
+        await new Promise(resolve => setTimeout(resolve, 2));
+        checked++;
+        return await stub.fetch(request);
+      } finally {
+        inFlight--;
+      }
+    } };
+  };
+  const inventory = await f.devices(OWNER);
+  assert.deepEqual(inventory.map(x => x.device_id), ids);
+  assert.equal(checked, ids.length, "all devices must be freshly verified");
+  assert.equal(maximum, 12, "fanout must be bounded");
+});

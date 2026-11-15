@@ -23,8 +23,18 @@ from udb.hyperspeed_perf import read_trace
 FIXTURES = Path(__file__).with_name("hyperspeed_scenarios.json")
 FAMILIES = frozenset({"browser", "desktop", "files", "office", "terminal", "transport"})
 OPERATIONS = frozenset(
-    {"queue", "startup", "dispatch", "lookup", "execute", "verify",
-     "observe", "digest", "response", "poll"}
+    {
+        "queue",
+        "startup",
+        "dispatch",
+        "lookup",
+        "execute",
+        "verify",
+        "observe",
+        "digest",
+        "response",
+        "poll",
+    }
 )
 TRACE_PHASES = frozenset(
     {"queue", "dispatch", "execution", "observation", "response", "startup"}
@@ -106,7 +116,11 @@ def critical_path(steps):
             raise ValueError("Critical path must be topologically ordered")
         parent = max(parents, key=lambda p: distance[p]) if parents else None
         duration = step["duration_ms"]
-        if type(duration) not in (float, int) or duration < 0 or not math.isfinite(duration):
+        if (
+            type(duration) not in (float, int)
+            or duration < 0
+            or not math.isfinite(duration)
+        ):
             raise ValueError("Invalid step duration")
         distance[key] = duration + (distance[parent] if parent else 0)
         route[key] = (route[parent] if parent else []) + [key]
@@ -129,7 +143,9 @@ def _fixture_step(op, payload):
         )
         return json.loads(encoded)["status"].encode("ascii") + payload[:64]
     if op == "response":
-        return json.loads(json.dumps({"length": len(payload)}))["length"].to_bytes(4, "big")
+        return json.loads(json.dumps({"length": len(payload)}))["length"].to_bytes(
+            4, "big"
+        )
     raise ValueError("Unknown synthetic operation")
 
 
@@ -215,7 +231,12 @@ def diagnostics(samples, traces=None):
             if e["operation"] in {"cloud.initialize", "desktop.uia"}
         )
         unusual.extend(
-            {"trace_id": key[0], "operation": key[1], "issue": "repeated_call", "count": count}
+            {
+                "trace_id": key[0],
+                "operation": key[1],
+                "issue": "repeated_call",
+                "count": count,
+            }
             for key, count in by_rpc.items()
             if count > 3 and key[0] is not None
         )
@@ -301,8 +322,11 @@ def regression_candidates(report, baseline, factor=1.3, minimum_samples=30):
             and latest["p95_ms"] > previous["p95_ms"] * factor
         ):
             alerts.append(
-                {"scenario": key, "old_p95_ms": previous["p95_ms"],
-                 "new_p95_ms": latest["p95_ms"]}
+                {
+                    "scenario": key,
+                    "old_p95_ms": previous["p95_ms"],
+                    "new_p95_ms": latest["p95_ms"],
+                }
             )
     return alerts
 

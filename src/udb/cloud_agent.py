@@ -543,7 +543,9 @@ def _run_paired(settings) -> int:
                         except (RuntimeError, TimeoutError, ValueError, OSError):
                             # No mutation has been sent: only the local MCP
                             # ping failed. Close this WebSocket and retry.
-                            raise OSError("Local read-only prewarm unavailable") from None
+                            raise OSError(
+                                "Local read-only prewarm unavailable"
+                            ) from None
                         print(
                             "UDB cloud agent: one MCP worker prewarmed "
                             f"in {round((time.monotonic() - warm_start) * 1000)} ms."

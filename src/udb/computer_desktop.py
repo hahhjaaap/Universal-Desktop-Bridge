@@ -370,9 +370,7 @@ class Desktop:
             )
         # The existing exact-match submit path checks owner pause, draft
         # emptiness, focus and exact post-typing UIA readback before Invoke.
-        sent = self.verified_submit(
-            hwnd, window_id, text, "Hỏi ChatGPT", "", "Gửi"
-        )
+        sent = self.verified_submit(hwnd, window_id, text, "Hỏi ChatGPT", "", "Gửi")
         submitted_ms = round((time.monotonic() - started) * 1000)
         # One UIA process polls locally instead of one remote MCP RPC/poll.
         # If UIA fails after sending, outcome is unknown and not replay-safe.
@@ -505,7 +503,8 @@ class Desktop:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                timeout=7 + (wait_ms / 1000 if mode in ("wait_for", "poll_chatgpt_reply") else 0),
+                timeout=7
+                + (wait_ms / 1000 if mode in ("wait_for", "poll_chatgpt_reply") else 0),
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 shell=False,
             )

@@ -186,6 +186,12 @@ def test_45_list_jobs_still_returns_only_last_30_in_order(project):
     rows = mcp.tools["list_jobs"]()
     assert len(rows) == 30
     assert [json.loads(row["info"])["order"] for row in rows] == list(range(34, 4, -1))
+    # A shorter read now avoids materializing/transporting 28 extra job rows.
+    brief = mcp.tools["list_jobs"](limit=2)
+    assert [json.loads(row["info"])["order"] for row in brief] == [34, 33]
+    for invalid in (0, 31, True, 1.5):
+        with pytest.raises(ValueError, match="1..30"):
+            mcp.tools["list_jobs"](limit=invalid)
 
 
 @pytest.mark.parametrize(

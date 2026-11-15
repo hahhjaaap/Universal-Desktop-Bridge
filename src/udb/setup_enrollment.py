@@ -15,7 +15,12 @@ from . import cloud_secrets, credentials
 from .cloud_pair import NoRedirect, validate_origin
 from .config import checked
 from .onboarding import paired_cloud
-from .private_enrollment import PRIVATE_RELAY, _request_json
+from .private_enrollment import (
+    FLEET_TEST_RELAY,
+    PRIVATE_RELAY,
+    _request_json,
+    setup_relay,
+)
 
 
 class EnrollmentError(ValueError):
@@ -50,7 +55,7 @@ class PendingStore:
             if (
                 not isinstance(value, dict)
                 or set(value) != {"id", "proof", "token", "relay"}
-                or value["relay"] != PRIVATE_RELAY
+                or value["relay"] not in (PRIVATE_RELAY, FLEET_TEST_RELAY)
                 or len(value["proof"]) != 64
                 or any(c not in "0123456789abcdef" for c in value["proof"])
             ):
@@ -133,17 +138,27 @@ def enroll(
         )
     store = store or PendingStore(home)
     opener = opener or build_opener(NoRedirect())
+    selected_relay = setup_relay()
     pending = store.load()
     if pending is None:
         pending = {
             "id": secrets.token_hex(16),
             "proof": secrets.token_hex(32),
             "token": secrets.token_urlsafe(48),
-            "relay": PRIVATE_RELAY,
+            "relay": selected_relay,
         }
         store.save_new(pending)  # BEFORE any network side effect.
+    elif pending["relay"] != selected_relay:
+        raise EnrollmentError(
+            "Pending enrollment belongs to another relay. Restore the original "
+            "UDB_SETUP_RELAY to resume without rotating credentials."
+        )
     relay, device_id = pending["relay"], pending["id"]
     fingerprint = hashlib.sha256(pending["proof"].encode("ascii")).hexdigest()
+    # Expose only a non-secret request ID, even when relay enrollment is off.
+    # This allows a staging operator to pin this exact machine before opening
+    # the one-owner approval flow; never print proof or device token.
+    print("Enrollment device ID: " + device_id)
     status, result = _request_json(
         opener,
         relay + "/v1/setup/enrollments",

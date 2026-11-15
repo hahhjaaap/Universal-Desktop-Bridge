@@ -14,6 +14,9 @@ const TEAM = /^https:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\
 // Access app-token sub is an account-scoped user UUID, not an email.
 const ACCESS_SUB = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 let cachedJwks = { url: "", until: 0, keys: [] };
+// Unknown untrusted kids must not turn one JWT request into an unbounded
+// JWKS fetch stream. Legitimate signing-key rollover retries within 1 second.
+let unknownKidRefresh = { url: "", nextAt: 0 };
 
 export function accessConfig(env) {
   const aud = env?.UDB_ACCESS_AUD;
@@ -132,7 +135,9 @@ export async function verifiedAccessIdentity(request, env, fetchImpl = fetch) {
   // Cloudflare Access can rotate its signing key inside our short cache TTL.
   // Refresh metadata once for an unknown kid; never bypass JWT verification.
   // A duplicate/invalid JWK fails closed without an extra network request.
-  if (match.length === 0 && fromCache) {
+  if (match.length === 0 && fromCache &&
+      (unknownKidRefresh.url !== url || Date.now() >= unknownKidRefresh.nextAt)) {
+    unknownKidRefresh = { url, nextAt: Date.now() + 1000 };
     keys = await getKeys(url, fetchImpl, true);
     match = matchingKeys(keys);
   }

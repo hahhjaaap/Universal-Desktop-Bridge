@@ -135,3 +135,93 @@ def test_open_tab_ignores_retired_aura_marker(monkeypatch, tmp_path):
     assert result["branding_requested"] is False
     assert result["branding_verified"] is False
     assert calls == [[CHROME, "--new-tab", "https://example.org/ai?test=1"]]
+
+
+def test_open_chatgpt_reuses_existing_browser_without_touching_login(monkeypatch):
+    d = desktop()
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("udb.computer_desktop.subprocess.run", run)
+    result = d._dispatch("open_chatgpt", text="https://evil.example/ignored")
+    assert calls[0][0] == [CHROME, "--new-tab", "https://chatgpt.com/"]
+    assert calls[0][1]["shell"] is False
+    assert result["requested"] is True
+    assert result["launch_mode"] == "existing_chrome_tab"
+    assert result["url"] == "https://chatgpt.com/"
+    assert result["login_verified"] is False
+    assert result["page_loaded_verified"] is False
+    assert result["dom_attached"] is False
+    assert result["replay_safe"] is False
+
+
+def test_open_chatgpt_starts_default_browser_when_chrome_is_absent(monkeypatch):
+    d = desktop(windows=[])
+    urls = []
+    monkeypatch.setattr(
+        "udb.computer_desktop.os.startfile",
+        urls.append,
+        raising=False,
+    )
+    result = d._dispatch("open_chatgpt")
+    assert urls == ["https://chatgpt.com/"]
+    assert result["requested"] is True
+    assert result["launch_mode"] == "default_browser"
+    assert result["browser_launch_verified"] is False
+    assert result["page_loaded_verified"] is False
+    assert result["login_verified"] is False
+    assert result["user_input_injected"] is False
+
+
+def test_open_chatgpt_failed_default_browser_does_not_retry(monkeypatch):
+    d = desktop(windows=[])
+    requested = []
+
+    def fail(url):
+        requested.append(url)
+        raise OSError("failed")
+
+    monkeypatch.setattr(
+        "udb.computer_desktop.os.startfile", fail, raising=False
+    )
+    with pytest.raises(PolicyError, match="inspect the desktop before retrying"):
+        d._dispatch("open_chatgpt")
+    assert requested == ["https://chatgpt.com/"]
+
+
+def test_open_chatgpt_does_not_fallback_after_uncertain_chrome_error(monkeypatch):
+    d = desktop()
+    called = []
+
+    def fail(url):
+        called.append(url)
+        raise PolicyError("Chrome outcome unknown")
+
+    d.open_chrome_tab = fail
+    monkeypatch.setattr(
+        "udb.computer_desktop.os.startfile",
+        lambda url: pytest.fail("Must not retry through a different browser"),
+        raising=False,
+    )
+    with pytest.raises(PolicyError, match="unknown"):
+        d._dispatch("open_chatgpt")
+    assert called == ["https://chatgpt.com/"]
+
+
+def test_open_chatgpt_obeys_desktop_pause(monkeypatch):
+    d = desktop()
+    d.control = SimpleNamespace(
+        check=lambda: (_ for _ in ()).throw(PolicyError("Desktop paused"))
+    )
+    d.open_chatgpt = lambda: pytest.fail("Paused launch must not occur")
+    with pytest.raises(PolicyError, match="Desktop paused"):
+        d._dispatch("open_chatgpt")
+
+
+def test_open_chatgpt_not_allowed_in_batch():
+    d = desktop()
+    with pytest.raises(PolicyError, match="Invalid/nested batch step"):
+        d.batch("some-window", [{"action": "open_chatgpt"}])

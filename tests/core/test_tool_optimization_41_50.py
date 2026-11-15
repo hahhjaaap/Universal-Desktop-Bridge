@@ -17,8 +17,8 @@ import pytest
 from udb import desktop_vm as vm
 from udb import sandbox
 from udb.core import Agent, PolicyError
-from udb.server_project_tools import register_project_tools
 from udb.sandbox import reserve_vm
+from udb.server_project_tools import register_project_tools
 
 
 @pytest.fixture

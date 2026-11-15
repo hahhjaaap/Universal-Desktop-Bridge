@@ -98,20 +98,27 @@ class ScopedFiles:
             with os.scandir(base) as entries:
                 for entry in entries:
                     try:
-                        yield self.path(entry.path)
+                        # Preserve full path authorization before metadata use.
+                        yield self.path(entry.path), entry
                     except (PermissionError, ValueError, FileNotFoundError):
                         continue
 
         items = []
-        for safe in heapq.nsmallest(
-            count, allowed_entries(), key=lambda p: p.name.casefold()
+        for safe, entry in heapq.nsmallest(
+            count,
+            allowed_entries(),
+            key=lambda pair: (pair[0].name.casefold(), pair[0].name),
         ):
+            try:
+                # DirEntry caches metadata for this scan only, avoiding
+                # repeated Path.stat/is_file/is_dir calls or stale auth caches.
+                directory = entry.is_dir(follow_symlinks=False)
+                regular = entry.is_file(follow_symlinks=False)
+                size = entry.stat(follow_symlinks=False).st_size if regular else None
+            except OSError:
+                continue
             items.append(
-                {
-                    "name": safe.name,
-                    "kind": "dir" if safe.is_dir() else "file",
-                    "size": safe.stat().st_size if safe.is_file() else None,
-                }
+                {"name": safe.name, "kind": "dir" if directory else "file", "size": size}
             )
         return {
             "path": str(base.relative_to(self.root)),
@@ -138,12 +145,29 @@ class ScopedFiles:
                 hasher.update(block)
             stream.seek(start)
             view = stream.read(count)
-        try:
-            displayed = view.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise ValueError(
-                "Read range must contain valid UTF-8; binary files are unsupported"
-            ) from exc
+            # Keep byte-based pagination but complete a final UTF-8 character
+            # (at most three extra bytes). Never silently skip an invalid
+            # start offset or a malformed sequence.
+            extra = 0
+            while True:
+                try:
+                    displayed = view.decode("utf-8")
+                    break
+                except UnicodeDecodeError as exc:
+                    if (
+                        exc.reason != "unexpected end of data"
+                        or start + len(view) >= size
+                        or extra >= 3
+                    ):
+                        raise ValueError(
+                            "Read range must contain valid UTF-8; "
+                            "offset must begin at a code-point boundary"
+                        ) from exc
+                    following = stream.read(1)
+                    if not following:
+                        raise ValueError("Incomplete UTF-8 file content") from exc
+                    view += following
+                    extra += 1
         return {
             "path": str(p.relative_to(self.root)),
             "content": displayed,

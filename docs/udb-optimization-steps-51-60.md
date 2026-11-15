@@ -1,7 +1,7 @@
 # UDB 100-step roadmap: implementation group 51–60
 
 This group implements the **proposed** tool-by-tool milestones in
-[the inventory](udb-100-tool-optimization-inventory.md). It does not infer
+[the inventory proposal (PR #194)](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/194). It does not infer
 a missing mapping of historical steps 31–40. All changes are isolated from
 the user's installed Windows desktop and Cloudflare deployment.
 

@@ -1,0 +1,1123 @@
+{
+  "schema": 1,
+  "mode": "synthetic-only",
+  "note": "Thirty representative UDB workflow shapes. Fixture execution never launches Chrome, moves a pointer, opens real files or contacts Cloudflare. Do not label these measurements real-world speed.",
+  "scenarios": [
+    {
+      "id": "chrome_read_tab",
+      "family": "browser",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "startup",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "dispatch",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "observe",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "response",
+          "after": [
+            "s3"
+          ]
+        }
+      ],
+      "fixture_size": 128
+    },
+    {
+      "id": "chrome_form_entry",
+      "family": "browser",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "observe",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "lookup",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "execute",
+          "after": [
+            "s3"
+          ]
+        },
+        {
+          "id": "s5",
+          "op": "verify",
+          "after": [
+            "s4"
+          ]
+        },
+        {
+          "id": "s6",
+          "op": "response",
+          "after": [
+            "s5"
+          ]
+        }
+      ],
+      "fixture_size": 192
+    },
+    {
+      "id": "chrome_multitab_scan",
+      "family": "browser",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "observe",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "lookup",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "observe",
+          "after": [
+            "s3"
+          ]
+        },
+        {
+          "id": "s5",
+          "op": "response",
+          "after": [
+            "s4"
+          ]
+        }
+      ],
+      "fixture_size": 256
+    },
+    {
+      "id": "chrome_navigation",
+      "family": "browser",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "execute",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "poll",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "verify",
+          "after": [
+            "s3"
+          ]
+        },
+        {
+          "id": "s5",
+          "op": "response",
+          "after": [
+            "s4"
+          ]
+        }
+      ],
+      "fixture_size": 320
+    },
+    {
+      "id": "chrome_snapshot",
+      "family": "browser",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "observe",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "digest",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "response",
+          "after": [
+            "s3"
+          ]
+        }
+      ],
+      "fixture_size": 384
+    },
+    {
+      "id": "desktop_window_inventory",
+      "family": "desktop",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "startup",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "dispatch",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "observe",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "response",
+          "after": [
+            "s3"
+          ]
+        }
+      ],
+      "fixture_size": 128
+    },
+    {
+      "id": "desktop_uia_lookup",
+      "family": "desktop",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "lookup",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "observe",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "verify",
+          "after": [
+            "s3"
+          ]
+        },
+        {
+          "id": "s5",
+          "op": "response",
+          "after": [
+            "s4"
+          ]
+        }
+      ],
+      "fixture_size": 192
+    },
+    {
+      "id": "desktop_uia_edit",
+      "family": "desktop",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "observe",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "execute",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "verify",
+          "after": [
+            "s3"
+          ]
+        },
+        {
+          "id": "s5",
+          "op": "response",
+          "after": [
+            "s4"
+          ]
+        }
+      ],
+      "fixture_size": 256
+    },
+    {
+      "id": "desktop_mouse_sequence",
+      "family": "desktop",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "lookup",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "execute",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "execute",
+          "after": [
+            "s3"
+          ]
+        },
+        {
+          "id": "s5",
+          "op": "verify",
+          "after": [
+            "s4"
+          ]
+        },
+        {
+          "id": "s6",
+          "op": "response",
+          "after": [
+            "s5"
+          ]
+        }
+      ],
+      "fixture_size": 320
+    },
+    {
+      "id": "desktop_region_capture",
+      "family": "desktop",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "observe",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "digest",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "response",
+          "after": [
+            "s3"
+          ]
+        }
+      ],
+      "fixture_size": 384
+    },
+    {
+      "id": "files_directory_list",
+      "family": "files",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "lookup",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "observe",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "response",
+          "after": [
+            "s3"
+          ]
+        }
+      ],
+      "fixture_size": 128
+    },
+    {
+      "id": "files_chunk_read",
+      "family": "files",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "lookup",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "execute",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "digest",
+          "after": [
+            "s3"
+          ]
+        },
+        {
+          "id": "s5",
+          "op": "response",
+          "after": [
+            "s4"
+          ]
+        }
+      ],
+      "fixture_size": 192
+    },
+    {
+      "id": "files_search",
+      "family": "files",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "lookup",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "observe",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "lookup",
+          "after": [
+            "s3"
+          ]
+        },
+        {
+          "id": "s5",
+          "op": "response",
+          "after": [
+            "s4"
+          ]
+        }
+      ],
+      "fixture_size": 256
+    },
+    {
+      "id": "files_copy_verify",
+      "family": "files",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "lookup",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "execute",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "digest",
+          "after": [
+            "s3"
+          ]
+        },
+        {
+          "id": "s5",
+          "op": "verify",
+          "after": [
+            "s4"
+          ]
+        },
+        {
+          "id": "s6",
+          "op": "response",
+          "after": [
+            "s5"
+          ]
+        }
+      ],
+      "fixture_size": 320
+    },
+    {
+      "id": "files_upload_stage",
+      "family": "files",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "execute",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "digest",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "verify",
+          "after": [
+            "s3"
+          ]
+        },
+        {
+          "id": "s5",
+          "op": "response",
+          "after": [
+            "s4"
+          ]
+        }
+      ],
+      "fixture_size": 384
+    },
+    {
+      "id": "excel_range_read",
+      "family": "office",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "lookup",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "observe",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "response",
+          "after": [
+            "s3"
+          ]
+        }
+      ],
+      "fixture_size": 128
+    },
+    {
+      "id": "excel_invoice_audit",
+      "family": "office",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "lookup",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "observe",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "digest",
+          "after": [
+            "s3"
+          ]
+        },
+        {
+          "id": "s5",
+          "op": "verify",
+          "after": [
+            "s4"
+          ]
+        },
+        {
+          "id": "s6",
+          "op": "response",
+          "after": [
+            "s5"
+          ]
+        }
+      ],
+      "fixture_size": 192
+    },
+    {
+      "id": "excel_cell_edit",
+      "family": "office",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "lookup",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "execute",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "verify",
+          "after": [
+            "s3"
+          ]
+        },
+        {
+          "id": "s5",
+          "op": "response",
+          "after": [
+            "s4"
+          ]
+        }
+      ],
+      "fixture_size": 256
+    },
+    {
+      "id": "docx_paragraph_read",
+      "family": "office",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "lookup",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "observe",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "response",
+          "after": [
+            "s3"
+          ]
+        }
+      ],
+      "fixture_size": 320
+    },
+    {
+      "id": "pdf_page_merge",
+      "family": "office",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "lookup",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "execute",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "digest",
+          "after": [
+            "s3"
+          ]
+        },
+        {
+          "id": "s5",
+          "op": "response",
+          "after": [
+            "s4"
+          ]
+        }
+      ],
+      "fixture_size": 384
+    },
+    {
+      "id": "terminal_start",
+      "family": "terminal",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "startup",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "dispatch",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "execute",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "response",
+          "after": [
+            "s3"
+          ]
+        }
+      ],
+      "fixture_size": 128
+    },
+    {
+      "id": "terminal_stdout_poll",
+      "family": "terminal",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "poll",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "observe",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "response",
+          "after": [
+            "s3"
+          ]
+        }
+      ],
+      "fixture_size": 192
+    },
+    {
+      "id": "terminal_batch_commands",
+      "family": "terminal",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "execute",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "verify",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "response",
+          "after": [
+            "s3"
+          ]
+        }
+      ],
+      "fixture_size": 256
+    },
+    {
+      "id": "terminal_status",
+      "family": "terminal",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "observe",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "response",
+          "after": [
+            "s2"
+          ]
+        }
+      ],
+      "fixture_size": 320
+    },
+    {
+      "id": "terminal_cancel",
+      "family": "terminal",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "verify",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "execute",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "response",
+          "after": [
+            "s3"
+          ]
+        }
+      ],
+      "fixture_size": 384
+    },
+    {
+      "id": "mcp_initialize",
+      "family": "transport",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "startup",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "dispatch",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "execute",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "response",
+          "after": [
+            "s3"
+          ]
+        }
+      ],
+      "fixture_size": 128
+    },
+    {
+      "id": "mcp_tools_list",
+      "family": "transport",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "dispatch",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "lookup",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "response",
+          "after": [
+            "s2"
+          ]
+        }
+      ],
+      "fixture_size": 192
+    },
+    {
+      "id": "mcp_call",
+      "family": "transport",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "queue",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "dispatch",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "execute",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "response",
+          "after": [
+            "s3"
+          ]
+        }
+      ],
+      "fixture_size": 256
+    },
+    {
+      "id": "cloud_read_rpc",
+      "family": "transport",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "queue",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "dispatch",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "poll",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "observe",
+          "after": [
+            "s3"
+          ]
+        },
+        {
+          "id": "s5",
+          "op": "response",
+          "after": [
+            "s4"
+          ]
+        }
+      ],
+      "fixture_size": 320
+    },
+    {
+      "id": "fleet_parallel_status",
+      "family": "transport",
+      "steps": [
+        {
+          "id": "s1",
+          "op": "queue",
+          "after": []
+        },
+        {
+          "id": "s2",
+          "op": "dispatch",
+          "after": [
+            "s1"
+          ]
+        },
+        {
+          "id": "s3",
+          "op": "observe",
+          "after": [
+            "s2"
+          ]
+        },
+        {
+          "id": "s4",
+          "op": "lookup",
+          "after": [
+            "s3"
+          ]
+        },
+        {
+          "id": "s5",
+          "op": "observe",
+          "after": [
+            "s4"
+          ]
+        },
+        {
+          "id": "s6",
+          "op": "response",
+          "after": [
+            "s5"
+          ]
+        }
+      ],
+      "fixture_size": 384
+    }
+  ]
+}

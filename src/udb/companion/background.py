@@ -8,6 +8,7 @@ import hashlib
 import os
 import re
 import shutil
+import stat
 import sys
 import tempfile
 import threading
@@ -25,13 +26,31 @@ MAX_LARGE = 16 * 1024**3
 CHUNK = 1024 * 1024
 
 
-def identity(p):
-    s = p.stat()
+def _identity_from_stat(s):
     return (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns)
 
 
+def identity(p):
+    return _identity_from_stat(p.stat())
+
+
+def _version_from_identity(metadata):
+    return hashlib.sha256(repr(metadata).encode()).hexdigest()
+
+
 def version(p):
-    return hashlib.sha256(repr(identity(p)).encode()).hexdigest()
+    return _version_from_identity(identity(p))
+
+
+def _unlink_owned_stage(path, expected_identity):
+    # A missing or replaced upload stage is never removed. The initial
+    # device/inode check is retained while avoiding exists()+stat()+stat().
+    try:
+        current = path.stat()
+    except FileNotFoundError:
+        return
+    if (current.st_dev, current.st_ino) == expected_identity[:2]:
+        path.unlink()
 
 
 def publish_new(source, destination):
@@ -189,28 +208,26 @@ class Background(SearchMixin):
                 self.upload("abort", upload_id=key)
 
     def read_chunk(self, path, offset=0, limit=65536, expected_version=""):
-        p = self.files.path(path)
+        # Invalid paging never touches a protected/expensive filesystem path.
         start = int(offset)
         count = int(limit)
         if start < 0 or not 1 <= count <= CHUNK:
             raise ValueError("Chunk limit 1..1048576; offset must be nonnegative")
-        if not p.is_file() or p.stat().st_size > MAX_LARGE:
+        p = self.files.path(path)
+        initial = p.stat()
+        if not stat.S_ISREG(initial.st_mode) or initial.st_size > MAX_LARGE:
             raise ValueError("Regular file up to 16 GiB required")
-        before = version(p)
+        before_identity = _identity_from_stat(initial)
+        before = _version_from_identity(before_identity)
         if expected_version and expected_version != before:
             raise ValueError("File changed since previous chunk")
         with p.open("rb") as stream:
             opened = os.fstat(stream.fileno())
-            if opened.st_nlink > 1 or (
-                opened.st_dev,
-                opened.st_ino,
-                opened.st_size,
-                opened.st_mtime_ns,
-            ) != identity(p):
+            if opened.st_nlink > 1 or _identity_from_stat(opened) != before_identity:
                 raise ValueError("File identity changed")
             stream.seek(start)
             data = stream.read(count)
-        if version(p) != before:
+        if identity(p) != before_identity:
             raise ValueError("File changed while reading")
         return dict(
             path=str(p.relative_to(self.files.root)),
@@ -230,14 +247,18 @@ class Background(SearchMixin):
         if action == "begin":
             if len(self.uploads) >= 2:
                 raise RuntimeError("Maximum two open uploads")
+            length = int(size)
+            if (
+                not 0 <= length <= MAX_LARGE
+                or not isinstance(sha256, str)
+                or not re.fullmatch("[0-9a-fA-F]{64}", sha256)
+            ):
+                raise ValueError("Expected size (0..16 GiB) and SHA256 required")
+            # Validate the cheap envelope before resolving the protected path.
             dst = self.files.path(path, allow_missing=True)
             if dst.exists() or dst.is_symlink():
                 raise FileExistsError("Upload is create-only; destination exists")
             self.files.path(str(dst.parent))
-            if not 0 <= int(size) <= MAX_LARGE or not re.fullmatch(
-                "[0-9a-fA-F]{64}", sha256
-            ):
-                raise ValueError("Expected size (0..16 GiB) and SHA256 required")
             fd, temp = tempfile.mkstemp(prefix=".udb-upload-", dir=str(dst.parent))
             os.close(fd)
             uid = uuid.uuid4().hex
@@ -245,13 +266,13 @@ class Background(SearchMixin):
                 path=dst,
                 temp=Path(temp),
                 identity=identity(Path(temp)),
-                size=int(size),
+                size=length,
                 sha256=sha256.lower(),
                 offset=0,
                 hasher=hashlib.sha256(),
                 at=time.monotonic(),
             )
-            return dict(upload_id=uid, offset=0, size=int(size), state="open")
+            return dict(upload_id=uid, offset=0, size=length, state="open")
         if upload_id not in self.uploads:
             if action == "status" and upload_id in self.upload_history:
                 return self.upload_history[upload_id]
@@ -278,22 +299,16 @@ class Background(SearchMixin):
             self.upload_history[upload_id] = dict(upload_id=upload_id, state="aborted")
             if len(self.upload_history) > 64:
                 self.upload_history.pop(next(iter(self.upload_history)))
-            if temp.exists() and identity(temp)[:2] == row["identity"][:2]:
-                temp.unlink()
+            _unlink_owned_stage(temp, row["identity"])
             return dict(upload_id=upload_id, state="aborted")
         if row.get("state") == "committing":
             raise ValueError(
                 "Upload commit already running; inspect its job instead of replaying"
             )
-        if (
-            identity(temp)[:2] != row["identity"][:2]
-            or temp.stat().st_nlink != 1
-            or temp.stat().st_size != row["offset"]
-        ):
-            raise ValueError("Upload staging identity/size changed")
         if action == "write":
             if len(content) > ((CHUNK + 2) // 3) * 4:
                 raise ValueError("Chunk exceeds 1 MiB")
+            # Validate encoded payload and cursor before any stage stat/open.
             data = base64.b64decode(content, validate=True)
             if (
                 int(offset) != row["offset"]
@@ -301,6 +316,14 @@ class Background(SearchMixin):
                 or row["offset"] + len(data) > row["size"]
             ):
                 raise ValueError("Expected next offset and bounded upload data")
+        stage = temp.stat()
+        if (
+            (stage.st_dev, stage.st_ino) != row["identity"][:2]
+            or stage.st_nlink != 1
+            or stage.st_size != row["offset"]
+        ):
+            raise ValueError("Upload staging identity/size changed")
+        if action == "write":
             with temp.open("ab") as f:
                 f.write(data)
             row["hasher"].update(data)
@@ -353,8 +376,7 @@ class Background(SearchMixin):
                 if len(self.upload_history) > 64:
                     self.upload_history.pop(next(iter(self.upload_history)))
                 self.uploads.pop(upload_id, None)
-                if temp.exists() and identity(temp)[:2] == row["identity"][:2]:
-                    temp.unlink()
+                _unlink_owned_stage(temp, row["identity"])
 
         row["state"] = "committing"
         try:

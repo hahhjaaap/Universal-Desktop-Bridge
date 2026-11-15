@@ -5,6 +5,7 @@ from .core import PolicyError
 BROWSER_ACTIONS = (
     "open",
     "batch",
+    "fastpath",
     "batch_status",
     "batch_cancel",
     "capture_start",

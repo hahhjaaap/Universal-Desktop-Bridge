@@ -27,10 +27,17 @@ def test_isolated_fleet_staging_has_its_own_script_namespace():
         {"workers_dev": False},
         {"vars": {"UDB_ENABLE_ACCOUNT_FLEET": "true"}},
         {"routes": ["*/*"]},
-        {"durable_objects": {"bindings": [
-            {"name": "DEVICES", "class_name": "DeviceRelay",
-             "script_name": "udb-private-relay-staging"},
-        ]}},
+        {
+            "durable_objects": {
+                "bindings": [
+                    {
+                        "name": "DEVICES",
+                        "class_name": "DeviceRelay",
+                        "script_name": "udb-private-relay-staging",
+                    },
+                ]
+            }
+        },
         {"migrations": [{"tag": "v1", "new_classes": ["DeviceRelay"]}]},
         {"migrations": [{"tag": "v1", "new_sqlite_classes": ["OtherClass"]}]},
     ],

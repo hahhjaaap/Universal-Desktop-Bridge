@@ -8,6 +8,7 @@ the local proxy retains the existing project boundaries and owner approvals.
 from __future__ import annotations
 
 import json
+import os
 import queue
 import re
 import subprocess
@@ -328,6 +329,29 @@ class ParallelLocalProxies:
                 raise RuntimeError("Cloud RPC pool is unavailable")
             return self.executor.submit(self._invoke, rpc)
 
+    def prewarm_one(self, timeout=16):
+        """Initialize exactly one local stdio proxy with a read-only ping.
+
+        Owner opt-in only; this never invokes a tool, starts input control,
+        or replays an unknown user mutation. Other worker threads stay lazy.
+        """
+        if type(timeout) not in (int, float) or not 1 <= timeout <= 30:
+            raise ValueError("Prewarm timeout must be 1..30 seconds")
+        rpc = {
+            "jsonrpc": "2.0",
+            "id": "udb-prewarm-" + uuid.uuid4().hex,
+            "method": "ping",
+        }
+        reply = self.submit(rpc).result(timeout=timeout)
+        if (
+            not isinstance(reply, dict)
+            or reply.get("error") is not None
+            or not isinstance(reply.get("result"), dict)
+        ):
+            self.failed.set()
+            raise RuntimeError("Read-only MCP prewarm ping rejected")
+        return True
+
     def close(self):
         with self.lock:
             if self.closed:
@@ -512,6 +536,20 @@ def _run_paired(settings) -> int:
                             pass
 
                 try:
+                    if os.environ.get("UDB_CLOUD_PREWARM") == "1":
+                        warm_start = time.monotonic()
+                        try:
+                            pool.prewarm_one()
+                        except (RuntimeError, TimeoutError, ValueError, OSError):
+                            # No mutation has been sent: only the local MCP
+                            # ping failed. Close this WebSocket and retry.
+                            raise OSError(
+                                "Local read-only prewarm unavailable"
+                            ) from None
+                        print(
+                            "UDB cloud agent: one MCP worker prewarmed "
+                            f"in {round((time.monotonic() - warm_start) * 1000)} ms."
+                        )
                     while True:
                         frame = receive_relay_text(ws, websocket)
                         if not frame:

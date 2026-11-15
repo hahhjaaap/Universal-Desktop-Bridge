@@ -2,6 +2,32 @@
 
 > **Historical evidence:** Earlier run counts/benchmarks are not current UDB 0.12.0 CI results. The UDB Aura extension is retired from source. See [version/status](current-version.md).
 
+## Optional Cloud Agent prewarm (experimental)
+
+On `HAHHJAAAP` (2026-11-15), an isolated MCP sidecar took **2,960 ms**
+to initialize but only **20 ms, 3 ms, 3 ms and 3 ms** for successive
+read-only `computer_desktop(control_status)` calls within the same worker.
+Three equivalent calls over the connected ChatGPT/UDB path took
+**4,645 ms, 3,983 ms and 5,601 ms**. These measurements include
+different transport and runtime layers; they do not prove that the
+difference is entirely due to cold initialization.
+
+The owner may opt in to warming one local stdio proxy after a private
+Cloudflare WebSocket connects by setting `UDB_CLOUD_PREWARM=1` in the
+**Cloud Agent process environment** before starting it. The warmup uses
+only a read-only MCP `ping`; it never opens a browser, sends text,
+performs a remote tool action or changes grants. Other parallel workers
+remain lazy. If the ping fails, that connection fails closed and retries
+after the existing reconnect backoff, rather than sending a mutation
+through an unverified child.
+
+The flag is **off by default** to avoid idle process and RAM overhead on
+resource-constrained machines. It can improve the first call after a
+connection is established, but does **not** reduce ChatGPT model
+generation time, guarantee 5–6 second answers or remove network/UI
+latency from later calls. Measure cold and warm p50/p95 under the
+same device, request and network conditions before claiming improvement.
+
 ## Current optimization sweep (2026-11-14)
 
 The latest audit separates source optimizations from benchmarked Windows

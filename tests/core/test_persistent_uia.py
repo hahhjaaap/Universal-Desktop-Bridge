@@ -206,7 +206,7 @@ def test_windows_powershell_two_rejected_requests_keep_worker_alive():
     )
     fixture = {
         "hwnd": 0,
-        "pid": 0,
+        "pid": -1,  # Cannot match any live Windows process, even the desktop root.
         "mode": "snapshot",
         "text": "",
     }

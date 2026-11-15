@@ -363,4 +363,11 @@ test("Cloudflare Access key rotation refreshes a stale JWKS once without trustin
   await assert.rejects(verifyAccessAssertion(
     request(await signed(first, kid)), env, fetchImpl), AuthError);
   assert.equal(fetches, 2);
+  // Two unrelated, attacker-controlled kids cannot force repeated JWKS
+  // refreshes immediately after a legitimate rollover.
+  for (const fakeKid of ["unrecognized-1", "unrecognized-2"]) {
+    await assert.rejects(verifyAccessAssertion(
+      request(await signed(first, fakeKid)), env, fetchImpl), AuthError);
+  }
+  assert.equal(fetches, 2);
 });

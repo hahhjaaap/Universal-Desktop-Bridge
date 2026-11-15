@@ -101,6 +101,7 @@ class Computer:
                 args.get("action", "read"),
                 args.get("job_id", ""),
                 args.get("offset", 0),
+                args.get("limit", 30),
             )
         if mode == "files" or (
             mode == "desktop" and args.get("action") in READ_ACTIONS

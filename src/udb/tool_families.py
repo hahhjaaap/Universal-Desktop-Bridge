@@ -14,6 +14,9 @@ FAMILY_NAMES = frozenset(group["name"] for group in FAMILIES)
 FAMILY_MEMBERS = frozenset(
     name for group in FAMILIES for name in group["actions"].values()
 )
+# Family declarations are immutable once the gateway starts. Route one
+# existing family in O(1) without scanning every unrelated family.
+_FAMILY_BY_NAME = {group["name"]: group for group in FAMILIES}
 
 
 def family_annotations(group):
@@ -90,15 +93,14 @@ def consolidate_families(tools, routes):
 
 def resolve_family(name, arguments):
     """Unwrap one family; legacy names never acquire new actions or permissions."""
-    for group in FAMILIES:
-        if name != group["name"]:
-            continue
-        if set(arguments) != {"action", "params"} or not isinstance(
-            arguments["params"], dict
-        ):
-            raise ValueError("Family calls require exactly action and object params")
-        action = arguments["action"]
-        if not isinstance(action, str) or action not in group["actions"]:
-            raise ValueError("Unknown tool family action")
-        return group["actions"][action], arguments["params"]
-    return name, arguments
+    group = _FAMILY_BY_NAME.get(name)
+    if group is None:
+        return name, arguments
+    if set(arguments) != {"action", "params"} or not isinstance(
+        arguments["params"], dict
+    ):
+        raise ValueError("Family calls require exactly action and object params")
+    action = arguments["action"]
+    if not isinstance(action, str) or action not in group["actions"]:
+        raise ValueError("Unknown tool family action")
+    return group["actions"][action], arguments["params"]

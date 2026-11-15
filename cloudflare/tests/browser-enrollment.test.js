@@ -357,7 +357,7 @@ const syncedCall = (f, p, name, args = {}, owner = OWNER) => mcp(f, p, "untruste
   "tools/call", { name, arguments: args }, runtimeOwner(owner, MCP));
 const targetCalls = f => f.calls.filter(c => c.method === "tools/call" && c.params.name !== "bridge_status");
 
-test("fresh enrollment shows all 40 tools without granting local execution or changing credentials", async () => {
+test("fresh enrollment shows all 41 tools without granting local execution or changing credentials", async () => {
   const f = syncFixture(), p = await begin(f); await approve(f, p);
   const before = structuredClone([...f.objects.get(p.id).values]);
   const init = await mcp(f, p, "", "initialize", { protocolVersion: "2025-11-25", capabilities: {} }, runtimeOwner(OWNER, MCP));
@@ -365,7 +365,7 @@ test("fresh enrollment shows all 40 tools without granting local execution or ch
   const r = await mcp(f, p, "", "tools/list", {}, runtimeOwner(OWNER, MCP));
   assert.equal(r.status, 200);
   const tools = (await r.json()).result.tools;
-  assert.equal(tools.length, 40);
+  assert.equal(tools.length, 41);
   assert.ok(tools.some(t => t.name === "computer_files"));
   assert.ok(tools.some(t => t.name === "terminal"));
   assert.ok(tools.some(t => t.name === "browser"));
@@ -407,7 +407,7 @@ test("modern MCP discovery and owner-permission errors retain modern protocol me
         "io.modelcontextprotocol/clientCapabilities": {} } } }),
   }), f.env, p.id, f.env.DEVICES.get(p.id), keys, runtimeOwner(OWNER, MCP));
   const listed = await (await call("tools/list")).json();
-  assert.equal(listed.result.tools.length, 40);
+  assert.equal(listed.result.tools.length, 41);
   assert.equal(listed.result.resultType, "complete");
   assert.equal(listed.result.cacheScope, "private");
   const denied = await (await call("tools/call", { name: "computer_files", arguments: {} })).json();
@@ -496,7 +496,7 @@ test("global relay group opt-outs remain authoritative after local computer cons
   assert.equal((await syncedCall(f, p, "file_write")).status, 403);
   assert.equal(targetCalls(f).length, 0);
   const listed = await mcp(f, p, "", "tools/list", {}, runtimeOwner(OWNER, MCP));
-  assert.equal((await listed.json()).result.tools.length, 40);
+  assert.equal((await listed.json()).result.tools.length, 41);
 });
 
 test("permission synchronization dispatches a mutation once and never retries uncertain outcomes", async () => {

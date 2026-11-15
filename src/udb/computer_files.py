@@ -164,7 +164,11 @@ class Files:
 
     def _read(self, p, encoding, offset, limit):
         self._bounded_range(
-            offset, limit, MAX_FILE, 512 * 1024, "Read offset 0..8 MiB; limit 1..512 KiB"
+            offset,
+            limit,
+            MAX_FILE,
+            512 * 1024,
+            "Read offset 0..8 MiB; limit 1..512 KiB",
         )
         if encoding not in ("base64", "utf-8"):
             raise PolicyError("Encoding must be utf-8 or base64")

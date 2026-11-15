@@ -7,7 +7,6 @@ host applications, changes the clipboard or sends desktop input.
 from __future__ import annotations
 
 import json
-import os
 import struct
 import sys
 import tracemalloc
@@ -176,7 +175,7 @@ def test_56_capture_encodes_exact_bgrx_pixels_and_crc():
     chunks = _unpack_png(encode_bgrx_png(source, 2, 2))
     assert struct.unpack("!II", chunks[b"IHDR"][0][:8]) == (2, 2)
     pixels = zlib.decompress(chunks[b"IDAT"][0])
-    assert pixels == b"\x00\xff\x00\x00\x00\x00\xff\x00\x00\x00\xff\x00\x00\x00"
+    assert pixels == bytes([0, 255, 0, 0, 0, 0, 255, 0, 0, 255, 0, 0, 0, 0])
     with pytest.raises(ValueError, match="buffer"):
         encode_bgrx_png(b"short", 2, 2)
 

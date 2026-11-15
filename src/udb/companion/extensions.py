@@ -86,9 +86,12 @@ def _file_mkdir(rt, a):
 
 
 def _file_copy(rt, a):
-    source = _source_file(rt.files, a["source"], a.get("expected_sha256", ""))
+    provided = a.get("expected_sha256", "")
+    source = _source_file(rt.files, a["source"], provided)
     destination = _safe_destination(rt.files, a["destination"])
-    expected = _sha256(source)
+    # _source_file already verified a supplied expected SHA256. Hashing the
+    # source again would double I/O (up to 256 MiB) before transfer begins.
+    expected = provided.lower() if provided else _sha256(source)
     created = False
     identity = None
     try:
@@ -126,9 +129,12 @@ def _file_copy(rt, a):
 
 
 def _file_move(rt, a):
-    source = _source_file(rt.files, a["source"], a.get("expected_sha256", ""))
+    provided = a.get("expected_sha256", "")
+    source = _source_file(rt.files, a["source"], provided)
     destination = _safe_destination(rt.files, a["destination"])
-    expected = _sha256(source)
+    # _source_file already verified a supplied expected SHA256. Hashing the
+    # source again would double I/O (up to 256 MiB) before transfer begins.
+    expected = provided.lower() if provided else _sha256(source)
     # UDB currently runs only on Windows, where os.rename fails if dst exists.
     # Do not silently substitute os.replace, which would overwrite.
     if os.name != "nt":

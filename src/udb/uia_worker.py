@@ -33,6 +33,7 @@ class PersistentUIA:
         self._replies = None
         self._reader = None
         self._idle = None
+        self._idle_token = None
 
     @staticmethod
     def _receive(process, replies):
@@ -56,6 +57,7 @@ class PersistentUIA:
     def _stop_locked(self):
         timer = self._idle
         self._idle = None
+        self._idle_token = None
         if timer is not None:
             timer.cancel()
         process = self._process
@@ -86,9 +88,9 @@ class PersistentUIA:
         with self._lock:
             self._stop_locked()
 
-    def _expire(self):
+    def _expire(self, token):
         with self._lock:
-            if self._idle is not None:
+            if self._idle_token is token and self._idle is not None:
                 self._stop_locked()
 
     def _begin(self):
@@ -147,6 +149,7 @@ class PersistentUIA:
             if self._idle is not None:
                 self._idle.cancel()
                 self._idle = None
+                self._idle_token = None
             try:
                 self._begin()
                 process = self._process
@@ -178,8 +181,12 @@ class PersistentUIA:
                 ) from None
             finally:
                 if self._process is not None:
-                    timer = threading.Timer(IDLE_SECONDS, self._expire)
+                    token = object()
+                    timer = threading.Timer(
+                        IDLE_SECONDS, self._expire, args=(token,)
+                    )
                     timer.daemon = True
+                    self._idle_token = token
                     self._idle = timer
                     timer.start()
 

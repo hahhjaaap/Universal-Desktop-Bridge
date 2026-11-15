@@ -3,10 +3,12 @@ on:
   push:
     paths:
       - 'examples/chatgpt-workspace/**'
+      - 'tests/test_common_room_inbox.py'
       - '.github/workflows/workspace.yml'
   pull_request:
     paths:
       - 'examples/chatgpt-workspace/**'
+      - 'tests/test_common_room_inbox.py'
       - '.github/workflows/workspace.yml'
 permissions:
   contents: read
@@ -24,6 +26,8 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m pip install --target browser_deps -r requirements-browser.txt
+      - run: python -m pip install pytest
+      - run: python -m pytest -q ../../tests/test_common_room_inbox.py
       - run: python -B room.py selftest
       - run: python -B chain.py --selftest
       - run: python -B fast_live.py selftest

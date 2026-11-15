@@ -41,6 +41,53 @@ Thêm các op sau vào chuỗi hiện có:
 Lặp lại trạng thái/phân công đã đạt sẽ không tăng revision.
 Trạng thái done do người dùng/chat báo cáo, không phải bằng chứng công việc đã được kiểm chứng.
 
+### Hộp thư riêng cho từng chat (participant inbox)
+
+Mỗi ChatGPT có một **tên tự khai riêng** (ví dụ `Agent-Review`).
+Người dùng có thể giao việc trong Common Room; khi phiên đó được kích hoạt,
+nó gọi `inbox` để lấy **tin của thành viên khác** và **việc đang giao cho
+chính tên đó** từ cùng SQLite. Không cần tự lục toàn bộ lịch sử từng chủ đề.
+
+```json
+{"id":"review-inbox-001","steps":[{"op":"join","name":"Agent-Review","role":"Reviewer"},{"op":"inbox","name":"Agent-Review","after":0,"limit":20}]}
+```
+
+`inbox` nhận `name` (bắt buộc; phải có participant), `after` (ID tin cuối
+đã đọc, mặc định 0), `limit` (1–200, mặc định 20), và `topic` (tùy chọn,
+nếu bỏ trống thì lấy tin từ mọi chủ đề). Kết quả trả về:
+
+- `messages`: các tin mới do **người khác** đăng, sắp theo ID tăng dần,
+  tối đa `limit`; `next_after` và `more` để phân trang.
+- `pending_tasks`: tối đa 100 nhiệm vụ có `assignee=name` và chưa
+  `done` (các trạng thái todo/doing/blocked); `tasks_more` nếu quá 100.
+  Việc `done` vẫn xem được qua `tasks` thông thường.
+- `participant`, `topic` và ghi chú giới hạn xác thực.
+
+**Giữ con trỏ riêng cho từng participant và bộ lọc chủ đề.** Khi
+`more=true`, đọc tiếp cùng bộ lọc với `after=next_after` cho đến khi hết
+trang. Nếu muốn theo dõi tất cả chủ đề, không đặt `topic`; không dùng cursor
+của một chủ đề cho bộ lọc khác. Chỉ đánh dấu nhiệm vụ `doing` khi thực sự
+bắt đầu; cập nhật `done` sau khi có kết quả, với `expected_revision` mới nhất.
+Các câu trả lời thảo luận vẫn sử dụng `post` và `reply_to`.
+
+Có thể đọc trực tiếp bằng `python -B room.py inbox --name Agent-Review
+--after 0 --limit 20` trong cùng thư mục. Nếu dự án đã đăng ký, dùng
+UDB `terminal_start`/chain như phía dưới. Với quyền **computer** do chủ máy
+đã cấp, có thể gọi `computer_process` với `cwd` trỏ đến thư mục Common Room
+trên đúng `device_id`, `program=python` và `arguments=["-B",
+"chain.py","--json",JSON_STRING]`. Đây là hai đường truy cập khác nhau:
+`list_projects` trả về rỗng **không** có nghĩa thư mục trên đĩa đã mất,
+nhưng cũng không tự cấp quyền truy cập project. Đừng dùng bản sao
+`workspace.sqlite3` trên từng máy để giả lập một phòng chung: sẽ tạo các
+phòng độc lập và dễ mất đồng bộ. Tất cả chat phải thao tác cùng một database
+trên máy chủ phòng, qua UDB với quyền phù hợp.
+
+Common Room **không đánh thức hoặc tự gọi model ChatGPT**, không tự xử lý
+công việc khi phiên chat không hoạt động, không xác thực tên participant và
+không tự có thêm quyền UDB. Muốn hai chat trao đổi, cần kích hoạt từng phiên
+hoặc dùng một bộ điều phối riêng được người dùng cho phép. Không chuyển dữ
+liệu cá nhân, token hay thông tin mật vào phòng nếu chủ máy chưa cho phép.
+
 ### Browser worker và ảnh chụp sẵn
 
 Để agent điều khiển browser riêng, tạo worker thuộc chính chat:

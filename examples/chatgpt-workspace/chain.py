@@ -14,6 +14,7 @@ ALLOWED = {
     "topic": {"op", "name", "goal"},
     "post": {"op", "author", "topic", "kind", "body", "reply_to", "request_id"},
     "read": {"op", "topic", "after", "limit"},
+    "inbox": {"op", "name", "topic", "after", "limit"},
     "status": {"op"},
     "task": {"op", "title", "topic", "assignee", "request_id"},
     "tasks": {"op", "topic", "state", "limit"},
@@ -49,6 +50,7 @@ def validate(req):
         "topic": {"name", "goal"},
         "post": {"author", "body"},
         "read": set(),
+        "inbox": {"name"},
         "status": set(),
         "task": {"title"},
         "tasks": set(),
@@ -70,7 +72,7 @@ def validate(req):
                 raise ValueError(
                     "References are allowed only for reply_to, task_id and expected_revision"
                 )
-        if op == "read":
+        if op in ("read", "inbox"):
             if type(step.get("after", 0)) is not int or step.get("after", 0) < 0:
                 raise ValueError("after must be a nonnegative integer")
             if (
@@ -147,6 +149,14 @@ def run(db, req):
                     step.get("topic", "general"),
                     step.get("after", 0),
                     step.get("limit", 20),
+                )
+            elif op == "inbox":
+                value = room.inbox(
+                    db,
+                    step["name"],
+                    step.get("after", 0),
+                    step.get("limit", 20),
+                    step.get("topic"),
                 )
             elif op == "task":
                 value = room.task_create(

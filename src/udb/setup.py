@@ -456,6 +456,11 @@ def run(
                     }
                 )
             )
+            if fleet:
+                print(
+                    "Fleet: call list_devices, then bridge_status with the chosen device_id; "
+                    "pass that device_id on every Windows tool call."
+                )
             return 0 if verified and online else 2
     except KeyboardInterrupt:
         print("Setup paused. Run udb setup to resume the saved request.")

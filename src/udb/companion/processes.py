@@ -27,6 +27,16 @@ def clean_env():
     return env
 
 
+def _valid_terminal_dimensions(columns, rows):
+    """ConPTY dimensions must be exact integers within native bounds."""
+    return (
+        type(columns) is int
+        and type(rows) is int
+        and 20 <= columns <= 400
+        and 5 <= rows <= 200
+    )
+
+
 class ManagedProcess:
     def __init__(self, argv, cwd, memory_mib=1024, conpty=False, columns=100, rows=30):
         self.lock = threading.RLock()
@@ -35,11 +45,7 @@ class ManagedProcess:
         self.stdin = self.stdout = None
         self.hpc = None
         if conpty and (
-            os.name != "nt"
-            or type(columns) is not int
-            or type(rows) is not int
-            or not 20 <= columns <= 400
-            or not 5 <= rows <= 200
+            os.name != "nt" or not _valid_terminal_dimensions(columns, rows)
         ):
             raise ValueError("ConPTY requires Windows, columns 20..400 and rows 5..200")
         if os.name != "nt":
@@ -57,6 +63,9 @@ class ManagedProcess:
             self.stdin = self.proc.stdin
             self.stdout = self.proc.stdout
             return
+        self._start_windows(argv, cwd, memory_mib, conpty, columns, rows)
+
+    def _start_windows(self, argv, cwd, memory_mib, conpty, columns, rows):
         import msvcrt
         from ctypes import wintypes as w
 
@@ -365,12 +374,7 @@ class ManagedProcess:
         with self.lock:
             if not self.hpc or self.poll() is not None:
                 raise RuntimeError("No active ConPTY")
-            if (
-                type(columns) is not int
-                or type(rows) is not int
-                or not 20 <= columns <= 400
-                or not 5 <= rows <= 200
-            ):
+            if not _valid_terminal_dimensions(columns, rows):
                 raise ValueError("columns 20..400; rows 5..200")
             hr = self.k.ResizePseudoConsole(self.hpc, self.Coord(columns, rows))
             if hr < 0:

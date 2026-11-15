@@ -9,7 +9,7 @@ the user's installed Windows desktop and Cloudflare deployment.
 | ---: | --- | --- | --- |
 | 51 | `computer_process start` | Construct executable Path once; reject bool timeout before expensive PATH/FS calls | Invalid durations never spawn; absolute paths do not use PATH; owner executable allowlist unchanged |
 | 52 | `computer_process read` | Avoid opening log at exact 4-MiB EOF quota, retain bounded output/cursor | Fake inaccessible log; strict offset bound and no unknown-job/foreign-PID read |
-| 53 | `computer_process list` | Optional `limit=1..30` to materialize/transport fewer owned metadata rows | Default 30 and legacy insertion order; no OS-wide enumeration |
+| 53 | `computer_process list` | Optional `limit=1..30` to return the newest owned metadata rows without materializing skipped records | Default 30 and legacy insertion order; no OS-wide enumeration |
 | 54 | `computer_process stop / cleanup` | Clear capacity slot reference after successful close, avoiding repeat release in cleanup retry | Fake double finish; no arbitrary PID termination |
 | 55 | `computer_desktop list` | Reuse one title/class/foreground observation per enumerated HWND | Window IDs still live 60s; `resolve` still checks live PID/class/focus |
 | 56 | `computer_desktop screenshot` | Convert top-down BGRX directly to PNG scanlines; no `buffer.raw` and extra full RGB buffer | Pixel/CRC fixture, max dimensions, bounded peak memory; foreground/occlusion verification untouched |

@@ -119,7 +119,7 @@ Worker name `udb-fleet-isolated-staging` and its own
 `new_sqlite_classes: ["DeviceRelay"]` migration. It does **not** inherit
 the live staging Worker name or Durable Object namespace, and contains no
 runtime secrets, approvals, routes or implicit Fleet-enabled flags.
-Run the offline guard `python tools/check_fleet_isolated_config.py`
+Run the offline guard `python -m tools.check_fleet_isolated_config`
 before any separately approved deployment. Do not deploy using the default
 `wrangler.staging.jsonc`, which deliberately targets the live relay.
 

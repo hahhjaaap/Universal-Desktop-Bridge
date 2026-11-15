@@ -160,7 +160,7 @@ export async function verifyAccessAssertion(request, env, fetchImpl = fetch) {
 }
 
 export async function authorizeAccess(access, env, deviceId, request = null,
-    fetchImpl = fetch, enrolledGrant = null) {
+    fetchImpl = fetch, enrolledGrant = null, trustedFleetOwner = null) {
   const cfg = accessConfig(env);
   if (!cfg) throw new AuthError();
   const mode = env?.UDB_ACCESS_PRINCIPAL_MODE === undefined
@@ -173,28 +173,47 @@ export async function authorizeAccess(access, env, deviceId, request = null,
   let subject = null;
   let runtimeIdentity = null;
   if (mode === "issuer-sub") {
-    // Opt-in staging pilot: require the signed assertion even when ctx.access
-    // supplies a valid email. The authenticated issuer + account-scoped sub
-    // must match an explicit grant; email and legacy grants never substitute.
+    // Direct per-device routes still require the signed JWT. Only the account
+    // Fleet handler can pass a preverified owner, after Access identity,
+    // registry membership and the device's live owner proof were all checked.
     if (!cfg.team) throw new AuthError();
-    const identity = await verifiedAccessIdentity(request, env, fetchImpl);
-    if (typeof identity.sub !== "string" || !ACCESS_SUB.test(identity.sub))
-      throw new AuthError();
-    // If the Access runtime separately exposes an identity, it must not
-    // disagree with the signed assertion. WARP may expose only aud; in that
-    // case the signature remains the sole source of user identity.
-    if (typeof access?.getIdentity === "function") {
-      let observed = null;
-      try { observed = await access.getIdentity(); }
-      catch { /* Optional runtime identity unavailable; signed JWT required. */ }
-      if (observed) {
-        if ((emailSubject(observed.email) && observed.email !== identity.email) ||
-            (typeof observed.user_uuid === "string" &&
-              observed.user_uuid.toLowerCase() !== identity.sub.toLowerCase()))
+    if (trustedFleetOwner !== null) {
+      if (typeof access?.getIdentity !== "function" ||
+          typeof trustedFleetOwner !== "string") throw new AuthError();
+      const observed = await access.getIdentity();
+      if (typeof observed?.user_uuid !== "string" ||
+          !ACCESS_SUB.test(observed.user_uuid)) throw new AuthError();
+      const trustedSubject = cfg.team + "#" + observed.user_uuid.toLowerCase();
+      if (trustedSubject !== trustedFleetOwner) throw new AuthError();
+      // An additional signed assertion must agree with the native identity.
+      if (request?.headers?.get("Cf-Access-Jwt-Assertion")) {
+        const signed = await verifiedAccessIdentity(request, env, fetchImpl);
+        if (signed.sub?.toLowerCase() !== observed.user_uuid.toLowerCase() ||
+            (emailSubject(observed.email) && signed.email !== observed.email))
           throw new AuthError();
       }
+      runtimeIdentity = { sub: observed.user_uuid.toLowerCase(),
+        email: observed.email };
+      subject = trustedSubject;
+    } else {
+      // Standalone device MCP: never exchange an email or runtime hint for
+      // the original issuer-sub JWT requirement.
+      const identity = await verifiedAccessIdentity(request, env, fetchImpl);
+      if (typeof identity.sub !== "string" || !ACCESS_SUB.test(identity.sub))
+        throw new AuthError();
+      if (typeof access?.getIdentity === "function") {
+        let observed = null;
+        try { observed = await access.getIdentity(); }
+        catch { /* Optional runtime identity unavailable; signed JWT required. */ }
+        if (observed) {
+          if ((emailSubject(observed.email) && observed.email !== identity.email) ||
+              (typeof observed.user_uuid === "string" &&
+                observed.user_uuid.toLowerCase() !== identity.sub.toLowerCase()))
+            throw new AuthError();
+        }
+      }
+      subject = cfg.team + "#" + identity.sub.toLowerCase();
     }
-    subject = cfg.team + "#" + identity.sub.toLowerCase();
   } else {
     if (access) {
       try {
@@ -240,6 +259,9 @@ export async function authorizeAccess(access, env, deviceId, request = null,
         if (!cfg.team || typeof runtimeIdentity.user_uuid !== "string" ||
             !ACCESS_SUB.test(runtimeIdentity.user_uuid)) throw new AuthError();
         verified = { email: runtimeIdentity.email, sub: runtimeIdentity.user_uuid };
+      } else if (mode === "issuer-sub" && trustedFleetOwner === subject &&
+                 runtimeIdentity) {
+        verified = runtimeIdentity;
       } else verified = await verifiedAccessIdentity(request, env, fetchImpl);
       if (verified.email !== (mode === "email" ? subject : verified.email))
         throw new AuthError();
@@ -255,7 +277,9 @@ export async function authorizeAccess(access, env, deviceId, request = null,
   // Preserve the legacy read-only authorization response exactly when the
   // opt-in profile is absent; existing Access integrations remain unchanged.
   const readScope = stagingFixtureProject ? { stagingFixtureProject } : {};
-  if (enrolledStatusOnly && mode === "email" && env.UDB_ENABLE_LOCAL_TOOL_SYNC === "true")
+  if (enrolledStatusOnly && (mode === "email" ||
+      (mode === "issuer-sub" && trustedFleetOwner === subject)) &&
+      env.UDB_ENABLE_LOCAL_TOOL_SYNC === "true")
     return { subject, allowTools: readTools, catalogTools: ENROLLED_CATALOG,
       enrolledOwner: true };
   return ownerTools.length

@@ -90,8 +90,13 @@ export async function routeBrowserEnrollment(request, env, forward, fetchImpl = 
         // Static diagnostics only: never log assertions, cookies, identity or URL.
         console.warn(JSON.stringify({ event: "udb_owner_auth_denied", reason,
           runtime_present: Boolean(access), assertion_present: request.headers.has("Cf-Access-Jwt-Assertion") }));
-        return page("<p>Owner authentication could not be verified. Sign in through the configured Cloudflare Access application.</p>" +
-          "<p>Diagnostic: <code>" + reason + "</code>. If already signed in, ask the relay operator to check this code.</p>", 403);
+        const unavailable = reason === "owner_keys_unavailable" ||
+          reason === "owner_runtime_unavailable";
+        return page("<p>" + (unavailable ?
+          "Cloudflare Access identity verification is temporarily unavailable. Your approval has not been changed; retry later." :
+          "Owner authentication could not be verified. Sign in through the configured Cloudflare Access application.") +
+          "</p><p>Diagnostic: <code>" + reason + "</code>. If already signed in, ask the relay operator to check this code.</p>",
+        unavailable ? 503 : 403);
       }
       if (request.method === "GET") {
         const code = url.searchParams.get("code");

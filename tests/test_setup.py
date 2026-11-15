@@ -45,6 +45,34 @@ def remote(online=True, verified=False):
     }
 
 
+def test_locked_fleet_canary_stages_only_non_secret_request_id(
+    selected, monkeypatch, capsys
+):
+    from udb.private_enrollment import FLEET_TEST_RELAY
+
+    monkeypatch.setenv("UDB_SETUP_RELAY", FLEET_TEST_RELAY)
+    urls = []
+
+    def caps(opener, url, **kwargs):
+        urls.append(url)
+        return 200, {"protocol": 2, "browser_enrollment": False}
+
+    monkeypatch.setattr(setup, "_request_json", caps)
+    monkeypatch.setattr(
+        setup, "prepare_pending",
+        lambda _: {"id": "c" * 32, "proof": "secret", "token": TOKEN},
+    )
+    monkeypatch.setattr(
+        setup, "enroll", lambda *a, **kw: pytest.fail("Enrollment must stay locked")
+    )
+    assert setup.run(selected, browser=lambda _: pytest.fail("No browser")) == 2
+    output = capsys.readouterr().out
+    assert urls == [FLEET_TEST_RELAY + "/v1/setup"]
+    assert "Pending device ID: " + "c" * 32 in output
+    assert "secret" not in output and TOKEN not in output
+    assert not selected.home.exists()
+
+
 def test_fresh_device_runs_every_phase_without_typing_secrets(
     selected, monkeypatch, capsys
 ):

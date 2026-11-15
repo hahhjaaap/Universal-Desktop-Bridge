@@ -113,8 +113,13 @@ def http(opener, url, *, method="GET", data=None, accept="application/json"):
 
 
 def check(
-    relay, device_id=None, *, account_fleet=False, callback=None,
-    register_client=False, opener=None,
+    relay,
+    device_id=None,
+    *,
+    account_fleet=False,
+    callback=None,
+    register_client=False,
+    opener=None,
 ):
     if account_fleet and device_id is not None:
         raise ValueError("Fleet account preflight must not select a device ID")
@@ -257,7 +262,8 @@ def main(argv=None):
     target = parser.add_mutually_exclusive_group(required=True)
     target.add_argument("--device-id", help="Legacy per-device MCP resource")
     target.add_argument(
-        "--account-fleet", action="store_true",
+        "--account-fleet",
+        action="store_true",
         help="Shared account MCP resource; no device ID",
     )
     parser.add_argument("--register-client", action="store_true")

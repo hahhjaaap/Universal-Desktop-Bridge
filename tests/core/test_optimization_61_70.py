@@ -11,9 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from udb import browser_files
-from udb import host_browser
-from udb import host_service
+from udb import browser_files, host_browser, host_service
 from udb.browser_capture import CaptureCache
 from udb.companion.virtual_pointer import VirtualPointer, _LastInputInfo
 from udb.core import PolicyError

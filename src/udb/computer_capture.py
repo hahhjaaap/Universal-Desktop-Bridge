@@ -36,12 +36,7 @@ def encode_bgrx_png(buffer, width: int, height: int) -> bytes:
 
     def chunk(kind: bytes, value: bytes) -> bytes:
         crc = zlib.crc32(value, zlib.crc32(kind)) & 0xFFFFFFFF
-        return (
-            struct.pack("!I", len(value))
-            + kind
-            + value
-            + struct.pack("!I", crc)
-        )
+        return struct.pack("!I", len(value)) + kind + value + struct.pack("!I", crc)
 
     return (
         b"\x89PNG\r\n\x1a\n"

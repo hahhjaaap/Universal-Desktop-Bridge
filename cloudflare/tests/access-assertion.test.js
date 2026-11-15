@@ -371,3 +371,38 @@ test("Cloudflare Access key rotation refreshes a stale JWKS once without trustin
   }
   assert.equal(fetches, 2);
 });
+
+test("Access certificate outage is retryable, not a false login or OAuth consent failure", async () => {
+  // New team isolates this case from the module's 30-second valid JWKS cache.
+  const f = await fixture();
+  const team = "https://udb-cert-outage-check.cloudflareaccess.com";
+  f.env.UDB_ACCESS_TEAM_DOMAIN = team;
+  const jwt = await f.token({ iss: team });
+  let fetches = 0;
+  const offlineJwks = async () => {
+    fetches++;
+    return Response.json({ error: "synthetic outage" }, { status: 503 });
+  };
+  const { handleMcp } = await import("../src/mcp.js");
+  const denied = await handleMcp(f.request(jwt), f.env, DEVICE,
+    f.env.DEVICES.get(), offlineJwks);
+  assert.equal(denied.status, 503);
+  assert.equal((await denied.json()).error,
+    "cloudflare_access_keys_temporarily_unavailable");
+  assert.equal(f.forwards.length, 0, "no unverified request is dispatched");
+
+  f.env.UDB_ENABLE_ACCOUNT_FLEET = "true";
+  f.env.UDB_ENABLE_BROWSER_ENROLLMENT = "true";
+  f.env.UDB_ENABLE_LOCAL_TOOL_SYNC = "true";
+  const { handleAccountMcp } = await import("../src/account-fleet.js");
+  const accountRequest = new Request(ROOT + "/v1/account/mcp", {
+    method: "POST", headers: { "Cf-Access-Jwt-Assertion": jwt },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+  });
+  const fleetDenied = await handleAccountMcp(accountRequest, f.env, null, offlineJwks);
+  assert.equal(fleetDenied.status, 503);
+  assert.equal((await fleetDenied.json()).error,
+    "cloudflare_access_keys_temporarily_unavailable");
+  assert.equal(f.forwards.length, 0);
+  assert.equal(fetches, 2);
+});

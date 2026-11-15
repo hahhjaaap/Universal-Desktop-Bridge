@@ -63,6 +63,7 @@ def test_canary_pending_credential_is_reused_and_cannot_switch_relays(
 def test_legacy_setup_still_uses_existing_default_relay(tmp_path, monkeypatch):
     monkeypatch.delenv("UDB_SETUP_RELAY", raising=False)
     store = MemoryStore()
-    assert setup_enrollment.prepare_pending(tmp_path / "legacy", store=store)[
-        "relay"
-    ] == OLD
+    assert (
+        setup_enrollment.prepare_pending(tmp_path / "legacy", store=store)["relay"]
+        == OLD
+    )

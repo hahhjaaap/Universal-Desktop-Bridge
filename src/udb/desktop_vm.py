@@ -16,9 +16,9 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 from .core import PolicyError, canonical, digest, reject_links
-from .sandbox_runtime import trusted_python_runtime
 from .desktop_guest import DEMO, validate_steps
 from .sandbox import available, executable, reserve_vm, restore_owned_vm
+from .sandbox_runtime import trusted_python_runtime
 
 BUSY = ("running", "reviewing", "stopping")
 PNG_LIMIT = 8 * 1024 * 1024

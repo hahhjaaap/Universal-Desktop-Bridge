@@ -113,11 +113,13 @@ def test_computer_job_usage_is_read_without_enumerating_identifiers(monkeypatch)
     assert brief["job_usage"]["remaining_shared_slots_upper_bound"] == 8
     assert brief["job_usage"]["other_background_jobs_not_included"] is True
 
-    rows = {"jobs": [
-        {"job_id": "one", "status": "running"},
-        {"job_id": "two", "status": "cleanup_failed"},
-        {"job_id": "three", "status": "exited"},
-    ]}
+    rows = {
+        "jobs": [
+            {"job_id": "one", "status": "running"},
+            {"job_id": "two", "status": "cleanup_failed"},
+            {"job_id": "three", "status": "exited"},
+        ]
+    }
     full = computer.status_report(selected.agent, rows)
     assert full["processes"] == rows
     assert full["job_usage"]["known_computer_jobs"] == 3
@@ -155,28 +157,45 @@ def test_mcp_optional_brief_tools_do_not_change_legacy_calls(tmp_path, monkeypat
     health = {
         "enabled": False,
         "worker_ready": True,
-        "sessions": [{
-            "session_id": "a" * 32, "kind": "browser",
-            "task": "PRIVATE_SESSION_TASK", "tabs": 1, "expires": 100,
-        }],
+        "sessions": [
+            {
+                "session_id": "a" * 32,
+                "kind": "browser",
+                "task": "PRIVATE_SESSION_TASK",
+                "tabs": 1,
+                "expires": 100,
+            }
+        ],
         "resources": {
-            "at": 100, "cpu_percent": 20, "ram_percent": 30,
-            "paused": False, "admission_ready": True,
+            "at": 100,
+            "cpu_percent": 20,
+            "ram_percent": 30,
+            "paused": False,
+            "admission_ready": True,
             "limits": {"private": "not-needed"},
         },
     }
-    monkeypatch.setattr(host_client, "status", lambda _: calls.append("health") or health)
     monkeypatch.setattr(
-        host_client, "command",
-        lambda agent, operation, **kw: calls.append((operation, kw)) or {
-            "enabled": False, "job_usage": {"available": True}
-        },
+        host_client, "status", lambda _: calls.append("health") or health
+    )
+    monkeypatch.setattr(
+        host_client,
+        "command",
+        lambda agent, operation, **kw: (
+            calls.append((operation, kw))
+            or {"enabled": False, "job_usage": {"available": True}}
+        ),
     )
     server = make_server(agent)
 
     async def check():
         names = {t.name: t for t in await server.list_tools()}
-        for name in ("bridge_status", "list_projects", "host_status", "computer_status"):
+        for name in (
+            "bridge_status",
+            "list_projects",
+            "host_status",
+            "computer_status",
+        ):
             assert name in names
         assert "brief" in names["bridge_status"].input_schema["properties"]
         assert "limit" in names["list_projects"].input_schema["properties"]

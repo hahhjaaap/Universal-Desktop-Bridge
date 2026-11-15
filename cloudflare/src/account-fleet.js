@@ -186,23 +186,37 @@ async function verifiedDevice(env, owner, device) {
   } catch { return { stub, verified: false }; }
 }
 
+const STATUS_FANOUT = 12;
+
 async function deviceList(env, owner, entries) {
-  // Concurrent status reads are isolated by their immutable IDs; errors cannot
-  // silently route the next tool call to a different device.
-  return Promise.all(entries.map(async entry => {
-    const current = await verifiedDevice(env, owner, entry);
-    return { device_id: entry.id, display_name: entry.name,
-      connection: !current.verified ? "unverified" : current.online ? "online" : "offline",
-      verified: current.verified,
-      last_seen_at: current.verified && current.last_seen_at ?
-        new Date(current.last_seen_at).toISOString() : null };
-  }));
+  // Bound Durable Object reads even for a full 100-device fleet. Preserve the
+  // registry order and independently verify ownership on EVERY request.
+  const devices = new Array(entries.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < entries.length) {
+      const position = cursor++;
+      const entry = entries[position];
+      const current = await verifiedDevice(env, owner, entry);
+      devices[position] = { device_id: entry.id, display_name: entry.name,
+        connection: !current.verified ? "unverified" : current.online ? "online" : "offline",
+        verified: current.verified,
+        last_seen_at: current.verified && current.last_seen_at ?
+          new Date(current.last_seen_at).toISOString() : null };
+    }
+  }
+  await Promise.all(Array.from(
+    { length: Math.min(entries.length, STATUS_FANOUT) }, () => worker()));
+  return devices;
 }
 
 const listTool = {
   name: "list_devices",
   description: "List Windows devices enrolled to this authenticated owner, their stable IDs, current connection status and last contact. Choose device_id explicitly for every machine operation.",
-  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  inputSchema: { type: "object", properties: {
+    if_revision: { type: "string", pattern: "^[a-f0-9]{64}$",
+      description: "Optional revision from a previous list_devices call. An unchanged response omits devices." },
+  }, additionalProperties: false },
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true,
     openWorldHint: false },
   securitySchemes: [{ type: "oauth2", scopes: ["udb:read"] }],
@@ -318,10 +332,19 @@ export async function handleAccountMcp(request, env, access = null, fetchImpl = 
   }
   if (rpc.method !== "tools/call") return fail(400, "unsupported_rpc");
   if (rpc.params.name === "list_devices") {
-    if (Object.keys(rpc.params.arguments || {}).length) return fail(400, "invalid_tool_arguments");
+    const args = rpc.params.arguments || {};
+    if (Object.keys(args).some(key => key !== "if_revision") ||
+        (args.if_revision !== undefined &&
+         (typeof args.if_revision !== "string" || !/^[a-f0-9]{64}$/.test(args.if_revision))))
+      return fail(400, "invalid_tool_arguments");
+    // A revision is a payload optimization, NEVER cached authorization.
+    // Re-check every device against the authenticated owner before comparing.
     const devices = await deviceList(env, owner, snapshot.devices);
-    const value = { content: [{ type: "text", text: JSON.stringify(devices) }],
-      structuredContent: { devices } };
+    const revision = await digest(JSON.stringify(devices));
+    const unchanged = args.if_revision === revision;
+    const payload = unchanged ? { revision, unchanged: true } : { devices, revision };
+    const value = { content: [{ type: "text", text: JSON.stringify(
+      unchanged ? payload : devices) }], structuredContent: payload };
     return result(rpc.id, value, modern);
   }
   // Reject unknown MCP names even if the client never requested discovery.

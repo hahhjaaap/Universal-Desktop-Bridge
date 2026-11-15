@@ -102,8 +102,10 @@ def test_83_bad_upload_cursor_does_not_touch_staging_file(bg):
 def test_83_84_upload_write_status_abort_and_owned_staging_cleanup(bg, files):
     data = b"some limited bytes"
     uid = bg.upload(
-        "begin", path="received.bin", size=len(data),
-        sha256=hashlib.sha256(data).hexdigest()
+        "begin",
+        path="received.bin",
+        size=len(data),
+        sha256=hashlib.sha256(data).hexdigest(),
     )["upload_id"]
     path = bg.uploads[uid]["temp"]
     written = bg.upload(

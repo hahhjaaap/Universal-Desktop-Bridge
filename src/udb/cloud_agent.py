@@ -300,9 +300,7 @@ class ParallelLocalProxies:
 
     def _invoke(self, rpc: dict, queued_at_ns=None) -> dict:
         if queued_at_ns is not None:
-            perf.interval(
-                "cloud.queue", "queue", queued_at_ns, rpc_id=rpc.get("id")
-            )
+            perf.interval("cloud.queue", "queue", queued_at_ns, rpc_id=rpc.get("id"))
         # A queued task must not start a new process after another worker has
         # poisoned the connection, even if it passed submit() earlier.
         if self.failed.is_set():
@@ -321,9 +319,7 @@ class ParallelLocalProxies:
             raise RuntimeError("Cloud RPC pool is unavailable")
         try:
             with perf.rpc_scope(rpc.get("id")):
-                return perf.timed_call(
-                    "cloud.local_rpc", "execution", proxy.call, rpc
-                )
+                return perf.timed_call("cloud.local_rpc", "execution", proxy.call, rpc)
         except (RuntimeError, TimeoutError, ValueError):
             # A dead child process can be unusable without setting its flag:
             # LocalProxy.call() detects process.poll() before _exchange().

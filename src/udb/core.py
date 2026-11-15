@@ -362,56 +362,83 @@ class Agent(AutonomyMixin):
         self.check_protected(p)
         return p
 
-    def read_bytes(self, project, relative):
+    def _source_data(self, project, relative):
+        """One bounded read and UTF-8 decode for source, syntax and SHA256."""
         p = self.path(project, relative)
         if (
             not p.is_file()
-            or p.suffix.lower() not in SOURCE_EXT
+            or (p.suffix.lower() not in SOURCE_EXT and p.name.lower() not in SOURCE_EXT)
             or p.stat().st_size > MAX_TEXT
         ):
             raise PolicyError("Only small source/text files may be read")
-        data = p.read_bytes()
+        # A size check before opening is not enough if the file grows.
+        with p.open("rb") as stream:
+            if os.fstat(stream.fileno()).st_size > MAX_TEXT:
+                raise PolicyError("Only small source/text files may be read")
+            data = stream.read(MAX_TEXT + 1)
         if len(data) > MAX_TEXT or b"\0" in data:
             raise PolicyError("Binary/oversized file blocked")
-        data.decode("utf-8-sig")
-        return data
+        return data, data.decode("utf-8-sig")
+
+    def read_bytes(self, project, relative):
+        return self._source_data(project, relative)[0]
 
     def read(self, project, relative):
-        data = self.read_bytes(project, relative)
+        data, content = self._source_data(project, relative)
         sha = digest(data)
         self.audit("read", {"project": project, "path": relative, "sha256": sha})
-        return {
-            "path": relative,
-            "sha256": sha,
-            "text": data.decode("utf-8-sig"),
-        }
+        return {"path": relative, "sha256": sha, "text": content}
 
-    def listing(self, project, relative=".", offset=0, limit=100):
+    def listing(self, project, relative=".", offset=0, limit=100, after=""):
         p = self.path(project, relative)
+        if not p.is_dir():
+            raise PolicyError("Listing root must be a project directory")
         offset = max(0, min(int(offset), 100000))
         limit = max(1, min(int(limit), 200))
+        if not isinstance(after, str) or len(after) > 240 or "\0" in after:
+            raise PolicyError("Invalid listing cursor")
+        if after and offset:
+            raise PolicyError("Use either offset or after, not both")
         _, root = self.project(project)
-        # Bound traversal even for unusually large directories.
         visible = []
-        for i, f in enumerate(p.iterdir()):
-            if i >= 10000:
-                break
-            # Exclude unsupported files before the expensive per-path policy
-            # check; all visible entries still pass the full policy.
-            if f.is_file() and f.suffix.lower() not in SOURCE_EXT:
-                continue
-            rel = f.relative_to(root).as_posix()
-            try:
-                self.path(project, rel)
-                visible.append({"path": rel, "directory": f.is_dir()})
-            except PolicyError:
-                continue
-        visible.sort(key=lambda x: x["path"].lower())
+        scan_truncated = False
+        # Filter extensions before invoking the complete source path policy.
+        # Only policy-verified entries are included in the sorted result.
+        with os.scandir(p) as entries:
+            for scanned, entry in enumerate(entries):
+                if scanned >= 10000:
+                    scan_truncated = True
+                    break
+                try:
+                    if entry.is_file(follow_symlinks=False) and (
+                        Path(entry.name).suffix.lower() not in SOURCE_EXT
+                        and entry.name.lower() not in SOURCE_EXT
+                    ):
+                        continue
+                    relative_path = (p / entry.name).relative_to(root).as_posix()
+                    verified = self.path(project, relative_path)
+                    visible.append(
+                        {"path": relative_path, "directory": verified.is_dir()}
+                    )
+                except (PolicyError, OSError):
+                    continue
+        # Casefold collisions are ordered by the original path, not scandir
+        # enumeration order. Cursor paging does not repeat earlier entries if
+        # the directory changes between calls (but is not a frozen snapshot).
+        key = lambda row: (row["path"].casefold(), row["path"])
+        visible.sort(key=key)
+        if after:
+            cursor = (after.casefold(), after)
+            visible = [row for row in visible if key(row) > cursor]
+        page = visible[offset : offset + limit]
+        has_more = len(visible) > offset + limit
         return {
-            "items": visible[offset : offset + limit],
-            "next_offset": offset + limit if len(visible) > offset + limit else None,
+            "items": page,
+            "next_offset": offset + limit if has_more and not after else None,
+            "next_after": page[-1]["path"] if has_more and page else None,
             "protected_items_hidden": True,
             "scan_cap": 10000,
+            "scan_truncated": scan_truncated,
         }
 
     def propose(self, kind, payload):
@@ -677,18 +704,20 @@ class Agent(AutonomyMixin):
         return launch(self, rid, payload)
 
     def syntax_check(self, project, relative):
-        if not relative.lower().endswith(".py"):
+        if not isinstance(relative, str) or not relative.lower().endswith(".py"):
             raise PolicyError("Python source only")
-        data = self.read_bytes(project, relative)
+        _, content = self._source_data(project, relative)
         try:
-            ast.parse(data.decode("utf-8-sig"), filename=relative)
+            ast.parse(content, filename=relative)
             return {"valid": True, "executes_code": False}
-        except SyntaxError as e:
+        except SyntaxError as exc:
             return {
                 "valid": False,
-                "line": e.lineno,
-                "column": e.offset,
-                "message": e.msg,
+                "line": exc.lineno,
+                "column": exc.offset,
+                "end_line": exc.end_lineno,
+                "end_column": exc.end_offset,
+                "message": exc.msg,
                 "executes_code": False,
             }
 

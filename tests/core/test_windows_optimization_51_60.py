@@ -51,7 +51,9 @@ def manager(tmp_path):
         jobs.close()
 
 
-def test_51_start_rejects_boolean_timeout_before_executable_lookup(manager, monkeypatch):
+def test_51_start_rejects_boolean_timeout_before_executable_lookup(
+    manager, monkeypatch
+):
     jobs, work = manager
     monkeypatch.setattr(
         "udb.computer_jobs.executable_path",
@@ -68,9 +70,9 @@ def test_51_start_resolves_absolute_target_without_path_lookup(manager, monkeypa
         "udb.computer_jobs.shutil.which",
         lambda *_: pytest.fail("absolute executable must not run PATH lookup"),
     )
-    jid = jobs.start(str(Path(sys.executable).resolve()), [], str(work), 10, "owner-grant")[
-        "job_id"
-    ]
+    jid = jobs.start(
+        str(Path(sys.executable).resolve()), [], str(work), 10, "owner-grant"
+    )["job_id"]
     assert jobs.rows[jid]["process"].argv[0] == str(Path(sys.executable).resolve())
 
 
@@ -128,14 +130,15 @@ def test_55_window_listing_uses_one_fresh_metadata_sample_per_window():
     counts = dict(text=0, kind=0, foreground=0)
     gui = SimpleNamespace(
         IsWindowVisible=lambda hwnd: True,
-        GetWindowText=lambda hwnd: counts.__setitem__("text", counts["text"] + 1)
-        or "Example",
-        GetClassName=lambda hwnd: counts.__setitem__("kind", counts["kind"] + 1)
-        or "FixtureWindow",
-        GetForegroundWindow=lambda: counts.__setitem__(
-            "foreground", counts["foreground"] + 1
-        )
-        or 42,
+        GetWindowText=lambda hwnd: (
+            counts.__setitem__("text", counts["text"] + 1) or "Example"
+        ),
+        GetClassName=lambda hwnd: (
+            counts.__setitem__("kind", counts["kind"] + 1) or "FixtureWindow"
+        ),
+        GetForegroundWindow=lambda: (
+            counts.__setitem__("foreground", counts["foreground"] + 1) or 42
+        ),
         GetWindowRect=lambda hwnd: (0, 0, 500, 400),
         IsIconic=lambda hwnd: False,
         EnumWindows=lambda callback, param: callback(42, param),
@@ -169,9 +172,7 @@ def _unpack_png(data):
 
 
 def test_56_capture_encodes_exact_bgrx_pixels_and_crc():
-    source = bytes(
-        [0, 0, 255, 255, 255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 0, 255]
-    )
+    source = bytes([0, 0, 255, 255, 255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 0, 255])
     chunks = _unpack_png(encode_bgrx_png(source, 2, 2))
     assert struct.unpack("!II", chunks[b"IHDR"][0][:8]) == (2, 2)
     pixels = zlib.decompress(chunks[b"IDAT"][0])

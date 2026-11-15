@@ -266,7 +266,7 @@ def test_real_source_mcp_without_installed_core_or_owner_access(tmp_path):
         p.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n')
         p.stdin.flush()
         listing = rpc("tools/list", {})
-        assert len(listing["tools"]) == 40
+        assert len(listing["tools"]) == 41
         status = rpc("tools/call", dict(name="bridge_status", arguments={}))
         assert not status.get("isError"), status
         assert status["_meta"]["udb"]["version"] == __version__

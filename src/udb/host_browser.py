@@ -37,8 +37,14 @@ _LOCATOR_PATTERN = re.compile(
     "|".join(
         re.escape(key)
         for key in (
-            "__TRAVERSAL__", "__SELECTOR__", "__ROLE__", "__NAME__",
-            "__EXACT__", "__VISIBLE_ONLY__", "__UNIQUE__", "__BODY__",
+            "__TRAVERSAL__",
+            "__SELECTOR__",
+            "__ROLE__",
+            "__NAME__",
+            "__EXACT__",
+            "__VISIBLE_ONLY__",
+            "__UNIQUE__",
+            "__BODY__",
         )
     )
 )

@@ -452,6 +452,8 @@ def run(
                         "cloud_agent_online": online,
                         "authenticated_mcp_verified": verified,
                         "chatgpt_connected": False,
+                        "account_fleet": fleet,
+                        "fleet_linked": fleet,
                         "mcp_url": endpoint,
                     }
                 )

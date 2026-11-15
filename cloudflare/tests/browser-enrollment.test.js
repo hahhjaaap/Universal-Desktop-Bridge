@@ -183,6 +183,22 @@ test("owner approval rejects missing, forged, expired, other-account and MCP-aud
   assert.equal(f.objects.has(p.id), false);
 });
 
+test("Access runtime outage leaves device approval pending without asking for new consent", async () => {
+  const f = fixture();
+  const p = await begin(f);
+  const url = p.path + "/approval?code=" + hash(p.proof).slice(0, 10).toUpperCase();
+  const access = { aud: APP, getIdentity: async () => {
+    throw new Error("synthetic Access identity outage");
+  } };
+  const page = await f.route(url, "GET", undefined, {}, access);
+  assert.equal(page.status, 503);
+  const html = await page.text();
+  assert.match(html, /temporarily unavailable/);
+  assert.match(html, /owner_runtime_unavailable/);
+  assert.doesNotMatch(html, /Approve device/);
+  assert.equal((await (await status(f, p)).json()).state, "pending");
+});
+
 test("approval diagnostics identify the failing verification step without echoing credentials", async () => {
   const f = fixture(), p = await begin(f);
   for (const [assertion, reason] of [

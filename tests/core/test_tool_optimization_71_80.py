@@ -52,10 +52,9 @@ def test_71_terminal_invalid_envelope_fails_before_scoped_path_lookup():
 
 def test_72_terminal_list_keeps_order_and_live_process_status():
     readings = []
+
     def process(name, exit_code):
-        return SimpleNamespace(
-            poll=lambda: readings.append(name) or exit_code
-        )
+        return SimpleNamespace(poll=lambda: readings.append(name) or exit_code)
 
     runtime = SimpleNamespace(
         sessions={
@@ -65,9 +64,7 @@ def test_72_terminal_list_keeps_order_and_live_process_status():
         }
     )
     assert _terminal_list(runtime, {}) == (
-        "first | RUNNING | exit=None\n"
-        "second | PASS | exit=0\n"
-        "third | ERROR | exit=8"
+        "first | RUNNING | exit=None\nsecond | PASS | exit=0\nthird | ERROR | exit=8"
     )
     assert readings == ["first", "second", "third"]
     runtime.sessions.clear()
@@ -117,6 +114,7 @@ def test_73_terminal_partial_utf8_cursor_preserved():
 def test_74_terminal_send_encodes_once_and_still_enforces_byte_limit():
     class Counted(str):
         calls = 0
+
         def encode(self, *args, **kwargs):
             self.calls += 1
             return super().encode(*args, **kwargs)
@@ -139,13 +137,17 @@ def test_75_terminal_capacity_slot_closed_once_on_repeated_stop():
     class Slot:
         def close(self):
             counts.append("slot")
+
     class Process:
         stdin = SimpleNamespace(close=lambda: None)
         stdout = SimpleNamespace(close=lambda: None)
+
         def __init__(self):
             self.exit = None
+
         def poll(self):
             return self.exit
+
         def close(self):
             self.exit = 0
     terminal.process = Process()
@@ -178,7 +180,9 @@ def test_77_live_search_read_and_cancel_skip_journal_load():
     calls = []
     bg.tasks = {
         "owned": SimpleNamespace(
-            read=lambda offset, limit: calls.append(("read", offset, limit)) or {"ok": True},
+            read=lambda offset, limit: (
+                calls.append(("read", offset, limit)) or {"ok": True}
+            ),
             stop=lambda: calls.append(("stop",)) or {"cancel": True},
         )
     }
@@ -211,7 +215,8 @@ def test_79_context_search_keeps_line_numbers_and_protected_roots(tmp_path):
     (hidden / "secret.txt").write_text("needle secret\n", encoding="utf-8")
     rt = SimpleNamespace(files=ScopedFiles(str(tmp_path)))
     row = _file_search_context(
-        rt, {"path": ".", "pattern": "*.txt", "text": "NEEDLE", "context": 1, "limit": 10}
+        rt,
+        {"path": ".", "pattern": "*.txt", "text": "NEEDLE", "context": 1, "limit": 10},
     )
     assert "alpha.txt:2" in row
     assert "2: NeedLe" in row
@@ -223,17 +228,23 @@ def test_80_recovery_inspects_live_owned_state_without_journal_io():
     class Journal:
         def load(self, key):
             pytest.fail("Live task inspect must not decode disk journal")
+
     task = SimpleNamespace(read=lambda: {"state": "running", "job_id": "owned"})
-    terminal = SimpleNamespace(read=lambda offset, wait_ms: {
-        "state": "RUNNING", "session_id": "console", "next_offset": 0
-    })
+    terminal = SimpleNamespace(
+        read=lambda offset, wait_ms: {
+            "state": "RUNNING",
+            "session_id": "console",
+            "next_offset": 0,
+        }
+    )
     bg = SimpleNamespace(journal=Journal(), tasks={"owned": task})
     rt = SimpleNamespace(
         features=SimpleNamespace(background=bg), sessions={"console": terminal}
     )
     work = WorkRecovery(rt)
     assert work.call("inspect", "job", "owned") == {
-        "state": "running", "job_id": "owned"
+        "state": "running",
+        "job_id": "owned",
     }
     assert work.call("inspect", "terminal", "console")["state"] == "RUNNING"
     with pytest.raises(ValueError, match="action"):

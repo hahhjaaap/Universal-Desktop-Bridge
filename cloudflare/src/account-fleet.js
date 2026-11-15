@@ -184,6 +184,8 @@ async function verifiedDevice(env, owner, device) {
   } catch { return { stub, verified: false }; }
 }
 
+const STATUS_FANOUT = 12;
+
 async function deviceList(env, owner, entries) {
   // Bound Durable Object reads even for a full 100-device fleet. Preserve the
   // registry order and independently verify ownership on EVERY request.

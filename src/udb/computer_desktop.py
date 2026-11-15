@@ -281,6 +281,55 @@ class Desktop:
             "replay_safe": False,
         }
 
+    def verified_submit(self, hwnd, window_id, text, name, automation_id, submit_name):
+        """Verify exact editor contents before invoking one uniquely named button.
+
+        This reduces remote MCP round trips, not Windows UI authorization.
+        Never discards a pre-existing draft and never retries a submission.
+        """
+        if not isinstance(text, str) or not 1 <= len(text) <= 5000:
+            raise PolicyError("Submission text must contain 1..5000 characters")
+        if not isinstance(name, str) or len(name) > 120:
+            raise PolicyError("Editor name must be at most 120 characters")
+        if not isinstance(automation_id, str) or len(automation_id) > 120:
+            raise PolicyError("Editor automation_id must be at most 120 characters")
+        if not name and not automation_id:
+            raise PolicyError("Provide an exact editor name or automation_id")
+        if not isinstance(submit_name, str) or not 1 <= len(submit_name) <= 120:
+            raise PolicyError("Provide the exact submit button name (1..120)")
+        if "\n" in submit_name or "\r" in submit_name:
+            raise PolicyError("Submit button name must be one line")
+
+        selector = dict(name=name, automation_id=automation_id, control_type="Edit")
+        first = self.uia(hwnd, "read_text", limit=5000, **selector)
+        initial = first["text"].rstrip("\r\n")
+        # Some contenteditable controls expose the placeholder as TextPattern.
+        # Treat only the exact editor label as a potential placeholder.
+        if first.get("truncated") or initial not in ("", name):
+            raise PolicyError("Editor is not empty; existing draft preserved")
+        self.uia(hwnd, "uia_focus", **selector)
+        self._dispatch("type", window_id=window_id, text=text)
+        observed = self.uia(hwnd, "read_text", limit=5000, **selector)
+        if observed.get("truncated") or observed.get("text") != text:
+            raise PolicyError(
+                "Input does not exactly match requested text; nothing submitted. "
+                "Inspect the editor before retrying."
+            )
+        control = getattr(self, "control", None)
+        if control:
+            control.check()
+        if self.gui.GetForegroundWindow() != hwnd:
+            raise PolicyError("Foreground changed; nothing submitted")
+        result = self.uia(hwnd, "invoke", name=submit_name, control_type="Button")
+        return dict(
+            verified_text=True,
+            submit_requested=result.get("invoked") is True,
+            reply_verified=False,
+            replay_safe=False,
+            application_submission_verified=False,
+            input_characters=len(text),
+        )
+
     def resolve(self, window_id, focus=True):
         self.interactive()
         row = self.windows.get(window_id)
@@ -464,6 +513,7 @@ class Desktop:
         region=None,
         checked=None,
         limit=5000,
+        submit_name="",
     ):
         self.validate_options(
             action, button, clicks, duration_ms, horizontal, wait_ms, condition
@@ -527,6 +577,10 @@ class Desktop:
                 "scroll_into_view",
             ),
         )
+        if action == "verified_submit":
+            return self.verified_submit(
+                hwnd, window_id, text, name, automation_id, submit_name
+            )
         if action in UIA_ACTIONS:
             return self.uia(
                 hwnd,
@@ -732,6 +786,7 @@ class Desktop:
                     "displays",
                     "open_chrome_tab",
                     "open_chatgpt",
+                    "verified_submit",
                 )
                 or "action" not in row
             ):

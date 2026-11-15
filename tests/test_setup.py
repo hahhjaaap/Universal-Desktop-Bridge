@@ -204,6 +204,10 @@ def test_readonly_setup_requires_fleet_link(selected, monkeypatch, capsys):
         "fleet_linked": False,
         "chatgpt_connected": False,
     }
+    assert "Fleet account link: not verified; run udb setup" in setup.render(report)
+    report["fleet_linked"] = True
+    assert "Fleet account link: verified" in setup.render(report)
+    report["fleet_linked"] = False
     monkeypatch.setattr(setup, "inspect", lambda *_: report)
     assert setup.run(selected, readonly=True, json_output=True) == 2
     assert json.loads(capsys.readouterr().out)["fleet_linked"] is False

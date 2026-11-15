@@ -125,9 +125,7 @@ def run(samples=15, backend_delay_ms=15):
         "empty_inbox_glob_ms_per_scan": round(glob_ms, 5),
         "empty_inbox_listdir_ms_per_scan": round(listdir_ms, 5),
         "mixed_inbox_sort_all_ms_per_scan": round(mixed_all_sort_ms, 5),
-        "mixed_inbox_filter_then_sort_ms_per_scan": round(
-            mixed_filtered_sort_ms, 5
-        ),
+        "mixed_inbox_filter_then_sort_ms_per_scan": round(mixed_filtered_sort_ms, 5),
         "rpc_waiter_bounded_queue_us_per_roundtrip": waiter["bounded"],
         "rpc_waiter_simple_queue_us_per_roundtrip": waiter["simple"],
         "os": os.name,

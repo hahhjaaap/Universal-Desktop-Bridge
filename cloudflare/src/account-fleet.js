@@ -50,7 +50,10 @@ export async function fleetIdentity(request, env, access = null, fetchImpl = fet
     } catch { return null; }
   } else {
     try { identity = await verifiedAccessIdentity(request, env, fetchImpl); }
-    catch { return null; }
+    catch (error) {
+      if (error?.message === "access_keys_unavailable") throw error;
+      return null;
+    }
   }
   return stableAccessSubject(identity, config.team);
 }
@@ -259,7 +262,9 @@ export async function handleAccountMcp(request, env, access = null, fetchImpl = 
   const origin = request.headers.get("Origin");
   if (origin && origin !== new URL(request.url).origin) return fail(403, "invalid_origin");
   if (request.method !== "POST") return fail(405, "method_not_allowed");
-  const owner = await fleetIdentity(request, env, access, fetchImpl);
+  let owner;
+  try { owner = await fleetIdentity(request, env, access, fetchImpl); }
+  catch { return fail(503, "cloudflare_access_keys_temporarily_unavailable"); }
   if (!owner) return denied(request);
   let snapshot, rpc;
   try { snapshot = await fleetSnapshot(env, owner); }

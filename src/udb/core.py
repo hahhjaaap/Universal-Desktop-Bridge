@@ -138,7 +138,9 @@ _DIFF_MAX_LINES = 2048
 _DIFF_MAX_BYTES = 128 * 1024
 
 
-def diff_preview(before: bytes | None, text: str, relative: str) -> str:
+def diff_preview(
+    before: bytes | None, text: str, relative: str, *, new_size: int | None = None
+) -> str:
     """Bound approval preview CPU, memory and SQLite payload size.
 
     A large or truncated preview is explicitly marked as incomplete so
@@ -148,7 +150,8 @@ def diff_preview(before: bytes | None, text: str, relative: str) -> str:
     old = (before or b"").decode("utf-8-sig")
     if (
         len(before or b"") > _DIFF_MAX_BYTES
-        or len(text.encode("utf-8")) > _DIFF_MAX_BYTES
+        or (new_size if new_size is not None else len(text.encode("utf-8")))
+        > _DIFF_MAX_BYTES
         or old.count("\n") > _DIFF_MAX_LINES
         or text.count("\n") > _DIFF_MAX_LINES
     ):
@@ -493,11 +496,15 @@ class Agent(AutonomyMixin):
 
     def propose_write(self, project, relative, text, expected_sha256):
         p = self.path(project, relative, write=True)
-        if p == self.project(project)[1] or p.suffix.lower() not in SOURCE_EXT:
+        _, root = self.project(project)
+        if p == root or p.suffix.lower() not in SOURCE_EXT:
             raise PolicyError("Write only source/text file extensions")
         if not p.parent.is_dir():
             raise PolicyError("Parent directory must exist")
-        if len(text.encode()) > MAX_TEXT or "\0" in text:
+        if not isinstance(text, str) or "\0" in text:
+            raise PolicyError("Text too large or binary")
+        new_data = text.encode("utf-8")
+        if len(new_data) > MAX_TEXT:
             raise PolicyError("Text too large or binary")
         before = self.read_bytes(project, relative) if p.exists() else None
         actual = digest(before) if before is not None else "NEW"
@@ -505,13 +512,13 @@ class Agent(AutonomyMixin):
             raise PolicyError(
                 "Stale file: read current SHA256; use NEW only for new files"
             )
-        diff = diff_preview(before, text, relative)
+        diff = diff_preview(before, text, relative, new_size=len(new_data))
         payload = {
             "project": project,
             "path": relative,
             "text": text,
             "expected": actual,
-            "root": str(self.project(project)[1]),
+            "root": str(root),
             "diff": diff,
         }
         if self.source_autonomy_authorization(project, payload["root"]):
@@ -680,10 +687,12 @@ class Agent(AutonomyMixin):
             with backup.open("xb") as f:
                 f.write(old)
         # Exclusive temporary file + atomic rename. Never follow an existing link.
+        new_data = payload["text"].encode("utf-8")
+        new_sha = digest(new_data)
         temp = p.with_name(".udb-" + rid + ".tmp")
         try:
             with temp.open("xb") as f:
-                f.write(payload["text"].encode("utf-8"))
+                f.write(new_data)
                 f.flush()
                 os.fsync(f.fileno())
             self.path(project, rel, write=True)
@@ -697,7 +706,7 @@ class Agent(AutonomyMixin):
             temp.unlink(missing_ok=True)
         return {
             "path": rel,
-            "sha256": digest(payload["text"].encode()),
+            "sha256": new_sha,
             "backup_id": rid if backup else None,
         }
 

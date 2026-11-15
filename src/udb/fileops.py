@@ -159,6 +159,7 @@ def propose_text_edit(
         raise PolicyError("File changed since it was read")
     if row["text"].count(old_text) != occurrences:
         raise PolicyError("Exact occurrence count mismatch")
-    return agent.propose_write(
-        project, path, row["text"].replace(old_text, new_text), expected_sha256
-    )
+    # Exact occurrence count was checked above, so bounded replacement is
+    # equivalent to replacing all occurrences without a second unbounded pass.
+    updated = row["text"].replace(old_text, new_text, occurrences)
+    return agent.propose_write(project, path, updated, expected_sha256)

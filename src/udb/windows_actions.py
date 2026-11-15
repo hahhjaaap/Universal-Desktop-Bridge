@@ -33,6 +33,7 @@ DESKTOP_ACTIONS = (
     "open_chrome_tab",
     "open_chatgpt",
     "verified_submit",
+    "chatgpt_roundtrip",
     *UIA_ACTIONS,
 )
 UTILITY_ACTIONS = ("clipboard_get", "clipboard_set", "notify", "apps", "launch_app")

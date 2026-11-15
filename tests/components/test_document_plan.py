@@ -50,12 +50,19 @@ def test_existing_target_and_source_hash_conflicts_remain_rejected(tmp_path):
     source.write_bytes(b"%PDF-1.4\n")
     with pytest.raises(ValueError, match="Current source expected_sha256"):
         prepare_document_request(
-            files, "pdf_document",
-            {"action": "extract", "path": "old.pdf", "destination": "part.pdf", "pages": [1]},
+            files,
+            "pdf_document",
+            {
+                "action": "extract",
+                "path": "old.pdf",
+                "destination": "part.pdf",
+                "pages": [1],
+            },
         )
     with pytest.raises(ValueError, match="Source SHA256 mismatch"):
         prepare_document_request(
-            files, "pdf_document",
+            files,
+            "pdf_document",
             {"action": "read", "path": "old.pdf", "expected_sha256": "0" * 64},
         )
     with pytest.raises(FileExistsError, match="Destination exists"):
@@ -65,7 +72,8 @@ def test_existing_target_and_source_hash_conflicts_remain_rejected(tmp_path):
     for value in (-1, True, 61):
         with pytest.raises(ValueError, match="Document timeout"):
             prepare_document_request(
-                files, "pdf_document",
+                files,
+                "pdf_document",
                 {"action": "read", "path": "old.pdf", "timeout_seconds": value},
             )
 

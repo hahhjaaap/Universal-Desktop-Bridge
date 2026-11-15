@@ -61,7 +61,9 @@ def test_81_chunk_identity_and_base64_paging_stay_stable(bg, files):
 )
 def test_82_bad_upload_begin_rejected_before_scoped_path(bg, monkeypatch, size, digest):
     monkeypatch.setattr(
-        bg.files, "path", lambda *_a, **_kw: pytest.fail("Bad size/hash must not traverse")
+        bg.files,
+        "path",
+        lambda *_a, **_kw: pytest.fail("Bad size/hash must not traverse"),
     )
     with pytest.raises(ValueError, match="Expected size"):
         bg.upload("begin", path="new.bin", size=size, sha256=digest)
@@ -70,8 +72,10 @@ def test_82_bad_upload_begin_rejected_before_scoped_path(bg, monkeypatch, size, 
 def test_83_bad_upload_cursor_does_not_touch_staging_file(bg):
     data = b"hello"
     uid = bg.upload(
-        "begin", path="received.bin", size=len(data),
-        sha256=hashlib.sha256(data).hexdigest()
+        "begin",
+        path="received.bin",
+        size=len(data),
+        sha256=hashlib.sha256(data).hexdigest(),
     )["upload_id"]
     original = bg.uploads[uid]["temp"]
 
@@ -83,8 +87,10 @@ def test_83_bad_upload_cursor_does_not_touch_staging_file(bg):
     try:
         with pytest.raises(ValueError, match="Expected next offset"):
             bg.upload(
-                "write", upload_id=uid,
-                content=base64.b64encode(data).decode(), offset=1
+                "write",
+                upload_id=uid,
+                content=base64.b64encode(data).decode(),
+                offset=1,
             )
         with pytest.raises(ValueError, match="Chunk exceeds"):
             bg.upload("write", upload_id=uid, content="A" * (2 * 1024 * 1024))
@@ -101,8 +107,7 @@ def test_83_84_upload_write_status_abort_and_owned_staging_cleanup(bg, files):
     )["upload_id"]
     path = bg.uploads[uid]["temp"]
     written = bg.upload(
-        "write", upload_id=uid,
-        content=base64.b64encode(data).decode(), offset=0
+        "write", upload_id=uid, content=base64.b64encode(data).decode(), offset=0
     )
     assert written["next_offset"] == len(data)
     assert bg.upload("status", upload_id=uid)["offset"] == len(data)
@@ -118,8 +123,10 @@ def test_83_84_upload_write_status_abort_and_owned_staging_cleanup(bg, files):
 def test_84_stage_replaced_after_begin_is_never_deleted(bg, files):
     data = b"test"
     uid = bg.upload(
-        "begin", path="private.bin", size=len(data),
-        sha256=hashlib.sha256(data).hexdigest()
+        "begin",
+        path="private.bin",
+        size=len(data),
+        sha256=hashlib.sha256(data).hexdigest(),
     )["upload_id"]
     path = bg.uploads[uid]["temp"]
     moved = path.with_suffix(".retained")
@@ -147,15 +154,15 @@ def test_85_create_only_file_copy_preserves_tree_and_rejects_overwrite(bg, files
     bg.new = synchronous
     result = bg.file_operation("copy", source="input", destination="output")
     assert result["sha256_verified"] is True
-    assert (files.root / "output" / "part.txt").read_text("utf-8") == "unicode: Việt Nam"
+    assert (files.root / "output" / "part.txt").read_text(
+        "utf-8"
+    ) == "unicode: Việt Nam"
     assert observed[0]["tool"] == "file_operation"
     with pytest.raises(FileExistsError):
         bg.file_operation("copy", source="input", destination="output")
 
 
-def test_86_xlsx_range_preflight_happens_before_openpyxl_parse(
-    files, monkeypatch
-):
+def test_86_xlsx_range_preflight_happens_before_openpyxl_parse(files, monkeypatch):
     import openpyxl
 
     source = files.root / "sheet.xlsx"
@@ -163,8 +170,9 @@ def test_86_xlsx_range_preflight_happens_before_openpyxl_parse(
     book.save(source)
     book.close()
     monkeypatch.setattr(
-        openpyxl, "load_workbook",
-        lambda *_a, **_kw: pytest.fail("Invalid read range must not parse workbook")
+        openpyxl,
+        "load_workbook",
+        lambda *_a, **_kw: pytest.fail("Invalid read range must not parse workbook"),
     )
     with pytest.raises(ValueError, match="Read range limit"):
         documents.spreadsheet(
@@ -197,13 +205,15 @@ def test_87_invalid_xlsx_edit_preflight_happens_before_load(files, monkeypatch):
     wb.save(source)
     wb.close()
     monkeypatch.setattr(
-        openpyxl, "load_workbook",
-        lambda *_a, **_kw: pytest.fail("Malformed cells must not parse XLSX")
+        openpyxl,
+        "load_workbook",
+        lambda *_a, **_kw: pytest.fail("Malformed cells must not parse XLSX"),
     )
     with pytest.raises(ValueError, match="Invalid cell address"):
         documents.spreadsheet(
-            files, {"action": "edit_cells", "path": "sheet.xlsx",
-                    "cells": {"A0": "bad"}}, files.root / "output.xlsx"
+            files,
+            {"action": "edit_cells", "path": "sheet.xlsx", "cells": {"A0": "bad"}},
+            files.root / "output.xlsx",
         )
 
 
@@ -217,8 +227,13 @@ def test_87_xlsx_edits_still_preserve_literal_formula_protection(files):
     target = files.root / "output.xlsx"
     documents.spreadsheet(
         files,
-        {"action": "edit_cells", "path": "source.xlsx", "sheet": "Sheet",
-         "cells": {"A1": "=1+1"}, "allow_formulas": False},
+        {
+            "action": "edit_cells",
+            "path": "source.xlsx",
+            "sheet": "Sheet",
+            "cells": {"A1": "=1+1"},
+            "allow_formulas": False,
+        },
         target,
     )
     output = openpyxl.load_workbook(target)
@@ -229,12 +244,17 @@ def test_87_xlsx_edits_still_preserve_literal_formula_protection(files):
 
 def test_88_accounting_header_lookup_and_safe_export_rows(files, monkeypatch):
     assert accounting._column("Invoice Number", ["invoice number", "VAT"]) == 0
-    issues = [(n, "ISSUE", "=HYPERLINK(\"bad\")") for n in range(2, 32)]
+    issues = [(n, "ISSUE", '=HYPERLINK("bad")') for n in range(2, 32)]
     report = {
-        "source": "input.xlsx", "sheet": "Data", "header_row": 1,
-        "rows_checked": 30, "issue_count": len(issues),
+        "source": "input.xlsx",
+        "sheet": "Data",
+        "header_row": 1,
+        "rows_checked": 30,
+        "issue_count": len(issues),
         "issues_by_code": {"ISSUE": len(issues)},
-        "amount_totals": {}, "note": "Review only", "issues": issues,
+        "amount_totals": {},
+        "note": "Review only",
+        "issues": issues,
     }
     monkeypatch.setattr(accounting, "analyze", lambda *_a: dict(report))
     output = files.root / "audit.xlsx"
@@ -260,7 +280,8 @@ def test_89_docx_read_paging_counts_all_paragraphs_without_materializing(files):
     path = files.root / "paragraphs.docx"
     doc.save(path)
     got = documents.word_document(
-        files, {"action": "read", "path": "paragraphs.docx", "offset": 260, "limit": 3},
+        files,
+        {"action": "read", "path": "paragraphs.docx", "offset": 260, "limit": 3},
         None,
     )
     assert got["total"] == 301
@@ -273,19 +294,19 @@ def test_89_docx_read_paging_counts_all_paragraphs_without_materializing(files):
     assert tail["paragraphs"] == [] and tail["next_offset"] == 500
 
 
-def test_90_pdf_rejects_invalid_page_window_before_opening_document(
-    files, monkeypatch
-):
+def test_90_pdf_rejects_invalid_page_window_before_opening_document(files, monkeypatch):
     import pypdf
 
     monkeypatch.setattr(
-        pypdf, "PdfReader",
+        pypdf,
+        "PdfReader",
         lambda *_a, **_kw: pytest.fail("Invalid paging must not parse a PDF"),
     )
     with pytest.raises(ValueError, match="Page range"):
         documents.pdf_document(
-            files, {"action": "read", "path": "missing.pdf",
-                    "start_page": 0, "limit": 1}, None
+            files,
+            {"action": "read", "path": "missing.pdf", "start_page": 0, "limit": 1},
+            None,
         )
 
 
@@ -303,8 +324,9 @@ def test_90_pdf_page_paging_and_merge_keep_exact_order(files):
         writer.close()
         paths.append(path)
     read = documents.pdf_document(
-        files, {"action": "read", "path": paths[0].name, "start_page": 2,
-                "limit": 2}, None
+        files,
+        {"action": "read", "path": paths[0].name, "start_page": 2, "limit": 2},
+        None,
     )
     assert read["total_pages"] == 2
     assert [page["page"] for page in read["pages"]] == [2]

@@ -122,11 +122,37 @@ login, with all other identities denied. Both apps were read back after
 the change to verify their independent audiences, exact path scopes,
 single-email allowlists, and absence of Bypass or Everyone allow rules.
 
-This is **Access app provisioning only**: no Worker is deployed on that name,
-no Durable Object exists for this isolated candidate, no device can enroll,
-and no authenticated ChatGPT OAuth roundtrip has occurred. The old
+**Isolated Worker now deployed, not production accepted:** On 2026-11-15,
+`udb-fleet-isolated-staging` was deployed from source commit
+`6a5496e7f8b565f60447ff912d36cdf535e1d576` using a Wrangler 4.162.0
+dry-run bundle verified as SHA-256
+`7d90943920449fc8670e497df43bb9c714ec7cdc79a974e39db0bd982a4e08fd`.
+Cloudflare deployment ID: `404bef3a-95d1-41cf-87d8-ae2994ce2dbb`,
+version: `70fa032d-093d-484e-b85c-f154f6c4046b`. The new
+`udb-fleet-isolated-staging_DeviceRelay` DO namespace has a different ID
+from the existing `udb-private-relay-staging_DeviceRelay` namespace, and
+its admin credential was generated independently at deployment.
+
+This is **staging-only account discovery**, not a live Windows enrollment or
+a proven ChatGPT OAuth session. `UDB_ENABLE_ACCOUNT_FLEET=true`,
+but `UDB_ENABLE_PRIVATE_ENROLLMENT=false`: the request endpoint is intentionally
+unavailable until a separately approved, non-public enrollment plan exists.
+Owner/Companion execution switches are also false. The old
 `udb-private-relay-staging` Worker and its device/approval Access apps,
 permissions, secrets and Durable Objects remain unchanged.
+
+Read-only remote smoke checks after enabling only this isolated Worker's
+`workers.dev` subdomain: `GET /health` 200; protected-resource metadata
+200, matching the exact account resource; OAuth issuer matches, PKCE S256,
+authorization-code and refresh grants are advertised; unauthenticated GET
+and POST `/v1/account/mcp` both 401 with `WWW-Authenticate`;
+`POST /v1/enrollments` 404. The setup capabilities report
+`browser_enrollment=false` and `account_fleet=true`. No OAuth client was
+registered, no account signed in, and no device paired during this check.
+
+**Rollback:** disable the new script's `workers.dev` subdomain or disable its
+isolated Fleet flag. Do not roll back or delete any data in the existing
+`udb-private-relay-staging` Worker or namespace.
 
 The reviewed candidate file
 `cloudflare/wrangler.fleet-isolated-staging.jsonc` uses the independent
@@ -138,15 +164,16 @@ Run the offline guard `python -m tools.check_fleet_isolated_config`
 before any separately approved deployment. Do not deploy using the default
 `wrangler.staging.jsonc`, which deliberately targets the live relay.
 
-**Before enabling or deploying:** the one approved Access identity is
-sufficient only for single-owner acceptance. A second independently approved
-test identity is needed for real account-isolation acceptance. Also obtain
-disposable Windows devices, independent staging secrets, and the immutable
-subject for the pinned approval-app audience/owner allowlist; run CI and
-dry-run on the exact commit, and record rollback/teardown. Never copy a
-live admin key, device token, owner grant, Credential Manager value or
-Durable Object namespace into the test Worker. Do not expand this allowlist
-without separate, explicit owner approval.
+**Before enabling enrollment or accepting production:** the isolated
+deployment has fresh credentials, a pinned owner UUID and separate Access
+audiences. A user must still complete real OAuth consent for the test endpoint,
+and the owner must separately approve a disposable Windows device.
+To test two-account isolation, obtain a second independently approved
+test identity. Keep public enrollment disabled until there is a reviewed
+source restriction or explicit owner approval to accept pending requests.
+Never copy live device tokens, owner grants, Credential Manager values or
+Durable Object namespaces into the test Worker. Do not expand this Access
+allowlist without separate, explicit owner approval.
 
 ## Read-only OAuth preflight (isolated staging only)
 

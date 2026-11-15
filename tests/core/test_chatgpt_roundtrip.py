@@ -145,7 +145,7 @@ def test_dispatch_routes_new_action():
     desktop.chatgpt_roundtrip = lambda *args: args
     assert desktop._dispatch(
         "chatgpt_roundtrip", window_id="observed", text="Hello", wait_ms=6000
-    ) == (42, "observed", "Hello", 6000)
+    ) == (42, "observed", "Hello", 6000, False)
 
 
 def test_roundtrip_refused_in_batch():
@@ -180,6 +180,7 @@ def test_roundtrip_auto_discovers_foreground_chrome_without_window_id():
         "current-window",
         "Hello",
         6000,
+        False,
     )
 
 

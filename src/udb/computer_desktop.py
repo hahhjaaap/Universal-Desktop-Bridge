@@ -333,7 +333,7 @@ class Desktop:
             input_characters=len(text),
         )
 
-    def chatgpt_roundtrip(self, hwnd, window_id, text, wait_ms):
+    def chatgpt_roundtrip(self, hwnd, window_id, text, wait_ms, fast_reply=False):
         """One remote call: verify blank ChatGPT, submit, and wait for one reply.
 
         The request is NOT idempotent. A timeout after submit must never
@@ -343,6 +343,8 @@ class Desktop:
             raise PolicyError("ChatGPT message must contain 1..5000 characters")
         if type(wait_ms) is not int or not 500 <= wait_ms <= 10000:
             raise PolicyError("ChatGPT reply wait_ms must be 500..10000")
+        if type(fast_reply) is not bool:
+            raise PolicyError("fast_reply must be a boolean")
 
         started = time.monotonic()
         # One targeted UIA pass checks this exact ChatGPT document, blank
@@ -371,16 +373,27 @@ class Desktop:
             "poll_chatgpt_reply",
             text=text,
             wait_ms=wait_ms,
+            condition="first_text" if fast_reply else "exists",
             limit=3000,
         )
         total_ms = round((time.monotonic() - started) * 1000)
+        complete = bool(reply.get("completed"))
+        partial = bool(reply.get("partial")) and not complete
+        status = (
+            "complete"
+            if complete
+            else "partial_reply"
+            if fast_reply and partial
+            else "reply_timeout"
+        )
         return {
             "submit_requested": sent["submit_requested"],
             "verified_text": sent["verified_text"],
-            "reply_verified": bool(reply.get("completed")),
+            "reply_verified": complete,
+            "reply_partial": partial,
             "reply": reply.get("reply", ""),
             "reply_truncated": reply.get("truncated", False),
-            "status": "complete" if reply.get("completed") else "reply_timeout",
+            "status": status,
             "timings_ms": {
                 "desktop_operation": total_ms,
                 "verified_submit": submitted_ms,
@@ -390,6 +403,46 @@ class Desktop:
             "replay_safe": False,
             "login_verified": False,
             "response_observed_in_ui": bool(reply.get("completed")),
+        }
+
+    def chatgpt_read_reply(self, hwnd, text, wait_ms, fast_reply=False):
+        """Observe an exact already-sent prompt without sending or retrying."""
+        if not isinstance(text, str) or not 1 <= len(text) <= 5000:
+            raise PolicyError("Expected ChatGPT prompt must be 1..5000 characters")
+        if type(wait_ms) is not int or not 500 <= wait_ms <= 10000:
+            raise PolicyError("ChatGPT reply wait_ms must be 500..10000")
+        if type(fast_reply) is not bool:
+            raise PolicyError("fast_reply must be a boolean")
+        started = time.monotonic()
+        result = self.uia(
+            hwnd,
+            "poll_chatgpt_reply",
+            text=text,
+            wait_ms=wait_ms,
+            condition="first_text" if fast_reply else "exists",
+            limit=3000,
+        )
+        complete = bool(result.get("completed"))
+        partial = bool(result.get("partial")) and not complete
+        return {
+            "read_only": True,
+            "reply_verified": complete,
+            "reply_partial": partial,
+            "reply": result.get("reply", ""),
+            "reply_truncated": result.get("truncated", False),
+            "status": (
+                "complete"
+                if complete
+                else "partial_reply"
+                if fast_reply and partial
+                else "reply_timeout"
+            ),
+            "timings_ms": {
+                "reply_wait": round(result.get("elapsed_ms", 0)),
+                "observer_wall": round((time.monotonic() - started) * 1000),
+                "reply_first_text": round(result.get("first_reply_ms", -1)),
+            },
+            "replay_safe": True,
         }
 
     def resolve(self, window_id, focus=True):
@@ -579,6 +632,7 @@ class Desktop:
         checked=None,
         limit=5000,
         submit_name="",
+        fast_reply=False,
     ):
         self.validate_options(
             action, button, clicks, duration_ms, horizontal, wait_ms, condition
@@ -604,6 +658,7 @@ class Desktop:
             "wait_for",
             "batch",
             "read_text",
+            "chatgpt_read_reply",
         }:
             control.check()
         if action == "list":
@@ -620,7 +675,7 @@ class Desktop:
             return self.open_chrome_tab(text)
         if action == "open_chatgpt":
             return self.open_chatgpt()
-        if action == "chatgpt_roundtrip" and not window_id:
+        if action in ("chatgpt_roundtrip", "chatgpt_read_reply") and not window_id:
             # Resolve only an already-foreground, visible, real Chrome window.
             # A unique local observation avoids another remote list RPC.
             rows = self.listing()["windows"]
@@ -657,6 +712,7 @@ class Desktop:
                 "expand",
                 "collapse",
                 "scroll_into_view",
+                "chatgpt_read_reply",
             ),
         )
         if action == "verified_submit":
@@ -664,7 +720,9 @@ class Desktop:
                 hwnd, window_id, text, name, automation_id, submit_name
             )
         if action == "chatgpt_roundtrip":
-            return self.chatgpt_roundtrip(hwnd, window_id, text, wait_ms)
+            return self.chatgpt_roundtrip(hwnd, window_id, text, wait_ms, fast_reply)
+        if action == "chatgpt_read_reply":
+            return self.chatgpt_read_reply(hwnd, text, wait_ms, fast_reply)
         if action in UIA_ACTIONS:
             return self.uia(
                 hwnd,
@@ -872,6 +930,7 @@ class Desktop:
                     "open_chatgpt",
                     "verified_submit",
                     "chatgpt_roundtrip",
+                    "chatgpt_read_reply",
                 )
                 or "action" not in row
             ):

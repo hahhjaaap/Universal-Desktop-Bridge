@@ -34,6 +34,7 @@ DESKTOP_ACTIONS = (
     "open_chatgpt",
     "verified_submit",
     "chatgpt_roundtrip",
+    "chatgpt_read_reply",
     *UIA_ACTIONS,
 )
 UTILITY_ACTIONS = ("clipboard_get", "clipboard_set", "notify", "apps", "launch_app")
@@ -44,4 +45,5 @@ READ_ACTIONS = (
     "wait_for",
     "read_text",
     "control_status",
+    "chatgpt_read_reply",
 )

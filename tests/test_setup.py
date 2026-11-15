@@ -59,7 +59,8 @@ def test_locked_fleet_canary_stages_only_non_secret_request_id(
 
     monkeypatch.setattr(setup, "_request_json", caps)
     monkeypatch.setattr(
-        setup, "prepare_pending",
+        setup,
+        "prepare_pending",
         lambda _: {"id": "c" * 32, "proof": "secret", "token": TOKEN},
     )
     monkeypatch.setattr(

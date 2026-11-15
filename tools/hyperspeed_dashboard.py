@@ -18,9 +18,7 @@ def render(report):
     scenarios = report.get("scenarios")
     if not isinstance(scenarios, dict) or len(scenarios) > 100:
         raise ValueError("Invalid or oversized HyperSpeed report")
-    ranked = sorted(
-        scenarios.items(), key=lambda kv: kv[1]["p95_ms"], reverse=True
-    )
+    ranked = sorted(scenarios.items(), key=lambda kv: kv[1]["p95_ms"], reverse=True)
     high = max([r["p95_ms"] for _, r in ranked] + [0.0001])
     rows = []
     for name, row in ranked:
@@ -79,17 +77,17 @@ section{{margin-top:32px;overflow-x:auto}}
 <div class="summary">
 <div class="card">Workflow shapes<strong>{num}</strong></div>
 <div class="card">Timing samples<strong>{samples}</strong></div>
-<div class="card">Overall p95<strong>{report['overall']['p95_ms']:.4f} ms</strong></div>
-<div class="card">Overall p99<strong>{report['overall']['p99_ms']:.4f} ms</strong></div>
+<div class="card">Overall p95<strong>{report["overall"]["p95_ms"]:.4f} ms</strong></div>
+<div class="card">Overall p99<strong>{report["overall"]["p99_ms"]:.4f} ms</strong></div>
 </div>
 <section><h2>Per-workflow latency</h2><table>
 <thead><tr><th>Fixture workflow</th><th>n</th><th>p50 (ms)</th>
 <th>p95 (ms)</th><th>p99 (ms)</th><th>Cold p50</th>
 <th>Warm p50</th><th>RSS observed (MiB)</th></tr></thead>
-<tbody>{''.join(rows)}</tbody></table></section>
+<tbody>{"".join(rows)}</tbody></table></section>
 <section><h2>Opt-in real UDB trace phases</h2><table>
 <thead><tr><th>Stage</th><th>n</th><th>p50 (ms)</th><th>p95 (ms)</th></tr></thead>
-<tbody>{''.join(trace_rows) or '<tr><td colspan="4">No live trace supplied</td></tr>'}</tbody>
+<tbody>{"".join(trace_rows) or '<tr><td colspan="4">No live trace supplied</td></tr>'}</tbody>
 </table></section>
 <p class="subtitle">Critical-path and resource details are available in the companion JSON.
 Only fixed telemetry fields are recorded, never commands or user content.</p>

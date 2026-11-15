@@ -20,7 +20,7 @@ from udb import computer_desktop as desktop_mod
 from udb import windows_utilities as utilities_mod
 from udb.computer_capture import encode_bgrx_png
 from udb.computer_desktop import Desktop
-from udb.computer_jobs import Jobs, MAX_OUTPUT
+from udb.computer_jobs import MAX_OUTPUT, Jobs
 from udb.core import Agent, PolicyError
 from udb.windows_utilities import Utilities
 

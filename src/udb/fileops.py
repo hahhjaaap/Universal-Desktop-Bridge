@@ -105,6 +105,14 @@ def search_files(agent, project, path=".", pattern="*", text="", limit=100):
                             continue
                         row = {"path": rel}
                         if text:
+                            # Avoid disk IO for a candidate that already exceeds
+                            # the remaining search byte budget. Check again after
+                            # the read because the file may grow in the meantime.
+                            if target.stat().st_size > 4 * 1024 * 1024 - byte_count:
+                                truncated = True
+                                truncation_reason = "byte_budget"
+                                pending.clear()
+                                break
                             data = agent.read_bytes(project, rel)
                             byte_count += len(data)
                             if byte_count > 4 * 1024 * 1024:

@@ -77,9 +77,7 @@ def test_companion_guarded_write_and_replace_preserve_recovery(tmp_path):
     current = "emoji = '🍀'\r\nemoji = '🍀'\r\n"
     created = files.write("hello.py", current, "NEW")
     assert created["created"] is True
-    updated = files.replace(
-        "hello.py", "🍀", "🌿", created["sha256"], occurrences=2
-    )
+    updated = files.replace("hello.py", "🍀", "🌿", created["sha256"], occurrences=2)
     assert updated["replacements"] == 2
     assert (tmp_path / "hello.py").read_text("utf-8") == current.replace("🍀", "🌿")
     assert list((tmp_path / ".udb-recovery").glob("*.bak"))
@@ -109,7 +107,9 @@ def test_companion_mkdir_atomic_create_only_and_case_collision(tmp_path):
             extensions._file_mkdir(rt, {"path": "FOLDER"})
 
 
-def test_copy_is_streamed_verified_and_never_replaces_other_owner(tmp_path, monkeypatch):
+def test_copy_is_streamed_verified_and_never_replaces_other_owner(
+    tmp_path, monkeypatch
+):
     source = tmp_path / "original.txt"
     source.write_bytes(b"approved bytes" * 1000)
     files = ScopedFiles(str(tmp_path))

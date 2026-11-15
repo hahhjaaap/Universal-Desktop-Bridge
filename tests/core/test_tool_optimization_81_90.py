@@ -8,14 +8,11 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import threading
-from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from udb.companion import accounting, background, documents
-from udb.companion.background import Background, _unlink_owned_stage
+from udb.companion.background import Background
 from udb.companion.files import ScopedFiles
 from udb.companion.jobs import Task
 

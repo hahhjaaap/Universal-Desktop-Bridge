@@ -138,6 +138,36 @@ async function mcp(f, p, assertion, method = "tools/list", params = {}, access =
   }), f.env, p.id, f.env.DEVICES.get(p.id), keys, access);
 }
 
+test("isolated Fleet staging accepts only an operator-pinned Windows request ID", async () => {
+  const f = fixture();
+  f.env.UDB_ENABLE_ACCOUNT_FLEET = "true";
+  f.env.UDB_ENABLE_LOCAL_TOOL_SYNC = "true";
+  f.env.UDB_FLEET_REQUIRE_REQUEST_PIN = "true";
+  assert.equal((await (await f.route("/v1/setup")).json()).browser_enrollment, false);
+  assert.equal((await f.route("/v1/setup/enrollments", "POST", {})).status, 404);
+
+  const id = "a".repeat(32);
+  f.env.UDB_FLEET_ALLOWED_REQUEST_ID = id;
+  assert.equal((await (await f.route("/v1/setup")).json()).browser_enrollment, true);
+  assert.equal((await f.route("/v1/enrollments", "POST", {})).status, 404,
+    "legacy anonymous enrollment must remain disabled in the isolated lab");
+  const request = {
+    request_id: "b".repeat(32),
+    request_secret_sha256: hash("synthetic-proof"),
+    device_token_sha256: hash("synthetic-token"),
+    device_name: "Synthetic Windows",
+  };
+  const denied = await f.route("/v1/setup/enrollments", "POST", request);
+  assert.equal(denied.status, 404);
+  assert.equal(f.objects.size, 0, "unapproved request must not create state");
+  request.request_id = id;
+  const allowed = await f.route("/v1/setup/enrollments", "POST", request);
+  assert.equal(allowed.status, 201);
+  assert.equal((await allowed.json()).device_id, id);
+  const repeated = await f.route("/v1/setup/enrollments", "POST", request);
+  assert.equal(repeated.status, 201, "same pending identity can safely resume");
+});
+
 test("browser enrollment is opt-in and requires separate pinned owner application", async () => {
   for (const mutate of [
     env => delete env.UDB_ENABLE_BROWSER_ENROLLMENT,

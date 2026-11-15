@@ -184,9 +184,7 @@ def test_open_chatgpt_failed_default_browser_does_not_retry(monkeypatch):
         requested.append(url)
         raise OSError("failed")
 
-    monkeypatch.setattr(
-        "udb.computer_desktop.os.startfile", fail, raising=False
-    )
+    monkeypatch.setattr("udb.computer_desktop.os.startfile", fail, raising=False)
     with pytest.raises(PolicyError, match="inspect the desktop before retrying"):
         d._dispatch("open_chatgpt")
     assert requested == ["https://chatgpt.com/"]

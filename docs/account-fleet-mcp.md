@@ -104,17 +104,23 @@ with application ID `d6c82311-ce00-4709-ae2a-61c3e4005a8f`.
 It exclusively targets
 `udb-fleet-isolated-staging.hkhoinguyen72.workers.dev/v1/account/mcp`.
 A fresh read-back confirmed Managed OAuth, ChatGPT DCR callback patterns,
-a one-hour Access session, and **one deny-everyone policy**. The application
-is hidden from the app launcher; no test accounts are granted yet.
+a one-hour Access session, and a single Access policy. On 2026-11-15,
+the owner explicitly approved one test login. The previously deny-everyone
+policy was updated in place to **Allow exactly that email**, with no Bypass,
+Everyone, wildcard domain or additional login. All other identities remain
+denied by Cloudflare Access's default-deny behavior. Do not commit the personal
+email address or Access identifiers for that identity into public source.
+The application remains hidden from the app launcher.
 
 The separate browser-owner approval application
 **UDB Fleet Isolated Device Approval** was also created on
 `udb-fleet-isolated-staging.hkhoinguyen72.workers.dev/v1/setup/enrollments/*/approval`
 with ID `b443dd85-179d-4ea5-b42d-92ff486bdba2`. This is a distinct
-non-OAuth Access application with its own audience; it also has one
-**deny-everyone** policy and is hidden from the app launcher. Both apps were
-read back from Cloudflare API after creation to verify exact path scopes
-and no allow/bypass policies.
+non-OAuth Access application with its own audience. Its single policy
+was likewise updated in place to allow only the same owner-approved test
+login, with all other identities denied. Both apps were read back after
+the change to verify their independent audiences, exact path scopes,
+single-email allowlists, and absence of Bypass or Everyone allow rules.
 
 This is **Access app provisioning only**: no Worker is deployed on that name,
 no Durable Object exists for this isolated candidate, no device can enroll,
@@ -132,13 +138,15 @@ Run the offline guard `python -m tools.check_fleet_isolated_config`
 before any separately approved deployment. Do not deploy using the default
 `wrangler.staging.jsonc`, which deliberately targets the live relay.
 
-**Before enabling or deploying:** obtain at least two explicitly approved
-test Access identities and disposable Windows devices, provision independent
-staging secrets and a pinned approval-app audience/owner allowlist, perform
-the CI and dry-run on the exact commit, and record rollback/teardown. Never
-copy a live admin key, device token, owner grant, Credential Manager value,
-or Durable Object namespace to the test Worker. The deny-all Access policy
-must remain effective until the owner approves the specific test accounts.
+**Before enabling or deploying:** the one approved Access identity is
+sufficient only for single-owner acceptance. A second independently approved
+test identity is needed for real account-isolation acceptance. Also obtain
+disposable Windows devices, independent staging secrets, and the immutable
+subject for the pinned approval-app audience/owner allowlist; run CI and
+dry-run on the exact commit, and record rollback/teardown. Never copy a
+live admin key, device token, owner grant, Credential Manager value or
+Durable Object namespace into the test Worker. Do not expand this allowlist
+without separate, explicit owner approval.
 
 ## Read-only OAuth preflight (isolated staging only)
 

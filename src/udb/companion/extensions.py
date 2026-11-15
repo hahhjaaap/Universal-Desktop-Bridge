@@ -61,9 +61,7 @@ def _file_stat(rt, a):
     relative = str(p.relative_to(rt.files.root))
     if stat.S_ISREG(metadata.st_mode):
         if metadata.st_size > MAX_HASH:
-            return (
-                f"File: {relative}\nBytes: {metadata.st_size}\nSHA256: skipped (>256 MiB)"
-            )
+            return f"File: {relative}\nBytes: {metadata.st_size}\nSHA256: skipped (>256 MiB)"
         return f"File: {relative}\nBytes: {metadata.st_size}\nSHA256: {_sha256(p)}"
     if stat.S_ISDIR(metadata.st_mode):
         return f"Directory: {relative}"

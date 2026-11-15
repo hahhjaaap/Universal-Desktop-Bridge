@@ -422,6 +422,7 @@ class Agent(AutonomyMixin):
                     )
                 except (PolicyError, OSError):
                     continue
+
         # Casefold collisions are ordered by the original path, not scandir
         # enumeration order. Cursor paging does not repeat earlier entries if
         # the directory changes between calls (but is not a frozen snapshot).

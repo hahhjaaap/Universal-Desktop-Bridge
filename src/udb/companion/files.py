@@ -118,7 +118,11 @@ class ScopedFiles:
             except OSError:
                 continue
             items.append(
-                {"name": safe.name, "kind": "dir" if directory else "file", "size": size}
+                {
+                    "name": safe.name,
+                    "kind": "dir" if directory else "file",
+                    "size": size,
+                }
             )
         return {
             "path": str(base.relative_to(self.root)),

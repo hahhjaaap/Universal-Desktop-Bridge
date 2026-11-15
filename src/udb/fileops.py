@@ -23,12 +23,9 @@ def read_files(agent, project, paths):
     total_bytes = 0
     for relative in paths:
         file_path = agent.path(project, relative)
-        if (
-            not file_path.is_file()
-            or (
-                file_path.suffix.lower() not in SOURCE_EXT
-                and file_path.name.lower() not in SOURCE_EXT
-            )
+        if not file_path.is_file() or (
+            file_path.suffix.lower() not in SOURCE_EXT
+            and file_path.name.lower() not in SOURCE_EXT
         ):
             raise PolicyError("Only small source/text files may be read")
         total_bytes += file_path.stat().st_size

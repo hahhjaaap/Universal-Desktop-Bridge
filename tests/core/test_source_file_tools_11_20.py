@@ -85,7 +85,9 @@ def test_single_source_read_decodes_once_and_never_executes(project, monkeypatch
     assert agent.read("demo", ".gitignore")["text"] == "*.log\n"
 
 
-def test_batched_reads_bounded_parallel_order_and_fresh_permissions(project, monkeypatch):
+def test_batched_reads_bounded_parallel_order_and_fresh_permissions(
+    project, monkeypatch
+):
     agent, root = project
     names = [f"file_{index:02d}.py" for index in range(12)]
     for index, name in enumerate(names):

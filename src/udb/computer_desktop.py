@@ -398,7 +398,7 @@ class Desktop:
             },
             "replay_safe": False,
             "login_verified": False,
-            "server_delivery_verified": bool(reply.get("completed")),
+            "response_observed_in_ui": bool(reply.get("completed")),
         }
 
     def resolve(self, window_id, focus=True):
@@ -505,7 +505,7 @@ class Desktop:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                timeout=7 + (wait_ms / 1000 if mode == "wait_for" else 0),
+                timeout=7 + (wait_ms / 1000 if mode in ("wait_for", "poll_chatgpt_reply") else 0),
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 shell=False,
             )

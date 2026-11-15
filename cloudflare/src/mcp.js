@@ -204,7 +204,8 @@ async function unavailable(response, code) {
   } }, [429, 502, 503, 504].includes(response.status) ? response.status : 503);
 }
 
-export async function handleMcp(request, env, id, stub, fetchImpl = fetch, access = null) {
+export async function handleMcp(request, env, id, stub, fetchImpl = fetch, access = null,
+    trustedFleetOwner = null) {
   const origin = request.headers.get("Origin");
   if (origin && origin !== new URL(request.url).origin) {
     console.warn(JSON.stringify({ event: "udb_mcp_scan_denied", category: "origin_mismatch" }));
@@ -227,7 +228,7 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   if (mode === "cloudflare-access") {
     // Cloudflare runtime identity or a verified Access-signed JWT only.
     try { user = await authorizeAccess(access, env, id, request, fetchImpl,
-      identity => enrolledReadGrant(env, stub, identity)); }
+      identity => enrolledReadGrant(env, stub, identity), trustedFleetOwner); }
     catch (failure) {
       // Do not log caller identity, bearer material, JWTs, device IDs, or
       // request bodies. Only static reason classes are permitted in logs.

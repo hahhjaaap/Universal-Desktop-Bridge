@@ -205,7 +205,9 @@ def launch(agent, jid, p):
         ).fetchone()[0]:
             raise PolicyError("One Sandbox job at a time; check current job")
     # Runtime must be an explicit trusted Python install; never map the agent state.
-    runtime = trusted_python_runtime(agent, error_message="Select a standalone trusted Python runtime locally")
+    runtime = trusted_python_runtime(
+        agent, error_message="Select a standalone trusted Python runtime locally"
+    )
     guard_new_heavy_task(agent, 4096)
     folder = agent.state / "jobs" / jid
     source, output = folder / "input", folder / "output"

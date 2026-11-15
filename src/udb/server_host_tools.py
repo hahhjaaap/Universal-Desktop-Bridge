@@ -168,4 +168,3 @@ def register_host_tools(mcp, agent, read, propose):
         from .host_client import command
 
         return command(agent, "close", session_id=session_id)
-

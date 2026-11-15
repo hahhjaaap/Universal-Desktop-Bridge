@@ -227,4 +227,3 @@ def register_guest_tools(mcp, agent, read, propose):
     def desktop_batch(session_id: str, steps: list[dict]) -> dict:
         """Run 1..12 validated guest actions in one round trip. 30-second budget checked between steps; stops at first error. No permission changes, nested batches, screenshots or automatic UI rollback. Check state.ok and each result."""
         return desktop_vm.command(agent, session_id, "batch", steps=steps)
-

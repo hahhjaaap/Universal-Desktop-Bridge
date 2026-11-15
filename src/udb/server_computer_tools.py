@@ -190,4 +190,3 @@ def register_computer_tools(mcp, computer_call, read):
         if png:
             blocks.append(ImageContent(type="image", data=png, mimeType="image/png"))
         return CallToolResult(content=blocks)
-

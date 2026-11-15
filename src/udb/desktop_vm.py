@@ -545,7 +545,9 @@ def launch(agent, sid, payload):
     worker = guest_source()
     if digest(worker) != payload["guest_sha256"]:
         raise PolicyError("Guest controller changed; request approval again")
-    runtime = trusted_python_runtime(agent, error_message="Trusted standalone Python runtime required")
+    runtime = trusted_python_runtime(
+        agent, error_message="Trusted standalone Python runtime required"
+    )
     guard_new_heavy_task(agent, 4096)
     folder = agent.state / "desktops" / sid
     reject_links(folder)

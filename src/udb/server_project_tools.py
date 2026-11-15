@@ -95,4 +95,3 @@ def register_project_tools(mcp, agent, read, propose):
     ) -> dict:
         """Propose an observable Sandbox-only mouse/keyboard session on a source snapshot. An owner-issued project grant allows automatic startup; otherwise human approval is required locally; network/clipboard/host desktop remain disabled."""
         return agent.propose_desktop(project, task, duration_seconds)
-

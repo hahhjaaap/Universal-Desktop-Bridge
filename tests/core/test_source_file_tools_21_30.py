@@ -40,3 +40,31 @@ def test_search_small_source_keeps_existing_match_shape(tmp_path):
         {"path": "demo.py", "matches": [{"line": 2, "text": "needle here"}]}
     ]
     assert result["bytes_searched"] == len("one\nneedle here\n".encode("utf-8"))
+
+
+def test_search_order_is_stable_for_unchanged_small_tree(tmp_path):
+    root = tmp_path / "source"
+    root.mkdir()
+    # Creation order deliberately differs from casefold + original-name order.
+    for name in ("zeta.py", "Beta.py", "alpha.py", "ALPHA.py"):
+        (root / name).write_text("needle\n", encoding="utf-8")
+    agent = Agent(tmp_path / "bridge")
+    agent.register_local("demo", str(root), True)
+    expected = ["ALPHA.py", "alpha.py", "Beta.py", "zeta.py"]
+    first = search_files(agent, "demo", pattern="*.py", text="needle")
+    second = search_files(agent, "demo", pattern="*.py", text="needle")
+    assert [row["path"] for row in first["items"]] == expected
+    assert first["items"] == second["items"]
+
+
+def test_search_invalid_utf8_file_does_not_block_safe_matches(tmp_path):
+    root = tmp_path / "source"
+    root.mkdir()
+    (root / "a_bad.py").write_bytes(b"needle\xff")
+    (root / "b_good.py").write_text("needle\n", encoding="utf-8")
+    agent = Agent(tmp_path / "bridge")
+    agent.register_local("demo", str(root), True)
+    result = search_files(agent, "demo", pattern="*.py", text="needle")
+    assert [row["path"] for row in result["items"]] == ["b_good.py"]
+    assert result["truncated"] is False
+    assert result["bytes_searched"] == len(b"needle\xff") + len(b"needle\n")

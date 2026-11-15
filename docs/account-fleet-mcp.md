@@ -175,6 +175,53 @@ Never copy live device tokens, owner grants, Credential Manager values or
 Durable Object namespaces into the test Worker. Do not expand this Access
 allowlist without separate, explicit owner approval.
 
+## Safe one-machine canary enrollment without public registration
+
+The staging Worker keeps `UDB_ENABLE_PRIVATE_ENROLLMENT=false` until an
+attended Windows owner explicitly selects a **disposable UDB_HOME** and a
+specific Windows request ID. Existing `udb` managed installs, device tokens,
+autostart keys and Active Agents must not be overwritten for this test.
+
+With a CI-verified canary executable in a separate folder, open a Windows
+terminal as the device owner and set these variables for **this process only**:
+
+```powershell
+$env:UDB_HOME = "$env:LOCALAPPDATA\UDB-Fleet-Canary\profile"
+$env:UDB_SETUP_RELAY = "https://udb-fleet-isolated-staging.hkhoinguyen72.workers.dev"
+& "$env:LOCALAPPDATA\UDB-Fleet-Canary\portable\UDB\udb.exe" setup
+```
+
+The `UDB_SETUP_RELAY` override accepts only the exact built-in legacy
+staging relay or this **pinned isolated Fleet test relay**. It never changes an
+existing device's pairing. When browser enrollment remains locked, this
+attended command stores a *new* recoverable identity in the canary profile's
+Windows Credential Manager, prints only `Pending device ID` (32 hex digits),
+and returns incomplete. It does not send a registration, open a browser or
+grant Windows permissions at this stage.
+
+After checking that ID against the owner-controlled machine, the operator
+must update **only the isolated Worker**, atomically configuring
+`UDB_FLEET_REQUIRE_REQUEST_PIN=true`,
+`UDB_FLEET_ALLOWED_REQUEST_ID=<the exact pending ID>`, and
+`UDB_ENABLE_PRIVATE_ENROLLMENT=true`. When the request pin is absent,
+browser enrollment remains 404; when a different ID is submitted, it remains
+404 without creating a pending record. The legacy anonymous
+`POST /v1/enrollments` is always disabled while this staging pin gate is
+active. Verify these denial paths before rerunning `udb setup`.
+
+On the next **attended** run, the saved ID/proof/token are reused. The
+owner must compare the printed fingerprint and device ID with the protected
+Cloudflare Access approval page and explicitly approve or reject; ChatGPT
+OAuth is a separate user action. Decline sign-in autostart for canary tests
+unless explicitly requested. After approval, turn private enrollment off again
+without changing any existing device credentials or Durable Object namespace.
+
+Never copy a live `cloud-pairing.json`, Credential Manager item, device
+token, UDB manager permission grant, or auto-start registry entry into the
+canary. The established managed UDB process and its original relay stay live
+throughout. This procedure is staging-specific and not a general public
+fleet-enrollment feature.
+
 ## Read-only OAuth preflight (isolated staging only)
 
 Once a separate owner-scoped Access application protects the **exact**

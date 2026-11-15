@@ -147,9 +147,7 @@ def prepare_document_request(files, format, args):
         target_expected = "NEW" if destination else expected
         if target_expected == "NEW":
             if target.exists():
-                raise FileExistsError(
-                    "Destination exists; use its SHA256 to replace"
-                )
+                raise FileExistsError("Destination exists; use its SHA256 to replace")
         elif (
             not re.fullmatch("[0-9a-fA-F]{64}", target_expected)
             or not target.is_file()
@@ -169,9 +167,7 @@ def prepare_document_request(files, format, args):
         root=str(files.root),
         inputs={str(p): fingerprints[str(p)] for p in inputs},
     )
-    encoded = json.dumps(request, ensure_ascii=False, allow_nan=False).encode(
-        "utf-8"
-    )
+    encoded = json.dumps(request, ensure_ascii=False, allow_nan=False).encode("utf-8")
     if len(encoded) > 1024 * 1024:
         raise ValueError("Document request exceeds 1 MiB")
 

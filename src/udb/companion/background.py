@@ -142,7 +142,10 @@ class Background(SearchMixin):
                     for t in self.tasks.values()
                 ]
             }
-        if jid not in self.tasks:
+        # A progressive search read/cancel is one lookup in the owned job
+        # table. No persisted record is loaded for a live task.
+        owned = self.tasks.get(jid)
+        if owned is None:
             start = int(offset)
             count = int(limit)
             if not 0 <= start <= 2000 or not 1 <= count <= 100:
@@ -167,11 +170,7 @@ class Background(SearchMixin):
                 has_more=end < len(rows),
             )
             return row
-        return (
-            self.tasks[jid].stop()
-            if action == "cancel"
-            else self.tasks[jid].read(offset, limit)
-        )
+        return owned.stop() if action == "cancel" else owned.read(offset, limit)
 
     def close(self):
         for t in list(self.tasks.values()):

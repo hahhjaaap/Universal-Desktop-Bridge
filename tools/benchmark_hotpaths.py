@@ -81,10 +81,14 @@ def run(samples=15, backend_delay_ms=15):
         folder = Path(tmp)
         rounds = samples * 150
 
-        def measure(read):
+        def measure(read, expected=None):
+            # Keep the empty-mailbox assertion, but allow the mixed fixture
+            # to verify a stable, nonempty result on every repetition.
+            if expected is None:
+                expected = []
             started = time.perf_counter()
             for _ in range(rounds):
-                assert read() == []
+                assert read() == expected
             return 1000 * (time.perf_counter() - started) / rounds
 
         glob_ms = measure(lambda: sorted(folder.glob("*.json")))
@@ -110,9 +114,12 @@ def run(samples=15, backend_delay_ms=15):
                 ]
             return [mixed / n for n in sorted(names) if n.endswith(".json")]
 
-        assert previous_mixed_listing() == pending_inbox_commands(mixed)
-        mixed_all_sort_ms = measure(previous_mixed_listing)
-        mixed_filtered_sort_ms = measure(lambda: pending_inbox_commands(mixed))
+        expected_mixed = previous_mixed_listing()
+        assert expected_mixed == pending_inbox_commands(mixed)
+        mixed_all_sort_ms = measure(previous_mixed_listing, expected_mixed)
+        mixed_filtered_sort_ms = measure(
+            lambda: pending_inbox_commands(mixed), expected_mixed
+        )
     a, b = statistics.median(sequential_ms), statistics.median(parallel_ms)
     waiter = waiter_roundtrip_microbenchmark()
     return {

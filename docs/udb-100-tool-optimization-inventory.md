@@ -1,6 +1,6 @@
 # Kiểm kê và đề xuất hoàn tất 100 tối ưu từng công cụ UDB
 
-**Ngày kiểm kê:** 2026-11-15. **Nguồn catalog:** `cloudflare/src/fleet-tool-catalog.json` (blob SHA `339931936ceff3190b2b7a9e92bf3e1889901154`, 41 public tools trên `main`). **Phạm vi:** repository `hahhjaaap/Universal-Desktop-Bridge`. **Trạng thái:** BẢN KẾ HOẠCH ĐỀ XUẤT, không phải một đợt benchmark hay chứng nhận đã triển khai.
+**Ngày kiểm kê:** 2026-11-15. **Nguồn catalog:** `cloudflare/src/fleet-tool-catalog.json` (blob SHA `343948f31d71c267eeaa134fbd0faa63d85f19ff`, 41 public tools trên `main`). **Phạm vi:** repository `hahhjaaap/Universal-Desktop-Bridge`. **Trạng thái:** BẢN KẾ HOẠCH ĐỀ XUẤT, không phải một đợt benchmark hay chứng nhận đã triển khai.
 
 ## 1. Quy tắc xác nhận hoàn thành
 
@@ -188,7 +188,7 @@ Không bỏ authorization hoặc prompt approval; không giữ cache quyền khi
 
 ## 8. Bảng tiến độ triển khai 41–50 (PR #195)
 
-- **PR triển khai:** [#195](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/195) — Draft, không được tính là merged/shipped.
+- **PR triển khai:** [#195](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/195) — **đã merge** vào `main` (squash commit `597fae72cc863892d60c12e98345e724f9594efd`); chưa chứng minh đã phát hành/cài đặt.
 - **Bước 41:** code tiền kiểm request `propose_sandbox_job`, regression invalid inputs.
 - **Bước 42:** tái sử dụng `Path(parent)` mỗi thư mục và lọc hậu tố nhẹ hơn trong source snapshot; giữ nguyên quyền/caps.
 - **Bước 43:** fast path result JSON rỗng cho `get_request_status`.
@@ -199,5 +199,5 @@ Không bỏ authorization hoặc prompt approval; không giữ cache quyền khi
 - **Bước 48:** CRC PNG theo `memoryview` thay vì copy khối IDAT lớn.
 - **Bước 49:** internal readiness bỏ đọc `progress.json` dư; public desktop status vẫn đầy đủ.
 - **Bước 50:** bảng lock `desktop_control` tạo một lần ở Agent init, vẫn giữ transactional per-session lock và cancel/revocation.
-- **Nghiệm thu:** cross-platform CI, Windows EXE và relay validation phải đạt trên cùng SHA; trước đó trạng thái toàn nhóm là **code + tests, chờ merge**.
+- **Nghiệm thu:** CI Python Linux/Windows, Windows EXE và Cloudflare relay đã đạt trước khi merge #195. Đây là xác minh mã nguồn/CI, không phải benchmark thời gian end-to-end hay triển khai EXE lên máy thật.
 - **Phạm vi chưa xác minh:** Windows Sandbox trên máy thật và chi phí toàn bộ end-to-end ChatGPT không được chứng minh chỉ bằng CI.

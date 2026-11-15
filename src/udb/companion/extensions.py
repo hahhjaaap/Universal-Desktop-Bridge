@@ -180,6 +180,7 @@ def _file_search_context(rt, a):
     text = a["text"]
     if not isinstance(text, str) or not text or len(text) > 200:
         raise ValueError("Provide a literal text query of 1-200 characters")
+    folded_text = text.casefold()
     pattern = str(a.get("pattern", "*"))
     context = max(0, min(3, int(a.get("context", 1))))
     limit = max(1, min(MAX_CONTEXT_RESULTS, int(a.get("limit", 20))))
@@ -196,10 +197,11 @@ def _file_search_context(rt, a):
         )
     }
     for folder, dirs, names in os.walk(root, followlinks=False):
+        parent = Path(folder)
         dirs[:] = [
             x
             for x in dirs
-            if x.casefold() not in hidden and _allowed(rt.files, Path(folder) / x)
+            if x.casefold() not in hidden and _allowed(rt.files, parent / x)
         ]
         for filename in names:
             scanned += 1
@@ -208,7 +210,7 @@ def _file_search_context(rt, a):
                 break
             if not fnmatch.fnmatch(filename, pattern):
                 continue
-            candidate = Path(folder) / filename
+            candidate = parent / filename
             if not _allowed(rt.files, candidate):
                 continue
             path = rt.files.path(str(candidate))
@@ -219,7 +221,7 @@ def _file_search_context(rt, a):
             except (UnicodeError, OSError):
                 continue
             for idx, row in enumerate(lines):
-                if text.casefold() not in row.casefold():
+                if folded_text not in row.casefold():
                     continue
                 snippet = "\n".join(
                     f"{j + 1}: {lines[j][:350]}"
@@ -256,12 +258,18 @@ def _allowed(files, path):
 
 
 def _terminal_list(rt, a):
-    lines = []
-    for sid, session in rt.sessions.items():
-        code = session.process.poll()
-        state = "RUNNING" if code is None else ("PASS" if code == 0 else "ERROR")
-        lines.append(f"{sid} | {state} | exit={code}")
-    return "No companion-owned terminal sessions." if not lines else "\n".join(lines)
+    if not rt.sessions:
+        return "No companion-owned terminal sessions."
+
+    def owned_rows():
+        # Stream status strings into join; avoid a second list of 64 session
+        # snapshots. Each owned process is still freshly polled.
+        for sid, session in rt.sessions.items():
+            code = session.process.poll()
+            state = "RUNNING" if code is None else ("PASS" if code == 0 else "ERROR")
+            yield f"{sid} | {state} | exit={code}"
+
+    return "\n".join(owned_rows())
 
 
 def _terminal_wait(rt, a):

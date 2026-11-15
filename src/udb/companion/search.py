@@ -22,9 +22,8 @@ from udb.pipe_io import write_all
 
 class SearchMixin:
     def search(self, **args):
-        root = self.files.path(args.get("path", "."))
-        if not root.is_dir():
-            raise ValueError("Search path must be a directory")
+        # Validate the envelope before expensive scoped-path resolution or
+        # bounded worker allocation. Valid requests still use ScopedFiles.
         query = args.get("text", "")
         pattern = args.get("pattern", "*")
         if (
@@ -37,6 +36,12 @@ class SearchMixin:
         seconds = int(args.get("timeout_seconds", 30))
         if not 1 <= seconds <= 120:
             raise ValueError("Search timeout 1..120 seconds")
+        search_type = args.get("search_type", "content")
+        if search_type not in ("files", "content"):
+            raise ValueError("Search type files or content")
+        root = self.files.path(args.get("path", "."))
+        if not root.is_dir():
+            raise ValueError("Search path must be a directory")
         config = dict(
             root=str(self.files.root),
             path=str(root),
@@ -44,10 +49,8 @@ class SearchMixin:
             pattern=pattern,
             regex=bool(args.get("regex", False)),
             case_sensitive=bool(args.get("case_sensitive", False)),
-            search_type=args.get("search_type", "content"),
+            search_type=search_type,
         )
-        if config["search_type"] not in ("files", "content"):
-            raise ValueError("Search type files or content")
 
         def run(task):
             proc = ManagedProcess(worker_command("search"), str(self.files.root), 256)
@@ -124,16 +127,17 @@ def search_worker():
 
     try:
         rx = re.compile(query, flags) if config["regex"] else None
+
+        def allowed(p):
+            try:
+                files.path(str(p))
+                return True
+            except (OSError, ValueError):
+                return False
+
         for folder, dirs, names in os.walk(root, followlinks=False):
-
-            def allowed(p):
-                try:
-                    files.path(str(p))
-                    return True
-                except (OSError, ValueError):
-                    return False
-
-            dirs[:] = [n for n in dirs if allowed(Path(folder) / n)]
+            parent = Path(folder)
+            dirs[:] = [n for n in dirs if allowed(parent / n)]
             for name in names:
                 scanned += 1
                 if scanned > 20000:
@@ -143,7 +147,7 @@ def search_worker():
                     send("progress", dict(files_scanned=scanned, matches=matches))
                 if not fnmatch.fnmatch(name, config["pattern"]):
                     continue
-                p = Path(folder) / name
+                p = parent / name
                 if not allowed(p) or not p.is_file():
                     continue
                 if config["search_type"] == "files":

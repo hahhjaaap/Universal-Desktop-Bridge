@@ -227,9 +227,8 @@ class Runtime:
                         break
         if len(self.sessions) >= MAX_RETAINED_SESSIONS:
             raise RuntimeError("Session history full; running processes were kept")
-        location = self.files.path(cwd)
-        if not location.is_dir():
-            raise ValueError("cwd is not a directory")
+        # Cheap envelope checks must run before filesystem resolution or a
+        # capacity claim; invalid requests never spawn an owned process.
         if (
             not isinstance(program, str)
             or not program.strip()
@@ -240,18 +239,12 @@ class Runtime:
         if any(not isinstance(arg, str) for arg in argv):
             raise ValueError("Arguments must be strings")
         if (
-            not isinstance(timeout_seconds, int)
+            type(timeout_seconds) is not int
             or not 1 <= timeout_seconds <= 3600
-            or not isinstance(memory_mib, int)
+            or type(memory_mib) is not int
             or not 128 <= memory_mib <= 4096
         ):
             raise ValueError("Terminal timeout 1..3600s, memory 128..4096 MiB")
-        executable = (
-            shutil.which(program) if not Path(program).is_absolute() else program
-        )
-        if not executable or not Path(executable).is_file():
-            raise ValueError("Program was not found")
-        argv[0] = str(Path(executable).resolve())
         if (
             len(argv) > 129
             or any("\0" in a for a in argv)
@@ -260,6 +253,14 @@ class Runtime:
             raise ValueError("Bounded program arguments required")
         if mode not in ("pipe", "conpty"):
             raise ValueError("Terminal mode pipe or conpty")
+        location = self.files.path(cwd)
+        if not location.is_dir():
+            raise ValueError("cwd is not a directory")
+        requested = Path(program)
+        executable = shutil.which(program) if not requested.is_absolute() else program
+        if not executable or not Path(executable).is_file():
+            raise ValueError("Program was not found")
+        argv[0] = str(Path(executable).resolve())
         slot = self.capacity.claim()
         process = None
         try:

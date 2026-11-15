@@ -2,6 +2,8 @@
 // No current-device globals, client-supplied owner IDs, or delegated Windows permissions.
 import { digest, readJson, validRpc, DEVICE_ID } from "./auth.js";
 import { accessConfig, verifiedAccessIdentity } from "./access.js";
+import { fleetEnabled } from "./fleet-policy.js";
+export { fleetEnabled } from "./fleet-policy.js";
 import { stableAccessSubject } from "./enrollment-owner.js";
 import { handleMcp } from "./mcp.js";
 import { ENROLLED_CATALOG } from "./local-permissions.js";
@@ -27,14 +29,6 @@ const denied = (request) => json({ error: "cloudflare_access_authentication_requ
     new URL(request.url).origin +
     '/.well-known/oauth-protected-resource/v1/account/mcp", scope="udb:read"',
 });
-
-export const fleetEnabled = env =>
-  env?.UDB_ENABLE_ACCOUNT_FLEET === "true" &&
-  env?.UDB_ENABLE_BROWSER_ENROLLMENT === "true" &&
-  env?.UDB_ENABLE_LOCAL_TOOL_SYNC === "true" &&
-  env?.UDB_TENANT_POLICY === undefined &&
-  env?.UDB_AUTH_MODE === "cloudflare-access" &&
-  !!accessConfig(env)?.team && !!env.DEVICES?.get;
 
 export function fleetProtectedResource(request, env) {
   if (!fleetEnabled(env)) return fail(404, "account_fleet_disabled");

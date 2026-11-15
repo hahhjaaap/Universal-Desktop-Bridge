@@ -613,9 +613,7 @@ class UnifiedProxy:
             if not self.active_limit.acquire(timeout=10):
                 self.send(rpc_error(message.get("id"), "UDB Unified is busy", -32003))
                 continue
-            perf.interval(
-                "mcp.dispatch", "queue", queued_at, rpc_id=message.get("id")
-            )
+            perf.interval("mcp.dispatch", "queue", queued_at, rpc_id=message.get("id"))
             threading.Thread(target=self.handle, args=(message,), daemon=True).start()
 
 

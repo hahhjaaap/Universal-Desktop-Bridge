@@ -15,7 +15,15 @@ const envFor = (tools = OWNER_TOOLS) => ({
 });
 
 test("the opt-in names precisely match the defined local FastMCP catalog", () => {
-  const python = readFileSync(new URL("../../src/udb/server.py", import.meta.url), "utf8");
+  // Registrations are split by scope; compare every decorator against the
+  // actual owner/read grant allowlists instead of assuming one giant module.
+  const modules = [
+    "server_project_tools.py", "server_guest_tools.py",
+    "server_host_tools.py", "server_computer_tools.py",
+  ];
+  const python = modules.map(name => readFileSync(
+    new URL("../../src/udb/" + name, import.meta.url), "utf8",
+  )).join("\n");
   const local = [...python.matchAll(
     /@mcp\.tool\([\s\S]*?\)\s*\n\s*(?:async\s+)?def\s+([a-z][a-z0-9_]*)\s*\(/g,
   )].map((match) => match[1]);

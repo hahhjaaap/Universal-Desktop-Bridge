@@ -8,7 +8,6 @@ import re
 import socket
 import struct
 import subprocess
-import sys
 import threading
 import time
 import uuid
@@ -19,6 +18,7 @@ from xml.sax.saxutils import escape
 from .core import PolicyError, canonical, digest, reject_links
 from .desktop_guest import DEMO, validate_steps
 from .sandbox import available, executable, reserve_vm, restore_owned_vm
+from .sandbox_runtime import trusted_python_runtime
 
 BUSY = ("running", "reviewing", "stopping")
 PNG_LIMIT = 8 * 1024 * 1024
@@ -545,23 +545,9 @@ def launch(agent, sid, payload):
     worker = guest_source()
     if digest(worker) != payload["guest_sha256"]:
         raise PolicyError("Guest controller changed; request approval again")
-    cfg = agent.state / "runtime.json"
-    runtime = (
-        Path(json.loads(cfg.read_text("utf-8-sig"))["python_runtime"])
-        if cfg.exists()
-        else (
-            Path(sys.executable).parent / "vendor" / "python-runtime"
-            if getattr(sys, "frozen", False)
-            else Path(sys.base_prefix)
-        )
+    runtime = trusted_python_runtime(
+        agent, error_message="Trusted standalone Python runtime required"
     )
-    reject_links(runtime)
-    if (
-        not (runtime / "python.exe").is_file()
-        or runtime == agent.home
-        or agent.state.is_relative_to(runtime)
-    ):
-        raise PolicyError("Trusted standalone Python runtime required")
     guard_new_heavy_task(agent, 4096)
     folder = agent.state / "desktops" / sid
     reject_links(folder)

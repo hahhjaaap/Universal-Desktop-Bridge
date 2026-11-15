@@ -5,13 +5,13 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 import threading
 import time
 from pathlib import Path
 from xml.sax.saxutils import escape
 
 from .core import PolicyError, canonical, digest, reject_links
+from .sandbox_runtime import trusted_python_runtime
 
 REVIEW_SECONDS = 60
 
@@ -205,23 +205,9 @@ def launch(agent, jid, p):
         ).fetchone()[0]:
             raise PolicyError("One Sandbox job at a time; check current job")
     # Runtime must be an explicit trusted Python install; never map the agent state.
-    config = agent.state / "runtime.json"
-    runtime = (
-        Path(json.loads(config.read_text("utf-8-sig"))["python_runtime"])
-        if config.exists()
-        else (
-            Path(sys.executable).parent / "vendor" / "python-runtime"
-            if getattr(sys, "frozen", False)
-            else Path(sys.base_prefix)
-        )
+    runtime = trusted_python_runtime(
+        agent, error_message="Select a standalone trusted Python runtime locally"
     )
-    reject_links(runtime)
-    if (
-        not (runtime / "python.exe").is_file()
-        or runtime == agent.home
-        or agent.state.is_relative_to(runtime)
-    ):
-        raise PolicyError("Select a standalone trusted Python runtime locally")
     guard_new_heavy_task(agent, 4096)
     folder = agent.state / "jobs" / jid
     source, output = folder / "input", folder / "output"

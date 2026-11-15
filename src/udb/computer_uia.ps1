@@ -129,6 +129,7 @@ try {
         $timer=[Diagnostics.Stopwatch]::StartNew()
         $response=''
         $complete=$false
+        $firstReplyMs=$null
         do {
             # Re-validate observed window and process before each UIA read.
             if(!$root.Current.IsEnabled -or $root.Current.ProcessId -ne [int]$r.pid) {
@@ -155,6 +156,9 @@ try {
                     $response=$value
                 }
             }
+            if($sent -and $assistant -and $response -and $null -eq $firstReplyMs){
+                $firstReplyMs=$timer.ElapsedMilliseconds
+            }
             if($sent -and $assistant -and $response -and $done) {
                 $complete=$true; break
             }
@@ -169,7 +173,9 @@ try {
             $response=$response.Substring(0,$n)
         }
         @{ok=$true;completed=$complete;reply=$(if($complete){$response}else{''});
-          elapsed_ms=$timer.ElapsedMilliseconds;truncated=$truncated;
+          elapsed_ms=$timer.ElapsedMilliseconds;
+          first_reply_ms=$(if($null -eq $firstReplyMs){-1}else{$firstReplyMs});
+          truncated=$truncated;
           timeout=(!$complete);replay_safe=$false} |
             ConvertTo-Json -Compress -Depth 3
         exit 0

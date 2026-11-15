@@ -172,7 +172,6 @@ def read(db, topic, after, limit):
     }
 
 
-
 def inbox(db, participant, after=0, limit=20, topic=None):
     """Read another participant's messages and assigned unfinished tasks.
 
@@ -234,6 +233,7 @@ def inbox(db, participant, after=0, limit=20, topic=None):
             "activated; the room does not wake ChatGPT sessions automatically."
         ),
     }
+
 
 def status(db):
     return {

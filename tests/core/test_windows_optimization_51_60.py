@@ -104,7 +104,7 @@ def test_53_list_only_materializes_requested_owned_rows(manager):
         jobs.rows[f"owned-{index}"] = dict(status="exited", exit_code=index)
     assert len(jobs.process("list")["jobs"]) == 30
     subset = jobs.process("list", limit=2)["jobs"]
-    assert [row["job_id"] for row in subset] == ["owned-0", "owned-1"]
+    assert [row["job_id"] for row in subset] == ["owned-28", "owned-29"]
     for bad in (0, 31, True, 1.5):
         with pytest.raises(PolicyError, match="1..30"):
             jobs.process("list", limit=bad)

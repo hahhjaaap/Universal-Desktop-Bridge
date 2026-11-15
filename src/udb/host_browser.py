@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from . import hyperspeed_perf as perf
 from .browser_cdp import CDPChannel
 from .browser_dom import (
     CLICK_POINT_SCRIPT,
@@ -309,7 +310,9 @@ class Browser(BrowserInputMixin):
                 raise PolicyError(
                     "Browser action budget exceeded; inspect before retrying"
                 )
-        return self._cdp.call(method, params, session, timeout)
+        return perf.timed_call(
+            "browser.cdp", "execution", self._cdp.call, method, params, session, timeout
+        )
 
     def attach(self, target):
         getattr(self, "_identity_contexts", {}).pop(target, None)

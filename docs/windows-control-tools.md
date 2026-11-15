@@ -74,6 +74,43 @@ overhead, not ChatGPT's reply-generation time. The timing report now separates
 first visible reply text from full response completion; only the latter sets
 `status=complete`.
 
+For faster *visibility* rather than completion, the optional
+`fast_reply=true` returns at the **first confirmed assistant text**. Its
+status is `partial_reply` and `reply_verified=false` until the explicit
+completion marker is observed. This does not claim that generation has
+finished or that a 5–6-second end-to-end full response is achievable.
+
+```json
+{
+  "action": "chatgpt_roundtrip",
+  "text": "Hello",
+  "wait_ms": 6000,
+  "fast_reply": true
+}
+```
+
+If the result is `partial_reply` or `reply_timeout`, never resend the
+original prompt automatically. Use the **read-only follow-up** instead on
+the same visible conversation:
+
+```json
+{
+  "action": "chatgpt_read_reply",
+  "text": "Hello",
+  "wait_ms": 6000,
+  "fast_reply": false
+}
+```
+
+`chatgpt_read_reply` uses the exact original prompt as an anchor and
+refuses ambiguous repeated messages. It does not type, click, change
+focus, or replay the request. Both actions return bounded `reply` text:
+if UIA observed text before a timeout it is preserved as incomplete
+(`reply_partial=true`), rather than being erased. A completed reply is
+reported only as `status=complete` with `reply_verified=true`.
+The observer currently extracts a single plain-text accessibility block;
+it is not suitable for verifying full multi-block documents or tool outputs.
+
 For lowest remote latency, omit `window_id`: UDB locates a **single
 currently foreground** window whose title is exactly `ChatGPT - Google
 Chrome`, verifies its process is genuine Chrome, and binds that local
@@ -88,14 +125,14 @@ The operation:
    document and exactly one `Hỏi ChatGPT` editor, with no prior assistant
    response in the observed view. If it cannot verify a blank conversation,
    it refuses before modifying the page.
-2. Uses the existing owner-authorized `verified_submit` path. The
+2. Uses the same strict owner-authorized verified submission checks. The
    editor must be empty; typed text must match the requested text exactly
    before the uniquely named `Gửi` button is invoked **once**.
 3. Polls the same window **locally** for the newly displayed response and
    completion status, for `wait_ms=500..10000`. This makes one remote tool
    request rather than a separate Cloudflare relay request for each poll.
 4. Returns a best-effort visible reply (currently a single UIA text block),
-   `reply_verified`, `status=complete|reply_timeout`, elapsed milliseconds
+   `reply_verified`, `reply_partial`, `status=complete|partial_reply|reply_timeout`, elapsed milliseconds
    for local submission/observer and `replay_safe=false`.
 
 This is a UI automation experiment, not a supported ChatGPT-to-ChatGPT

@@ -1,6 +1,7 @@
 // Device diagnostics are NOT user OAuth. Proof comes only from authenticated MCP.
 import { bearer, digest, fixedEqual, HASH, readJson } from "./auth.js";
 import { stableAccessSubject } from "./enrollment-owner.js";
+import { fleetEnabled } from "./fleet-policy.js";
 
 const json = (value, status = 200) => Response.json(value, { status,
   headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" } });
@@ -59,11 +60,7 @@ export async function handleDeviceSetup(request, ctx, env = null) {
       proof.tokenHash === expected && challenge.expires > Date.now() &&
       proof.at <= Date.now() && Date.now() - proof.at <= PROOF_MS;
     return json({ token_valid: true,
-      account_fleet: env?.UDB_ENABLE_ACCOUNT_FLEET === "true" &&
-        env?.UDB_ENABLE_BROWSER_ENROLLMENT === "true" &&
-        env?.UDB_ENABLE_LOCAL_TOOL_SYNC === "true" &&
-        env?.UDB_TENANT_POLICY === undefined &&
-        env?.UDB_AUTH_MODE === "cloudflare-access",
+      account_fleet: fleetEnabled(env),
       cloud_agent_online: ctx.getWebSockets("device").some(ws => ws.readyState === 1),
       authenticated_mcp_verified: !!fresh, verified_at: fresh ? proof.at : null,
       verification_method: fresh ? proof.method : null,

@@ -212,9 +212,7 @@ class ProcessCatalog:
                         critical=int(folder.name) < 5,
                         image=os.readlink(folder / "exe"),
                         cpu_seconds=(int(tail[11]) + int(tail[12])) / ticks,
-                        working_set_mib=round(
-                            int(tail[21]) * page_bytes / 1048576, 2
-                        ),
+                        working_set_mib=round(int(tail[21]) * page_bytes / 1048576, 2),
                         private_commit_mib=None,
                     )
                 )

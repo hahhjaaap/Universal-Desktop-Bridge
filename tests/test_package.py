@@ -36,14 +36,15 @@ def test_single_version_and_generated_registry(tmp_path):
     assert result.returncode == 0, result.stderr
     data = json.loads(result.stdout)
     names = {t["name"] for t in data["tools"]}
-    assert len(names) == data["tool_count"] == 40
-    assert data["backend_count"] == data["core_count"] + data["companion_count"] == 67
+    assert len(names) == data["tool_count"] == 41
+    assert data["backend_count"] == data["core_count"] + data["companion_count"] == 68
     assert {
         "virtual_pointer",
         "work_recovery",
         "browser",
         "terminal",
         "computer_desktop",
+        "open_chatgpt",
         "spreadsheet",
     } <= names
 

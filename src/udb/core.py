@@ -195,6 +195,10 @@ class Agent(AutonomyMixin):
             CREATE TABLE IF NOT EXISTS requests(id TEXT PRIMARY KEY, kind TEXT, payload TEXT,
               hash TEXT, created REAL, status TEXT, result TEXT);
             CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, status TEXT, info TEXT);
+            -- Initialize the per-session desktop action lock once, not during
+            -- every mouse/UIA action. Existing installations keep their rows.
+            CREATE TABLE IF NOT EXISTS desktop_control(
+              session TEXT PRIMARY KEY, request_id TEXT, expires REAL);
             CREATE TABLE IF NOT EXISTS sandbox_grants(project TEXT PRIMARY KEY, root TEXT, token TEXT, created REAL);
             CREATE TABLE IF NOT EXISTS source_grants(project TEXT PRIMARY KEY, root TEXT, token TEXT, created REAL);
             CREATE TABLE IF NOT EXISTS media_grants(scope TEXT PRIMARY KEY, token TEXT, created REAL);
@@ -548,27 +552,42 @@ class Agent(AutonomyMixin):
                 if Path(name).suffix.lower() not in SOURCE_EXT:
                     continue
                 rel = (Path(parent) / name).relative_to(root).as_posix()
+                # Do not read a 2001st eligible source once the manifest
+                # capacity has been reached. All accepted files still pass
+                # through fresh owner/project path validation.
+                if len(manifest) >= 2000:
+                    raise PolicyError("Source snapshot limit: 16 MiB / 2000 files")
                 try:
                     data = self.read_bytes(project, rel)
                 except (PolicyError, UnicodeError):
                     continue
                 total += len(data)
-                if total > 16 * 1024 * 1024 or len(manifest) >= 2000:
+                if total > 16 * 1024 * 1024:
                     raise PolicyError("Source snapshot limit: 16 MiB / 2000 files")
                 manifest[rel] = digest(data)
         return manifest
 
     def propose_job(self, project, language, script, timeout=120):
+        # Cheap validation precedes guest availability and source traversal.
+        # Reject non-text and very large Unicode values without allocating
+        # their encoded copy; the byte cap remains the final authority.
+        if language not in ("python", "powershell") or (
+            type(timeout) is not int or not 1 <= timeout <= 600
+        ):
+            raise PolicyError("Invalid language or timeout (1–600 seconds)")
+        if (
+            not isinstance(script, str)
+            or len(script) > 64000
+            or "\0" in script
+            or len(script.encode("utf-8")) > 64000
+        ):
+            raise PolicyError("Script too large or invalid")
         from .sandbox import available
 
         if not available():
             raise PolicyError(
                 "Windows Sandbox unavailable. Host execution is disabled; see Enable-Sandbox.ps1"
             )
-        if language not in ("python", "powershell") or not 1 <= timeout <= 600:
-            raise PolicyError("Invalid language or timeout (1–600 seconds)")
-        if len(script.encode()) > 64000 or "\0" in script:
-            raise PolicyError("Script too large or invalid")
         # Running tests also executes arbitrary code, so uses identical isolation.
         return self.propose(
             "job",
@@ -617,7 +636,9 @@ class Agent(AutonomyMixin):
         if not row:
             raise PolicyError("Unknown request ID")
         r = dict(row)
-        r["result"] = json.loads(r["result"])
+        # A newly proposed request stores a literal empty JSON object.
+        # This is the common polling path and needs no decoder allocation.
+        r["result"] = {} if r["result"] == "{}" else json.loads(r["result"])
         return r
 
     def decide_local(self, rid, approve: bool):
@@ -746,16 +767,20 @@ class Agent(AutonomyMixin):
         log = folder / "output.log"
         reject_links(log)
         offset, limit = max(0, int(offset)), max(1, min(int(limit), 32000))
-        if log.exists():
+        # Avoid a redundant exists() probe before opening a potentially
+        # growing guest log. Missing logs remain a valid pending-job state.
+        try:
             with log.open("rb") as f:
                 if tail:
                     offset = max(0, os.fstat(f.fileno()).st_size - limit)
                 f.seek(offset)
                 data = f.read(limit)
-            r.update(
-                output=data.decode("utf-8", errors="replace"),
-                next_offset=offset + len(data),
-            )
+        except FileNotFoundError:
+            return r
+        r.update(
+            output=data.decode("utf-8", errors="replace"),
+            next_offset=offset + len(data),
+        )
         return r
 
     def diagnostics(self, *, brief=False):

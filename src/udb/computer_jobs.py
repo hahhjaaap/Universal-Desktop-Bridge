@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import os
 import shutil
 import stat
@@ -160,12 +161,13 @@ class Jobs:
             raise PolicyError(
                 "Program and at most 128 bounded string arguments are required"
             )
-        if not isinstance(timeout_seconds, int) or not 1 <= timeout_seconds <= 3600:
+        if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 3600:
             raise PolicyError("Command timeout must be 1..3600 seconds")
+        # Construct the requested executable path once. Relative names still
+        # resolve only through PATH; absolute paths retain owner-protected checks.
+        requested = Path(program)
         target = (
-            Path(program)
-            if Path(program).is_absolute()
-            else Path(shutil.which(program) or "")
+            requested if requested.is_absolute() else Path(shutil.which(program) or "")
         )
         executable_path(target)
         self.agent.check_protected(target)
@@ -226,6 +228,8 @@ class Jobs:
             row["process"].close()
             if row.get("capacity") is not None:
                 row["capacity"].close()
+                # Successful cleanup is never repeated during a retry.
+                row["capacity"] = None
         except Exception:
             row["status"] = "cleanup_failed"
 
@@ -265,13 +269,17 @@ class Jobs:
                 ),
             }
 
-    def process(self, action, job_id="", offset=0):
+    def process(self, action, job_id="", offset=0, limit=30):
         with self.lock:
             if action == "list":
+                if type(limit) is not int or not 1 <= limit <= 30:
+                    raise PolicyError("Computer job list limit must be 1..30")
+                # Copy only the requested bounded number of owned metadata rows.
+                # Dict iteration preserves the legacy insertion order.
                 return dict(
                     jobs=[
                         dict(job_id=k, status=r["status"], exit_code=r["exit_code"])
-                        for k, r in self.rows.items()
+                        for k, r in itertools.islice(self.rows.items(), limit)
                     ]
                 )
             if job_id not in self.rows:
@@ -285,15 +293,20 @@ class Jobs:
                 return dict(job_id=job_id, status=row["status"])
             if (
                 action != "read"
-                or not isinstance(offset, int)
+                or type(offset) is not int
                 or not 0 <= offset <= MAX_OUTPUT
             ):
                 raise PolicyError(
                     "Process actions: list, read, stop; output offset 0..4 MiB"
                 )
-            with row["output"].open("rb") as stream:
-                stream.seek(offset)
-                data = stream.read(min(65536, MAX_OUTPUT - offset))
+            # A cursor at the output quota has no possible readable bytes.
+            # Avoid opening the log at all for this common completed cursor.
+            if offset == MAX_OUTPUT:
+                data = b""
+            else:
+                with row["output"].open("rb") as stream:
+                    stream.seek(offset)
+                    data = stream.read(min(65536, MAX_OUTPUT - offset))
             return dict(
                 job_id=job_id,
                 status=row["status"],

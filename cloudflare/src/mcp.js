@@ -232,7 +232,8 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
       // Do not log caller identity, bearer material, JWTs, device IDs, or
       // request bodies. Only static reason classes are permitted in logs.
       const safe = new Set(["access_audience_mismatch",
-        "verified_identity_missing", "device_grant_missing"]);
+        "verified_identity_missing", "device_grant_missing",
+        "access_keys_unavailable"]);
       const category = failure instanceof AuthError && safe.has(failure.message)
         ? failure.message : "identity_unverified";
       console.warn(JSON.stringify({ event: "udb_mcp_scan_denied", category }));
@@ -241,6 +242,8 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
       if (category === "device_grant_missing" ||
           category === "access_audience_mismatch")
         return error(403, "cloudflare_access_identity_or_grant_required");
+      if (category === "access_keys_unavailable")
+        return error(503, "cloudflare_access_keys_temporarily_unavailable");
       return accessChallenge(request, id);
     }
   } else {

@@ -425,7 +425,9 @@ class Agent(AutonomyMixin):
         # Casefold collisions are ordered by the original path, not scandir
         # enumeration order. Cursor paging does not repeat earlier entries if
         # the directory changes between calls (but is not a frozen snapshot).
-        key = lambda row: (row["path"].casefold(), row["path"])
+        def key(row):
+            return row["path"].casefold(), row["path"]
+
         visible.sort(key=key)
         if after:
             cursor = (after.casefold(), after)

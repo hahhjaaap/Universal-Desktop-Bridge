@@ -27,7 +27,10 @@ def encode_bgrx_png(buffer, width: int, height: int) -> bytes:
     scanline = width * 3 + 1
     rows = bytearray(scanline * height)
     for y in range(height):
-        pixel = src[y * stride : (y + 1) * stride]
+        # Copy only one scanline to a compact bytes object: strided bytes
+        # slices run in C and are faster than strided memoryview assignment.
+        # The temporary is at most 7,680 bytes, not another full image.
+        pixel = bytes(src[y * stride : (y + 1) * stride])
         pos = y * scanline + 1
         end = pos + width * 3
         rows[pos:end:3] = pixel[2::4]  # R

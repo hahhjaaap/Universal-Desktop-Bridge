@@ -71,7 +71,9 @@ Implementation detail: the optimized path uses a targeted UI Automation
 SendInput. It avoids the generic full UI snapshot and repeated UIA
 read/focus/invoke processes. It still checks the same current-user access,
 desktop readiness and foreground window. These optimizations affect UDB
-overhead, not ChatGPT's reply-generation time.
+overhead, not ChatGPT's reply-generation time. The timing report now separates
+first visible reply text from full response completion; only the latter sets
+`status=complete`.
 
 The operation:
 1. Verifies that UI Automation exposes an untruncated `ChatGPT`

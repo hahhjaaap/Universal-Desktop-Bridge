@@ -155,3 +155,46 @@ def test_roundtrip_refused_in_batch():
             "observed",
             [{"action": "chatgpt_roundtrip", "text": "Hello"}],
         )
+
+
+def test_roundtrip_auto_discovers_foreground_chrome_without_window_id():
+    desktop = Desktop.__new__(Desktop)
+    desktop.listing = lambda: {
+        "windows": [
+            {
+                "title": "ChatGPT - Google Chrome",
+                "pid": 2840,
+                "window_id": "current-window",
+                "foreground": True,
+                "minimized": False,
+            }
+        ]
+    }
+    desktop._chrome_image_path = lambda pid: "C:\\Chrome\\chrome.exe"
+    desktop.resolve = lambda window_id, focus=True: (
+        42 if window_id == "current-window" else None
+    )
+    desktop.chatgpt_roundtrip = lambda *args: args
+    assert desktop._dispatch(
+        "chatgpt_roundtrip", text="Hello", wait_ms=6000
+    ) == (42, "current-window", "Hello", 6000)
+
+
+@pytest.mark.parametrize("wrong_binary", [True, False])
+def test_roundtrip_auto_discovery_refuses_unverified_target(wrong_binary):
+    desktop = Desktop.__new__(Desktop)
+    desktop.listing = lambda: {
+        "windows": [
+            {
+                "title": "ChatGPT - Google Chrome",
+                "pid": 2840,
+                "window_id": "current-window",
+                "foreground": wrong_binary,
+                "minimized": False,
+            }
+        ]
+    }
+    desktop._chrome_image_path = lambda pid: None if wrong_binary else "chrome.exe"
+    desktop.resolve = lambda *args, **kwargs: pytest.fail("Must not resolve")
+    with pytest.raises(PolicyError, match="No unique foreground"):
+        desktop._dispatch("chatgpt_roundtrip", text="Hello", wait_ms=6000)

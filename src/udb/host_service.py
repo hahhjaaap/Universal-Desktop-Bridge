@@ -30,14 +30,16 @@ def pending_inbox_commands(folder):
     On the idle path this avoids Path.glob's iterator/selector overhead. The
     worker still validates each path and claims commands atomically.
     """
+    # Do not sort unrelated files. Preserve a single directory read, current
+    # Windows case-insensitive / POSIX case-sensitive suffix semantics, and
+    # downstream link validation plus atomic command claiming.
     names = os.listdir(folder)
     if os.name == "nt":
-        return [
-            folder / n
-            for n in sorted(names, key=os.path.normcase)
-            if n.lower().endswith(".json")
-        ]
-    return [folder / n for n in sorted(names) if n.endswith(".json")]
+        candidates = (n for n in names if n.lower().endswith(".json"))
+        ordered = sorted(candidates, key=lambda n: (os.path.normcase(n), n))
+    else:
+        ordered = sorted(n for n in names if n.endswith(".json"))
+    return [folder / n for n in ordered]
 
 
 class HostService:
@@ -453,12 +455,32 @@ class HostService:
 
     def _prune_replies(self):
         cutoff = time.time() - 120
-        for p in (self.folder / "replies").glob("*.json"):
-            try:
-                if p.stat().st_mtime < cutoff:
-                    p.unlink(missing_ok=True)
-            except OSError:
-                continue  # A client may consume a reply during the scan.
+        folder = self.folder / "replies"
+        # Enumerate once and use DirEntry metadata. Never follow a redirected
+        # reply or remove a non-regular entry during routine cleanup.
+        try:
+            # Also reject a swapped/reparse mailbox directory, not just
+            # redirected children. Never prune through a linked parent.
+            reject_links(folder)
+            with os.scandir(folder) as entries:
+                for entry in entries:
+                    name = entry.name
+                    if not (
+                        name.lower().endswith(".json")
+                        if os.name == "nt"
+                        else name.endswith(".json")
+                    ):
+                        continue
+                    try:
+                        if (
+                            entry.is_file(follow_symlinks=False)
+                            and entry.stat(follow_symlinks=False).st_mtime < cutoff
+                        ):
+                            (folder / name).unlink(missing_ok=True)
+                    except OSError:
+                        continue  # Reply may be consumed during this scan.
+        except (OSError, PolicyError):
+            pass  # A missing or redirected mailbox must not stop the worker.
 
     def _process_command(self, path):
         reject_links(path)

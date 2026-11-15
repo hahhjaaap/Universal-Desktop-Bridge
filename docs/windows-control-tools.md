@@ -65,6 +65,14 @@ new chat, or wake an inactive second ChatGPT instance.
 }
 ```
 
+Implementation detail: the optimized path uses a targeted UI Automation
+**prepare** (verify exact page, blank editor and focus) and **commit**
+(verify exact typed text and invoke one Send button) around UDB's guarded
+SendInput. It avoids the generic full UI snapshot and repeated UIA
+read/focus/invoke processes. It still checks the same current-user access,
+desktop readiness and foreground window. These optimizations affect UDB
+overhead, not ChatGPT's reply-generation time.
+
 The operation:
 1. Verifies that UI Automation exposes an untruncated `ChatGPT`
    document and exactly one `Hỏi ChatGPT` editor, with no prior assistant

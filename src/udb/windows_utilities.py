@@ -54,7 +54,7 @@ class WindowsBackend:
                 "-File",
                 str(Path(__file__).with_name("windows_utilities.ps1")),
             ],
-            input=json.dumps(request, ensure_ascii=True),
+            input=json.dumps(request, ensure_ascii=True, separators=(",", ":")),
             text=True,
             encoding="utf-8",
             capture_output=True,
@@ -105,6 +105,10 @@ class Utilities:
         ):
             if not isinstance(value, str) or len(value) > limit or "\0" in value:
                 raise PolicyError("Invalid Windows utility text")
+        # Reject an unusable clipboard CAS token before allocating an input
+        # observer or probing the desktop. A valid write still rechecks pause.
+        if action == "clipboard_set" and not expected_version.isdecimal():
+            raise PolicyError("Read clipboard first and supply its expected_version")
         if action in {"clipboard_set", "launch_app"}:
             if self.control is None:
                 self.control = InputControl(self.agent)
@@ -112,10 +116,6 @@ class Utilities:
         if action == "clipboard_get":
             return self.backend.clipboard()
         if action == "clipboard_set":
-            if not expected_version.isdecimal():
-                raise PolicyError(
-                    "Read clipboard first and supply its expected_version"
-                )
             return self.backend.clipboard(text, expected_version)
         if action == "notify":
             if not title.strip() or not text.strip() or len(text) > 1000:
@@ -126,13 +126,19 @@ class Utilities:
         apps = self.backend.apps()
         if action == "apps":
             return dict(apps=apps, limit=300)
-        matches = [
-            app
-            for app in apps
-            if name.casefold() in (app["name"].casefold(), app["app_id"].casefold())
-        ]
-        if len(matches) != 1:
+        # Compare only until a second match makes selection ambiguous, and
+        # fold the requested name once. Never choose a fuzzy/partial match.
+        folded = name.casefold()
+        selected = None
+        for app in apps:
+            if folded == app["name"].casefold() or folded == app["app_id"].casefold():
+                if selected is not None:
+                    raise PolicyError(
+                        "Choose one exact name or app_id from apps; name is unknown or ambiguous"
+                    )
+                selected = app
+        if selected is None:
             raise PolicyError(
                 "Choose one exact name or app_id from apps; name is unknown or ambiguous"
             )
-        return self.backend.launch(matches[0]["app_id"])
+        return self.backend.launch(selected["app_id"])

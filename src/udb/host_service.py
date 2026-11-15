@@ -400,7 +400,7 @@ class HostService:
                 raise PolicyError(
                     "The owner has browser control; return it to background in the local UDB manager"
                 )
-            if action == "batch":
+            if action in {"batch", "fastpath"}:
                 if not hasattr(self, "batches"):
                     self.batches = BatchRunner()
                 return self.batches.run(self, obj, args)

@@ -86,9 +86,7 @@ def test_93_process_termination_invalid_token_never_reaches_os(tmp_path):
     assert "a" * 32 in processes.observations
 
 
-@pytest.mark.parametrize(
-    "arguments", [{"bad": object()}, {"nonfinite": float("nan")}]
-)
+@pytest.mark.parametrize("arguments", [{"bad": object()}, {"nonfinite": float("nan")}])
 def test_94_invalid_fleet_json_never_loads_secret_or_dials(
     tmp_path, monkeypatch, arguments
 ):
@@ -117,7 +115,9 @@ def test_95_sorted_fleet_listing_is_stable_and_detached(tmp_path):
     )
     original = router.list_computers()
     assert [row["id"] for row in original["computers"]] == [
-        "pc-home", "pc-alpha", "pc-zeta"
+        "pc-home",
+        "pc-alpha",
+        "pc-zeta",
     ]
     original["computers"][1]["id"] = "changed"
     assert router.list_computers()["computers"][1]["id"] == "pc-alpha"
@@ -134,11 +134,13 @@ class _Backend:
         if method == "tools/list":
             return {
                 "result": {
-                    "tools": [{
-                        "name": "fixture_" + self.name,
-                        "description": self.name,
-                        "inputSchema": {"type": "object", "properties": {}},
-                    }]
+                    "tools": [
+                        {
+                            "name": "fixture_" + self.name,
+                            "description": self.name,
+                            "inputSchema": {"type": "object", "properties": {}},
+                        }
+                    ]
                 }
             }
         if method == "initialize":
@@ -168,25 +170,22 @@ def test_97_family_dispatch_is_stable_without_unknown_action_escalation():
     group = FAMILIES[0]
     action, target = next(iter(group["actions"].items()))
     arguments = {"action": action, "params": {"fixture": "value"}}
-    assert resolve_family(group["name"], arguments) == (
-        target, {"fixture": "value"}
-    )
+    assert resolve_family(group["name"], arguments) == (target, {"fixture": "value"})
     assert arguments == {"action": action, "params": {"fixture": "value"}}
     assert resolve_family("unrelated_native", arguments) == (
-        "unrelated_native", arguments
+        "unrelated_native",
+        arguments,
     )
     with pytest.raises(ValueError, match="Unknown"):
-        resolve_family(
-            group["name"], {"action": "never-a-tool", "params": {}}
-        )
+        resolve_family(group["name"], {"action": "never-a-tool", "params": {}})
 
 
-def test_98_setup_origin_is_selected_once_for_locked_canary(
-    tmp_path, monkeypatch
-):
+def test_98_setup_origin_is_selected_once_for_locked_canary(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(setup, "attended_console", lambda: True)
-    monkeypatch.setattr(setup.owner_command, "launch_gate", lambda *_a, **_k: nullcontext())
+    monkeypatch.setattr(
+        setup.owner_command, "launch_gate", lambda *_a, **_k: nullcontext()
+    )
     monkeypatch.setattr(setup, "installation_status", lambda: {})
     monkeypatch.setattr(setup, "read_journal", lambda *_a: {"schema": 1})
     monkeypatch.setattr(setup, "paired_cloud", lambda *_a: None)
@@ -240,12 +239,8 @@ def test_100_no_update_skips_installer_path_and_powershell(
         "version": "7.8.9",
         "home": str(tmp_path),
     }
-    monkeypatch.setattr(
-        maintenance, "installation", lambda: (tmp_path, installed)
-    )
-    monkeypatch.setattr(
-        maintenance, "require_external_updater", lambda *_a: None
-    )
+    monkeypatch.setattr(maintenance, "installation", lambda: (tmp_path, installed))
+    monkeypatch.setattr(maintenance, "require_external_updater", lambda *_a: None)
     monkeypatch.setattr(maintenance, "latest_release", lambda: "7.8.9")
     monkeypatch.setattr(
         maintenance,
@@ -257,9 +252,5 @@ def test_100_no_update_skips_installer_path_and_powershell(
         "system_executable",
         lambda *_a: pytest.fail("No PowerShell lookup for current version"),
     )
-    assert maintenance.run(
-        "update", SimpleNamespace(home=tmp_path), as_json=True
-    ) == 0
-    assert json.loads(capsys.readouterr().out) == {
-        "updated": False, "version": "7.8.9"
-    }
+    assert maintenance.run("update", SimpleNamespace(home=tmp_path), as_json=True) == 0
+    assert json.loads(capsys.readouterr().out) == {"updated": False, "version": "7.8.9"}

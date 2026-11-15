@@ -9,8 +9,12 @@ from udb.core import PolicyError
 
 
 def fake_desktop(
-    previous=False, incomplete=False, ambiguous=False, mismatch=False,
-    paused=False, foreground=42,
+    previous=False,
+    incomplete=False,
+    ambiguous=False,
+    mismatch=False,
+    paused=False,
+    foreground=42,
 ):
     desktop = Desktop.__new__(Desktop)
     calls = []
@@ -118,18 +122,14 @@ def test_mismatch_prevents_submit_and_reply_poll():
     desktop, calls = fake_desktop(mismatch=True)
     with pytest.raises(PolicyError, match="Text mismatch"):
         desktop.chatgpt_roundtrip(42, "w", "Hello", 6000)
-    assert "poll_chatgpt_reply" not in [
-        op[1] for op in calls if op[0] == "uia"
-    ]
+    assert "poll_chatgpt_reply" not in [op[1] for op in calls if op[0] == "uia"]
 
 
 def test_paused_after_typing_prevents_submission():
     desktop, calls = fake_desktop(paused=True)
     with pytest.raises(PolicyError, match="desktop paused"):
         desktop.chatgpt_roundtrip(42, "w", "Hello", 6000)
-    assert "chatgpt_commit" not in [
-        op[1] for op in calls if op[0] == "uia"
-    ]
+    assert "chatgpt_commit" not in [op[1] for op in calls if op[0] == "uia"]
 
 
 def test_foreground_changed_after_typing_prevents_submission():

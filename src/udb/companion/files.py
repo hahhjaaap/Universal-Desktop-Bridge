@@ -30,6 +30,19 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _bounded_sha256(path: Path) -> str:
+    """Stream the commit-time verification hash without another 8-MiB allocation."""
+    hasher = hashlib.sha256()
+    consumed = 0
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(256 * 1024), b""):
+            consumed += len(block)
+            if consumed > MAX_FILE_BYTES:
+                raise ValueError("Existing file exceeds 8 MiB guarded-write limit")
+            hasher.update(block)
+    return hasher.hexdigest()
+
+
 def is_reparse(path: Path) -> bool:
     try:
         info = path.lstat()
@@ -176,7 +189,10 @@ class ScopedFiles:
         if is_existing:
             if p.stat().st_size > MAX_FILE_BYTES:
                 raise ValueError("Existing file exceeds 8 MiB guarded-write limit")
-            previous = p.read_bytes()
+            with p.open("rb") as source:
+                previous = source.read(MAX_FILE_BYTES + 1)
+            if len(previous) > MAX_FILE_BYTES:
+                raise ValueError("Existing file exceeds 8 MiB guarded-write limit")
             if digest(previous).lower() != expected_sha256.lower():
                 raise ValueError("File changed since reading; write cancelled")
         elif expected_sha256 != "NEW":
@@ -194,7 +210,7 @@ class ScopedFiles:
             else:
                 # Best effort CAS; noncooperating external writers may still
                 # race a replacement. Never suppress failed comparisons.
-                if digest(p.read_bytes()).lower() != expected_sha256.lower():
+                if _bounded_sha256(p).lower() != expected_sha256.lower():
                     raise ValueError("File changed before commit; write cancelled")
                 if not p.name.startswith(".udb-companion-test-"):
                     recovery = self.root / ".udb-recovery"
@@ -228,20 +244,25 @@ class ScopedFiles:
         self, path: str, old: str, new: str, expected_sha256: str, occurrences: int = 1
     ) -> dict[str, Any]:
         p = self.path(path)
-        data = p.read_bytes()
+        if not isinstance(old, str) or not old or not isinstance(new, str):
+            raise ValueError("Nonempty old text and string new text required")
+        if type(occurrences) is not int or not 1 <= occurrences <= 100:
+            raise ValueError("Occurrences must be 1..100")
+        with p.open("rb") as stream:
+            data = stream.read(MAX_FILE_BYTES + 1)
         if len(data) > MAX_FILE_BYTES:
             raise ValueError("File too large")
         if digest(data) != expected_sha256:
             raise ValueError("File changed since reading; edit cancelled")
         source = data.decode("utf-8")
-        actual = source.count(old) if old else 0
-        if actual != int(occurrences) or actual == 0:
+        actual = source.count(old)
+        if actual != occurrences:
             raise ValueError(
                 f"Expected {occurrences} matches, found {actual}; edit cancelled"
             )
-        return self.write(path, source.replace(old, new), expected_sha256) | {
-            "replacements": actual
-        }
+        return self.write(
+            path, source.replace(old, new, occurrences), expected_sha256
+        ) | {"replacements": actual}
 
     def search(
         self, path: str = ".", pattern: str = "*", text: str = "", limit: int = 30

@@ -318,3 +318,49 @@ test("issuer-sub mode rejects conflicting runtime identity and signed assertion"
     unavailable, f.env, DEVICE, request, f.fetchImpl);
   assert.equal(result.subject, qualified);
 });
+
+test("Cloudflare Access key rotation refreshes a stale JWKS once without trusting an unknown kid", async () => {
+  // Use an isolated team URL so this test cannot reuse the fixture's JWKS cache.
+  const team = "https://udb-rotation-check.cloudflareaccess.com";
+  const env = { UDB_ACCESS_TEAM_DOMAIN: team, UDB_ACCESS_AUD: AUD };
+  const first = await pairPromise;
+  const next = await crypto.subtle.generateKey({ name: "RSASSA-PKCS1-v1_5",
+    modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]),
+    hash: "SHA-256" }, true, ["sign", "verify"]);
+  let published = first;
+  let kid = "before-rotation";
+  let fetches = 0;
+  const fetchImpl = async (url, options) => {
+    assert.equal(url, team + "/cdn-cgi/access/certs");
+    assert.equal(options.redirect, "error");
+    fetches++;
+    const jwk = await crypto.subtle.exportKey("jwk", published.publicKey);
+    return Response.json({ keys: [{ ...jwk, kid }] });
+  };
+  const signed = async (pair, signingKid) => {
+    const header = b64(JSON.stringify({ alg: "RS256", kid: signingKid }));
+    const payload = b64(JSON.stringify({ iss: team, aud: [AUD],
+      exp: Math.floor(Date.now() / 1000) + 300, email: EMAIL, sub: SUBJECT_ID }));
+    const message = header + "." + payload;
+    const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5",
+      pair.privateKey, new TextEncoder().encode(message));
+    return message + "." + b64(signature);
+  };
+  const request = jwt => new Request(RESOURCE,
+    { headers: { "Cf-Access-Jwt-Assertion": jwt } });
+
+  assert.equal(await verifyAccessAssertion(
+    request(await signed(first, kid)), env, fetchImpl), EMAIL);
+  assert.equal(fetches, 1);
+  published = next;
+  kid = "after-rotation";
+  assert.equal(await verifyAccessAssertion(
+    request(await signed(next, kid)), env, fetchImpl), EMAIL);
+  assert.equal(fetches, 2, "a new kid must bypass stale JWKS once");
+
+  // The refreshed key's signature is mandatory. A forged old-key token
+  // cannot authenticate even if it lies about the newly announced kid.
+  await assert.rejects(verifyAccessAssertion(
+    request(await signed(first, kid)), env, fetchImpl), AuthError);
+  assert.equal(fetches, 2);
+});

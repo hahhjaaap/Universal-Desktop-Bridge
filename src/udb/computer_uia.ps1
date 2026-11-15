@@ -1,5 +1,6 @@
 ﻿# Fixed current-user UI Automation helper. Caller checks a local owner grant.
 # No arbitrary scripts/selectors, password reads, clipboard, elevation or input hooks.
+param([switch]$Persistent)
 $ErrorActionPreference='Stop'
 [Console]::InputEncoding=[Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
@@ -28,10 +29,13 @@ function Test-ChatGPTReplyCandidate([string]$value) {
     )){return $false}
     return $true
 }
+function Invoke-UdbUia([string]$raw) {
 try {
-    Add-Type -AssemblyName UIAutomationClient
-    Add-Type -AssemblyName UIAutomationTypes
-    $raw=[Console]::In.ReadToEnd()
+    if (-not $script:UdbAutomationTypesLoaded) {
+        Add-Type -AssemblyName UIAutomationClient
+        Add-Type -AssemblyName UIAutomationTypes
+        $script:UdbAutomationTypesLoaded = $true
+    }
     if($raw.Length -gt 100000){throw 'Request too large'}
     $r=$raw|ConvertFrom-Json
     if($r.mode -notin @('snapshot','set_value','invoke','uia_focus','wait_for','read_text','set_checked','select','expand','collapse','scroll_into_view','poll_chatgpt_reply','chatgpt_prepare','chatgpt_commit')){throw 'Unsupported UIA mode'}
@@ -40,8 +44,11 @@ try {
     # Initialize AutomationElement before registering the standard .NET proxies.
     # Without these, Win32/WinForms controls can appear as generic Panes and
     # fail to expose ValuePattern/InvokePattern in this short-lived client.
-    $providers=[Reflection.Assembly]::Load('UIAutomationClientsideProviders, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35')
-    [Windows.Automation.ClientSettings]::RegisterClientSideProviderAssembly($providers.GetName())
+    if (-not $script:UdbProvidersRegistered) {
+        $providers=[Reflection.Assembly]::Load('UIAutomationClientsideProviders, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35')
+        [Windows.Automation.ClientSettings]::RegisterClientSideProviderAssembly($providers.GetName())
+        $script:UdbProvidersRegistered=$true
+    }
     # Reacquire after provider registration; do not retain a generic wrapper
     # created before the standard Win32 proxies were available.
     $root=[Windows.Automation.AutomationElement]::FromHandle([IntPtr][long]$r.hwnd)
@@ -102,7 +109,7 @@ try {
             }
             $editor.SetFocus()
             @{ok=$true;prepared=$true;replay_safe=$false}|ConvertTo-Json -Compress
-            exit 0
+            return
         }
         if($value -cne [string]$r.text){
             throw 'ChatGPT text does not match exact request; no submit'
@@ -125,7 +132,7 @@ try {
         $invoke.Invoke()
         @{ok=$true;invoked=$true;verified_text=$true;replay_safe=$false} |
             ConvertTo-Json -Compress
-        exit 0
+        return
     }
     if($r.mode -eq 'poll_chatgpt_reply') {
         # Dedicated read-only post-submit observer. No browser CDP, cross-tab
@@ -206,7 +213,7 @@ try {
           truncated=$truncated;
           timeout=(!$complete);replay_safe=$false} |
             ConvertTo-Json -Compress -Depth 3
-        exit 0
+        return
     }
     if($r.mode -eq 'snapshot') {
       $view='control'
@@ -249,7 +256,7 @@ try {
         $hasChildren=$rows.Count -gt 1
         $next=if($hasChildren){''}else{'No accessible child controls exposed. List windows again and select the application frame; do not assume a generic Pane is actionable.'}
         @{ok=$true;elements=$rows.ToArray();truncated=($queue.Count -gt 0);tree_view=$view;children_exposed=$hasChildren;next_action=$next}|ConvertTo-Json -Depth 7 -Compress
-        exit 0
+        return
     }
     $conditions=[Collections.Generic.List[Windows.Automation.Condition]]::new()
     if($r.automation_id){$conditions.Add([Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::AutomationIdProperty,[string]$r.automation_id))}
@@ -291,7 +298,7 @@ try {
                 Start-Sleep -Milliseconds 100
             } while($true)
             @{ok=$true;matched=$matched;timed_out=(!$matched);elapsed_ms=$timer.ElapsedMilliseconds;element=$observed}|ConvertTo-Json -Depth 4 -Compress
-            exit 0
+            return
         }
         $matches=$root.FindAll([Windows.Automation.TreeScope]::Descendants,$condition)
         if($matches.Count -ne 1){throw 'Selector must match exactly one control'}
@@ -313,7 +320,7 @@ try {
             $value=$value.Substring(0,$count)
         }
         @{ok=$true;text=$value;truncated=$truncated;method=$method}|ConvertTo-Json -Depth 3 -Compress
-        exit 0
+        return
     }
     if(!$target.Current.IsEnabled){throw 'Disabled control'}
     if($r.mode -eq 'set_checked') {
@@ -365,6 +372,7 @@ try {
             # Multiline native Edit controls can expose TextPattern without ValuePattern.
             # A fixed, timeout-bounded app-local message is allowed only to that
             # same-PID/root Edit handle. No arbitrary message/HWND is accepted.
+            if (-not ('UDBEdit' -as [type])) {
             Add-Type -TypeDefinition @'
 using System;
 using System.Text;
@@ -398,5 +406,33 @@ public static class UDBEdit {
     }
 } catch {
     @{ok=$false;error='UI Automation failed: control changed, selector ambiguous, pattern unsupported, or access refused.'}|ConvertTo-Json -Compress
-    exit 1
+    return
+}
+}
+
+# Standard input is a private inherited pipe, not a remotely accessible
+# command surface. Strictly one JSON request/reply per line in worker mode.
+# No UIA elements, passwords, request payloads or owner permissions are cached.
+if($Persistent) {
+    while($true) {
+        $line=[Console]::In.ReadLine()
+        if($null -eq $line){break}
+        $response=Invoke-UdbUia $line
+        if($response -isnot [string] -or $response.Length -gt 262144) {
+            $response='{"ok":false,"error":"UIA worker produced an invalid response"}'
+        }
+        [Console]::Out.WriteLine($response)
+        [Console]::Out.Flush()
+    }
+} else {
+    $response=Invoke-UdbUia ([Console]::In.ReadToEnd())
+    if($response -isnot [string] -or $response.Length -gt 262144) {
+        [Console]::Out.WriteLine('{"ok":false,"error":"UIA produced an invalid response"}')
+        exit 1
+    }
+    [Console]::Out.WriteLine($response)
+    try {
+        $reply=$response|ConvertFrom-Json
+        if($reply.ok -ne $true){exit 1}
+    } catch {exit 1}
 }

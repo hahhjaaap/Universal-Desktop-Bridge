@@ -68,3 +68,40 @@ def test_search_invalid_utf8_file_does_not_block_safe_matches(tmp_path):
     assert [row["path"] for row in result["items"]] == ["b_good.py"]
     assert result["truncated"] is False
     assert result["bytes_searched"] == len(b"needle\xff") + len(b"needle\n")
+
+
+def test_batch_read_rechecks_postread_utf8_byte_budget(tmp_path, monkeypatch):
+    import pytest
+
+    from udb.core import MAX_TEXT, PolicyError
+    from udb.fileops import read_files
+
+    root = tmp_path / "source"
+    root.mkdir()
+    (root / "small.py").write_text("ok\n", encoding="utf-8")
+    agent = Agent(tmp_path / "bridge")
+    agent.register_local("demo", str(root), True)
+
+    # Preflight passes, but a concurrently changed read must still be bounded.
+    monkeypatch.setattr(
+        agent,
+        "read",
+        lambda project, path: {"path": path, "text": "💡" * (MAX_TEXT // 4 + 1)},
+    )
+    with pytest.raises(PolicyError, match="Combined"):
+        read_files(agent, "demo", ["small.py"])
+
+
+def test_listing_keyset_cursor_resists_insertions_before_cursor(tmp_path):
+    root = tmp_path / "source"
+    root.mkdir()
+    for name in ("Alpha.py", "beta.py", "delta.py"):
+        (root / name).write_text("x=1\n", encoding="utf-8")
+    agent = Agent(tmp_path / "bridge")
+    agent.register_local("demo", str(root), True)
+
+    page = agent.listing("demo", limit=2)
+    assert [row["path"] for row in page["items"]] == ["Alpha.py", "beta.py"]
+    (root / "AA.py").write_text("x=2\n", encoding="utf-8")
+    subsequent = agent.listing("demo", limit=2, after=page["next_after"])
+    assert [row["path"] for row in subsequent["items"]] == ["delta.py"]

@@ -172,6 +172,69 @@ def read(db, topic, after, limit):
     }
 
 
+
+def inbox(db, participant, after=0, limit=20, topic=None):
+    """Read another participant's messages and assigned unfinished tasks.
+
+    The cursor belongs to the caller (and optional topic), never the room.
+    Names are self-declared labels, not authenticated ChatGPT identities.
+    Reading does not wake an inactive ChatGPT session.
+    """
+    participant = check_text(participant, 80, "participant")
+    if type(after) is not int or after < 0:
+        raise ValueError("after must be a nonnegative integer")
+    if type(limit) is not int or not 1 <= limit <= 200:
+        raise ValueError("limit must be 1..200")
+    if topic is not None:
+        topic = check_text(topic, 80, "topic")
+    if not db.execute(
+        "SELECT 1 FROM participants WHERE name=?", (participant,)
+    ).fetchone():
+        raise ValueError("Unknown participant; run join first")
+
+    # Keep the messages and task list consistent with one SQLite snapshot.
+    db.execute("SAVEPOINT inbox_read")
+    try:
+        filters = ["author != ?", "id > ?"]
+        params = [participant, after]
+        if topic is not None:
+            filters.append("topic = ?")
+            params.append(topic)
+        rows = db.execute(
+            "SELECT * FROM messages WHERE "
+            + " AND ".join(filters)
+            + " ORDER BY id LIMIT ?",
+            params + [limit + 1],
+        ).fetchall()
+        tasks_filter = ["assignee = ?", "state != 'done'"]
+        tasks_params = [participant]
+        if topic is not None:
+            tasks_filter.append("topic = ?")
+            tasks_params.append(topic)
+        tasks = db.execute(
+            "SELECT * FROM tasks WHERE "
+            + " AND ".join(tasks_filter)
+            + " ORDER BY updated_at DESC, id DESC LIMIT 101",
+            tasks_params,
+        ).fetchall()
+    finally:
+        db.execute("RELEASE SAVEPOINT inbox_read")
+
+    messages = [dict(row) for row in rows[:limit]]
+    return {
+        "participant": participant,
+        "topic": topic,
+        "messages": messages,
+        "next_after": messages[-1]["id"] if messages else after,
+        "more": len(rows) > limit,
+        "pending_tasks": [dict(task) for task in tasks[:100]],
+        "tasks_more": len(tasks) > 100,
+        "note": (
+            "Names are not authenticated. Read this inbox when the chat is "
+            "activated; the room does not wake ChatGPT sessions automatically."
+        ),
+    }
+
 def status(db):
     return {
         "workspace": "ChatGPT Common Room",
@@ -386,6 +449,11 @@ def main():
     p.add_argument("--topic", default="general")
     p.add_argument("--after", type=int, default=0)
     p.add_argument("--limit", type=int, default=50)
+    p = sub.add_parser("inbox")
+    p.add_argument("--name", required=True)
+    p.add_argument("--topic", default=None)
+    p.add_argument("--after", type=int, default=0)
+    p.add_argument("--limit", type=int, default=20)
     p = sub.add_parser("export")
     p.add_argument("--topic", default="general")
     args = parser.parse_args()
@@ -403,6 +471,8 @@ def main():
                     result = topic(db, args.name, args.goal)
                 elif args.command == "post":
                     result = post(db, args)
+                elif args.command == "inbox":
+                    result = inbox(db, args.name, args.after, args.limit, args.topic)
                 elif args.command == "read":
                     if args.after < 0 or not 1 <= args.limit <= 200:
                         raise ValueError(

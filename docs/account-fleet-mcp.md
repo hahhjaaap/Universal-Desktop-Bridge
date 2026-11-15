@@ -97,6 +97,40 @@ A browser approval never grants local Windows computer access, and an MCP tool c
 approve enrollment or Windows permissions. A device going offline is never substituted
 by another machine. A failed or uncertain mutating call is **not** replayed.
 
+## Isolated staging resources provisioned (2026-11-15)
+
+Cloudflare Access application **UDB Fleet Isolated Staging MCP** was created
+with application ID `d6c82311-ce00-4709-ae2a-61c3e4005a8f`.
+It exclusively targets
+`udb-fleet-isolated-staging.hkhoinguyen72.workers.dev/v1/account/mcp`.
+A fresh read-back confirmed Managed OAuth, ChatGPT DCR callback patterns,
+a one-hour Access session, and **one deny-everyone policy**. The application
+is hidden from the app launcher; no test accounts are granted yet.
+
+This is **Access app provisioning only**: no Worker is deployed on that name,
+no Durable Object exists for this isolated candidate, no device can enroll,
+and no authenticated ChatGPT OAuth roundtrip has occurred. The old
+`udb-private-relay-staging` Worker and its device/approval Access apps,
+permissions, secrets and Durable Objects remain unchanged.
+
+The reviewed candidate file
+`cloudflare/wrangler.fleet-isolated-staging.jsonc` uses the independent
+Worker name `udb-fleet-isolated-staging` and its own
+`new_sqlite_classes: ["DeviceRelay"]` migration. It does **not** inherit
+the live staging Worker name or Durable Object namespace, and contains no
+runtime secrets, approvals, routes or implicit Fleet-enabled flags.
+Run the offline guard `python tools/check_fleet_isolated_config.py`
+before any separately approved deployment. Do not deploy using the default
+`wrangler.staging.jsonc`, which deliberately targets the live relay.
+
+**Before enabling or deploying:** obtain at least two explicitly approved
+test Access identities and disposable Windows devices, provision independent
+staging secrets and a pinned approval-app audience/owner allowlist, perform
+the CI and dry-run on the exact commit, and record rollback/teardown. Never
+copy a live admin key, device token, owner grant, Credential Manager value,
+or Durable Object namespace to the test Worker. The deny-all Access policy
+must remain effective until the owner approves the specific test accounts.
+
 ## Read-only OAuth preflight (isolated staging only)
 
 Once a separate owner-scoped Access application protects the **exact**

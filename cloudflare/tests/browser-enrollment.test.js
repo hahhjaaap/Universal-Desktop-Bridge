@@ -674,6 +674,27 @@ test("fleet onboarding indexes approved devices and links an existing token only
   assert.ok(handoffHtml.includes("bridge_status with the chosen device_id"));
 });
 
+test("setup diagnostics never claim Fleet ready when Access configuration is incomplete", async () => {
+  const f = fixture();
+  f.env.UDB_ENABLE_ACCOUNT_FLEET = "true";
+  f.env.UDB_ENABLE_LOCAL_TOOL_SYNC = "true";
+  const p = await begin(f);
+  assert.equal((await approve(f, p)).status, 200);
+  assert.equal((await (await deviceStatus(f, p)).json()).account_fleet, true);
+
+  const team = f.env.UDB_ACCESS_TEAM_DOMAIN;
+  f.env.UDB_ACCESS_TEAM_DOMAIN = "https://invalid.example.com";
+  assert.equal((await (await deviceStatus(f, p)).json()).account_fleet, false);
+  assert.equal((await (await f.route("/v1/setup")).json()).account_fleet, false);
+  f.env.UDB_ACCESS_TEAM_DOMAIN = team;
+
+  const audience = f.env.UDB_ACCESS_AUD;
+  f.env.UDB_ACCESS_AUD = "";
+  assert.equal((await (await deviceStatus(f, p)).json()).account_fleet, false);
+  f.env.UDB_ACCESS_AUD = audience;
+  assert.equal((await (await deviceStatus(f, p)).json()).account_fleet, true);
+});
+
 test("fleet linking never steals a device already owned by a different identity", async () => {
   const f = fixture(); f.env.UDB_ENABLE_ACCOUNT_FLEET = "true";
   f.env.UDB_ENABLE_LOCAL_TOOL_SYNC = "true";

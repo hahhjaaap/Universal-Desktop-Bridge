@@ -22,7 +22,7 @@ from .cloud_pair import NoRedirect
 from .config import activate, checked
 from .launcher import child_environment, command
 from .onboarding import CHATGPT_URL, attended_console, paired_cloud
-from .private_enrollment import PRIVATE_RELAY, _request_json
+from .private_enrollment import PRIVATE_RELAY, _request_json, setup_relay
 from .setup_enrollment import EnrollmentError, enroll, link_existing
 
 
@@ -158,7 +158,7 @@ def inspect(settings, opener=None):
     }
     pairing = paired_cloud(settings.home)
     if not pairing:
-        _, capabilities = _request_json(opener, PRIVATE_RELAY + "/v1/setup")
+        _, capabilities = _request_json(opener, setup_relay() + "/v1/setup")
         result.update(
             relay_reachable=True,
             browser_enrollment=capabilities.get("browser_enrollment") is True,
@@ -331,7 +331,7 @@ def run(
             pairing = paired_cloud(settings.home)
             if not pairing:
                 phase = "owner_approval"
-                _, caps = _request_json(opener, PRIVATE_RELAY + "/v1/setup")
+                _, caps = _request_json(opener, setup_relay() + "/v1/setup")
                 if (
                     caps.get("protocol") != 2
                     or caps.get("browser_enrollment") is not True

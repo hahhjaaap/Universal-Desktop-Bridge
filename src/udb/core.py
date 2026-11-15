@@ -226,9 +226,32 @@ class Agent(AutonomyMixin):
             c.execute("INSERT OR IGNORE INTO protected VALUES (?)", (str(p),))
         self.audit("protect", {"root": str(p)})
 
-    def projects(self):
+    def projects(self, *, offset=0, limit=0):
+        """Read fresh project permissions; the primary-key index supplies ordering.
+
+        Pagination is opt-in. Never cache project rights across owner changes.
+        """
+        if (type(offset) is not int or offset < 0 or type(limit) is not int
+                or not 0 <= limit <= 1000):
+            raise PolicyError("Project offset must be nonnegative; limit 0..1000")
+        sql = "SELECT id, root, writable FROM projects ORDER BY id"
+        args = ()
+        if limit:
+            sql += " LIMIT ? OFFSET ?"
+            args = (limit, offset)
+        elif offset:
+            sql += " LIMIT -1 OFFSET ?"
+            args = (offset,)
         with self.connect() as c:
-            return [dict(r) for r in c.execute("SELECT * FROM projects ORDER BY id")]
+            return [dict(row) for row in c.execute(sql, args)]
+
+    def project_counts(self):
+        """Small, fresh aggregate for compact diagnostics (no project paths)."""
+        with self.connect() as c:
+            total, writable = c.execute(
+                "SELECT COUNT(*), COALESCE(SUM(writable != 0), 0) FROM projects"
+            ).fetchone()
+        return int(total), int(writable)
 
     def project(self, project: str):
         with self.connect() as c:
@@ -687,7 +710,7 @@ class Agent(AutonomyMixin):
             )
         return r
 
-    def diagnostics(self):
+    def diagnostics(self, *, brief=False):
         from . import __version__
         from .build_identity import runtime_identity
         from .host_client import status as host_status
@@ -701,6 +724,32 @@ class Agent(AutonomyMixin):
         from .readiness import report as readiness_report
 
         manager = manager_status(self.state)
+        if brief:
+            # Owner grants and resource evidence are read afresh. An aggregate
+            # avoids opening a potentially large project registry as Python rows,
+            # and expensive Sandbox/media/source grant scans are not needed.
+            totals = self.project_counts()
+            return {
+                "name": "Universal Desktop Bridge",
+                "version": __version__,
+                "build": runtime_identity(),
+                "manager": manager,
+                "readiness": readiness_report(
+                    manager, hs, computer, [], project_totals=totals
+                ),
+                "computer_access": computer,
+                "host_background": {
+                    "enabled": hs["enabled"],
+                    "worker_ready": hs["worker_ready"],
+                    "scope": "owned browser and native text workspace only",
+                    "user_mouse_keyboard": False,
+                },
+                "resources": hs["resources"],
+                "platform": os.name,
+                "host_execution": computer["enabled"],
+                "projects": totals[0],
+                "rdc_dependency": False,
+            }
         projects = self.projects()
         return {
             "name": "Universal Desktop Bridge",

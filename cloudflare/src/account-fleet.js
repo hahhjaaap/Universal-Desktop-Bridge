@@ -318,5 +318,6 @@ export async function handleAccountMcp(request, env, access = null, fetchImpl = 
   // No replay: delegate once to the existing per-device Access/local-permission
   // gateway and retain its response status, protocol adaptation and errors.
   return handleMcp(forwardedRequest(request, { ...rpc, params: {
-    ...rpc.params, arguments: rest } }, id), env, id, current.stub, fetchImpl, access);
+    ...rpc.params, arguments: rest } }, id), env, id, current.stub, fetchImpl,
+    access, owner);
 }

@@ -371,6 +371,31 @@ def spreadsheet(files, a, output):
             from udb.companion.accounting import accounting_spreadsheet
 
             return accounting_spreadsheet(files, a, output)
+        # Reject invalid ranges/cell dictionaries before parsing the XLSX ZIP.
+        read_range = a.get("range", "A1:J50")
+        bounds = None
+        if action == "read":
+            bounds = range_boundaries(read_range)
+            x, y, right, bottom = bounds
+            if (
+                any(v is None for v in bounds)
+                or x < 1
+                or y < 1
+                or right < x
+                or bottom < y
+                or right > 16384
+                or bottom > 1048576
+                or (right - x + 1) * (bottom - y + 1) > 5000
+            ):
+                raise ValueError("Read range limit 5000 cells")
+        if action == "edit_cells":
+            cells = a.get("cells", {})
+            if not isinstance(cells, dict) or not 1 <= len(cells) <= 10000:
+                raise ValueError("Provide 1..10000 cell edits")
+            for address in cells:
+                if not re.fullmatch("[A-Za-z]{1,3}[1-9][0-9]{0,6}", address):
+                    raise ValueError("Invalid cell address")
+        allow_formulas = a.get("allow_formulas", False)
         if action == "write":
             book = openpyxl.Workbook()
             book.remove(book.active)
@@ -389,7 +414,7 @@ def spreadsheet(files, a, output):
                         put_cell(
                             sheet.cell(row_index, col),
                             value,
-                            a.get("allow_formulas", False),
+                            allow_formulas,
                         )
                         count += 1
                         if count > 10000:
@@ -412,24 +437,12 @@ def spreadsheet(files, a, output):
                 formulas_evaluated=False,
             )
         if action in ("read", "edit_cells"):
-            name = a.get("sheet") or book.sheetnames[0]
+            name = a.get("sheet") or book.worksheets[0].title
             if name not in book:
                 raise ValueError("Unknown sheet")
             sheet = book[name]
             if action == "read":
-                bounds = range_boundaries(a.get("range", "A1:J50"))
                 x, y, right, bottom = bounds
-                if (
-                    any(v is None for v in bounds)
-                    or x < 1
-                    or y < 1
-                    or right < x
-                    or bottom < y
-                    or right > 16384
-                    or bottom > 1048576
-                    or (right - x + 1) * (bottom - y + 1) > 5000
-                ):
-                    raise ValueError("Read range limit 5000 cells")
                 values = []
                 cropped = 0
                 for row in sheet.iter_rows(
@@ -439,25 +452,24 @@ def spreadsheet(files, a, output):
                     max_col=right,
                     values_only=True,
                 ):
-                    cropped += sum(isinstance(v, str) and len(v) > 2000 for v in row)
-                    values.append([cell_value(v) for v in row])
+                    formatted = []
+                    for value in row:
+                        if isinstance(value, str) and len(value) > 2000:
+                            cropped += 1
+                        formatted.append(cell_value(value))
+                    values.append(formatted)
                 return dict(
                     sheet=name,
-                    range=a.get("range", "A1:J50"),
+                    range=read_range,
                     rows=values,
                     truncated_cells=cropped,
                     formulas_evaluated=False,
                 )
-            cells = a.get("cells", {})
-            if not isinstance(cells, dict) or not 1 <= len(cells) <= 10000:
-                raise ValueError("Provide 1..10000 cell edits")
             for address, value in cells.items():
-                if not re.fullmatch("[A-Za-z]{1,3}[1-9][0-9]{0,6}", address):
-                    raise ValueError("Invalid cell address")
                 cell = sheet[address]
                 if cell.column > 16384 or cell.row > 1048576:
                     raise ValueError("Cell outside XLSX limits")
-                put_cell(cell, value, a.get("allow_formulas", False))
+                put_cell(cell, value, allow_formulas)
         book.save(output)
         return dict(sheets=book.sheetnames, formulas_evaluated=False)
     finally:
@@ -521,7 +533,6 @@ def word_document(files, a, output):
     if action == "inspect":
         return dict(paragraphs=len(doc.paragraphs), tables=len(doc.tables))
     if action == "read":
-        rows = list(paragraphs(doc))
         offset = a.get("offset", 0)
         limit = a.get("limit", 100)
         if (
@@ -531,15 +542,23 @@ def word_document(files, a, output):
             or not 1 <= limit <= 200
         ):
             raise ValueError("Paragraph offset >=0, limit 1..200")
+        # Count once without materializing all body/table paragraphs.
+        # Access the text of only selected rows, exactly once each.
+        selected = []
+        truncated = []
+        total = 0
+        for index, paragraph in enumerate(paragraphs(doc)):
+            if offset <= index < offset + limit:
+                content = paragraph.text
+                selected.append(content[:4000])
+                if len(content) > 4000:
+                    truncated.append(index)
+            total = index + 1
         return dict(
-            paragraphs=[p.text[:4000] for p in rows[offset : offset + limit]],
-            truncated_paragraphs=[
-                offset + i
-                for i, p in enumerate(rows[offset : offset + limit])
-                if len(p.text) > 4000
-            ],
-            next_offset=offset + min(limit, len(rows[offset:])),
-            total=len(rows),
+            paragraphs=selected,
+            truncated_paragraphs=truncated,
+            next_offset=offset + min(limit, max(0, total - offset)),
+            total=total,
             scope="body paragraphs and tables",
         )
     if action == "write":
@@ -587,6 +606,17 @@ def pdf_document(files, a, output):
     from pypdf import PdfReader, PdfWriter
 
     action = a["action"]
+    # Local paging limits can be rejected before PDF parser/permission work.
+    if action == "read":
+        start = a.get("start_page", 1)
+        limit = a.get("limit", 3)
+        if (
+            type(start) is not int
+            or start < 1
+            or type(limit) is not int
+            or not 1 <= limit <= 10
+        ):
+            raise ValueError("Page range invalid; read at most 10 pages")
 
     def reader(name):
         value = PdfReader(files.path(name))
@@ -598,21 +628,16 @@ def pdf_document(files, a, output):
 
     if action in ("inspect", "read", "extract"):
         source = reader(a["path"])
+        source_pages = source.pages
+        total_pages = len(source_pages)
         if action == "inspect":
-            return dict(pages=len(source.pages))
+            return dict(pages=total_pages)
         if action == "read":
-            start = a.get("start_page", 1)
-            limit = a.get("limit", 3)
-            if (
-                type(start) is not int
-                or not 1 <= start <= len(source.pages)
-                or type(limit) is not int
-                or not 1 <= limit <= 10
-            ):
+            if start > total_pages:
                 raise ValueError("Page range invalid; read at most 10 pages")
             values = []
-            for i in range(start - 1, min(len(source.pages), start - 1 + limit)):
-                value = source.pages[i].extract_text() or ""
+            for i in range(start - 1, min(total_pages, start - 1 + limit)):
+                value = source_pages[i].extract_text() or ""
                 values.append(
                     dict(
                         page=i + 1,
@@ -620,7 +645,7 @@ def pdf_document(files, a, output):
                         text_truncated=len(value) > 16000,
                     )
                 )
-            return dict(pages=values, total_pages=len(source.pages), ocr=False)
+            return dict(pages=values, total_pages=total_pages, ocr=False)
     if action == "write":
         from xml.sax.saxutils import escape
 
@@ -661,11 +686,11 @@ def pdf_document(files, a, output):
         if action == "merge":
             pages = 0
             for name in a["inputs"]:
-                source = reader(name)
-                pages += len(source.pages)
+                source_pages = reader(name).pages
+                pages += len(source_pages)
                 if pages > 200:
                     raise ValueError("Merged PDF limit 200 pages")
-                for page in source.pages:
+                for page in source_pages:
                     writer.add_page(page)
         else:
             selected = a.get("pages", [])

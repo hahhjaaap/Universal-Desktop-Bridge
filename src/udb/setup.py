@@ -340,12 +340,15 @@ def run(
             pairing = paired_cloud(settings.home)
             if not pairing:
                 phase = "owner_approval"
-                _, caps = _request_json(opener, setup_relay() + "/v1/setup")
+                # Resolve one configured setup origin per approval preflight.
+                # Do not reread the environment after contacting that origin.
+                setup_origin = setup_relay()
+                _, caps = _request_json(opener, setup_origin + "/v1/setup")
                 if (
                     caps.get("protocol") != 2
                     or caps.get("browser_enrollment") is not True
                 ):
-                    if caps.get("protocol") == 2 and setup_relay() == FLEET_TEST_RELAY:
+                    if caps.get("protocol") == 2 and setup_origin == FLEET_TEST_RELAY:
                         # No public request is sent while enrollment is locked.
                         # A non-secret ID lets the relay operator pin ONLY this
                         # device before this same setup command is resumed.

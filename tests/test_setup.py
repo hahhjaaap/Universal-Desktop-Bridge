@@ -214,9 +214,7 @@ def test_readonly_setup_requires_fleet_link(selected, monkeypatch, capsys):
     assert not selected.home.exists()
 
 
-def test_inspect_fleet_uses_account_url_and_checks_registry_link(
-    selected, monkeypatch
-):
+def test_inspect_fleet_uses_account_url_and_checks_registry_link(selected, monkeypatch):
     pair(selected)
     report = {**remote(verified=True), "account_fleet": True}
     monkeypatch.setattr(setup, "device_status", lambda *a: report)

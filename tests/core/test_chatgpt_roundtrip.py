@@ -1,4 +1,4 @@
-"""Single UDB call ChatGPT roundtrip: strict empty-chat and no replay."""
+"""Fast ChatGPT UIA roundtrip: exact matching, guarded input, no replay."""
 
 from types import SimpleNamespace
 
@@ -8,30 +8,29 @@ from udb.computer_desktop import Desktop
 from udb.core import PolicyError
 
 
-def fake_desktop(previous=False, incomplete=False):
+def fake_desktop(
+    previous=False, incomplete=False, ambiguous=False, mismatch=False,
+    paused=False, foreground=42,
+):
     desktop = Desktop.__new__(Desktop)
-    ops = []
-    desktop.gui = SimpleNamespace(GetForegroundWindow=lambda: 42)
+    calls = []
+    desktop.gui = SimpleNamespace(GetForegroundWindow=lambda: foreground)
+
+    def check():
+        calls.append(("control", "check"))
+        if paused:
+            raise PolicyError("desktop paused")
 
     def uia(hwnd, action, **kwargs):
-        ops.append(("uia", action, kwargs))
-        if action == "snapshot":
-            rows = [
-                {"control_type": "ControlType.Document", "name": "ChatGPT"},
-                {
-                    "control_type": "ControlType.Edit",
-                    "name": "Hỏi ChatGPT",
-                    "offscreen": False,
-                },
-            ]
-            if previous:
-                rows.append(
-                    {
-                        "control_type": "ControlType.Text",
-                        "name": "ChatGPT đã nói:",
-                    }
-                )
-            return {"elements": rows, "truncated": False}
+        calls.append(("uia", action, kwargs))
+        if action == "chatgpt_prepare":
+            if previous or ambiguous:
+                raise PolicyError("Existing conversation or ambiguous editor")
+            return {"ok": True, "prepared": True}
+        if action == "chatgpt_commit":
+            if mismatch:
+                raise PolicyError("Text mismatch; not submitted")
+            return {"ok": True, "verified_text": True, "invoked": True}
         if action == "poll_chatgpt_reply":
             return {
                 "completed": not incomplete,
@@ -41,46 +40,53 @@ def fake_desktop(previous=False, incomplete=False):
             }
         raise AssertionError(action)
 
-    def send(hwnd, window_id, text, name, automation_id, submit_name):
-        ops.append(("verified_submit", text, submit_name))
-        return {"submit_requested": True, "verified_text": True}
+    def dispatch(action, **kwargs):
+        calls.append(("desktop", action, kwargs))
+        assert action == "type"
+        assert kwargs["text"] == "Hello"
+        return {"injected_characters": len(kwargs["text"])}
 
     desktop.uia = uia
-    desktop.verified_submit = send
-    return desktop, ops
+    desktop._dispatch = dispatch
+    desktop.control = SimpleNamespace(check=check)
+    return desktop, calls
 
 
-def test_roundtrip_uses_one_local_poll_after_one_exact_submit():
-    desktop, ops = fake_desktop()
+def test_two_uia_phases_with_one_guarded_input_and_one_reply_poll():
+    desktop, calls = fake_desktop()
     result = desktop.chatgpt_roundtrip(42, "w", "Hello", 6000)
     assert result["reply_verified"] is True
     assert result["reply"] == "Hello! 👋"
+    assert result["submit_requested"] is True
+    assert result["verified_text"] is True
     assert result["replay_safe"] is False
     assert result["response_observed_in_ui"] is True
     assert result["timings_ms"]["reply_wait"] == 850
-    assert [op[:2] for op in ops] == [
-        ("uia", "snapshot"),
-        ("verified_submit", "Hello"),
+    assert [op[:2] for op in calls] == [
+        ("uia", "chatgpt_prepare"),
+        ("desktop", "type"),
+        ("control", "check"),
+        ("uia", "chatgpt_commit"),
         ("uia", "poll_chatgpt_reply"),
     ]
-    assert ops[-1][2]["wait_ms"] == 6000
+    assert calls[-1][2]["wait_ms"] == 6000
 
 
 def test_existing_chat_is_not_modified():
-    desktop, ops = fake_desktop(previous=True)
-    with pytest.raises(PolicyError, match="existing messages"):
+    desktop, calls = fake_desktop(previous=True)
+    with pytest.raises(PolicyError, match="Existing conversation"):
         desktop.chatgpt_roundtrip(42, "w", "Hello", 6000)
-    assert len(ops) == 1
+    assert len(calls) == 1
 
 
 def test_timeout_preserves_uncertain_submission_without_retry():
-    desktop, ops = fake_desktop(incomplete=True)
+    desktop, calls = fake_desktop(incomplete=True)
     result = desktop.chatgpt_roundtrip(42, "w", "Hello", 6000)
     assert result["status"] == "reply_timeout"
     assert result["submit_requested"] is True
     assert result["reply_verified"] is False
     assert result["reply"] == ""
-    assert [op[0] for op in ops].count("verified_submit") == 1
+    assert [op[1] for op in calls if op[0] == "uia"].count("chatgpt_commit") == 1
 
 
 @pytest.mark.parametrize(
@@ -93,32 +99,44 @@ def test_timeout_preserves_uncertain_submission_without_retry():
     ],
 )
 def test_bad_request_rejected_before_ui(message, wait_ms):
-    desktop, ops = fake_desktop()
+    desktop, calls = fake_desktop()
     with pytest.raises(PolicyError):
         desktop.chatgpt_roundtrip(42, "w", message, wait_ms)
-    assert ops == []
+    assert calls == []
 
 
-def test_ambiguous_editor_refused_without_sending():
-    desktop, ops = fake_desktop()
-    original = desktop.uia
-
-    def duplicate(hwnd, action, **kwargs):
-        result = original(hwnd, action, **kwargs)
-        if action == "snapshot":
-            result["elements"].append(
-                {
-                    "control_type": "ControlType.Edit",
-                    "name": "Hỏi ChatGPT",
-                    "offscreen": False,
-                }
-            )
-        return result
-
-    desktop.uia = duplicate
-    with pytest.raises(PolicyError, match="Expected an empty"):
+def test_ambiguous_editor_refused_without_typing():
+    desktop, calls = fake_desktop(ambiguous=True)
+    with pytest.raises(PolicyError, match="ambiguous editor"):
         desktop.chatgpt_roundtrip(42, "w", "Hello", 6000)
-    assert not any(op[0] == "verified_submit" for op in ops)
+    assert all(op[0] != "desktop" for op in calls)
+
+
+def test_mismatch_prevents_submit_and_reply_poll():
+    desktop, calls = fake_desktop(mismatch=True)
+    with pytest.raises(PolicyError, match="Text mismatch"):
+        desktop.chatgpt_roundtrip(42, "w", "Hello", 6000)
+    assert "poll_chatgpt_reply" not in [
+        op[1] for op in calls if op[0] == "uia"
+    ]
+
+
+def test_paused_after_typing_prevents_submission():
+    desktop, calls = fake_desktop(paused=True)
+    with pytest.raises(PolicyError, match="desktop paused"):
+        desktop.chatgpt_roundtrip(42, "w", "Hello", 6000)
+    assert "chatgpt_commit" not in [
+        op[1] for op in calls if op[0] == "uia"
+    ]
+
+
+def test_foreground_changed_after_typing_prevents_submission():
+    desktop, calls = fake_desktop(foreground=77)
+    with pytest.raises(PolicyError, match="Foreground changed"):
+        desktop.chatgpt_roundtrip(42, "w", "Hello", 6000)
+    assert "chatgpt_commit" not in [
+        op[1] for op in calls if op[0] == "uia"
+    ]
 
 
 def test_dispatch_routes_new_action():

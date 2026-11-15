@@ -372,6 +372,27 @@ test("Cloudflare Access key rotation refreshes a stale JWKS once without trustin
   assert.equal(fetches, 2);
 });
 
+test("Workers-compatible JWKS lookup never follows redirect or authenticates from redirects", async () => {
+  const f = await fixture();
+  const team = "https://udb-jwks-redirect-denied.cloudflareaccess.com";
+  f.env.UDB_ACCESS_TEAM_DOMAIN = team;
+  const jwt = await f.token({ iss: team });
+  let requests = 0;
+  const redirectFetch = async (_url, init) => {
+    requests++;
+    assert.equal(init.redirect, "manual",
+      "Cloudflare Workers rejects redirect:error before network I/O");
+    return new Response(null, { status: 302,
+      headers: { location: "https://untrusted.example/keys" } });
+  };
+  await assert.rejects(
+    verifyAccessAssertion(f.request(jwt), f.env, redirectFetch),
+    error => error instanceof AuthError &&
+      error.message === "access_keys_unavailable",
+  );
+  assert.equal(requests, 1, "never follow the redirect or try a second origin");
+});
+
 test("Access certificate outage is retryable, not a false login or OAuth consent failure", async () => {
   // New team isolates this case from the module's 30-second valid JWKS cache.
   const f = await fixture();

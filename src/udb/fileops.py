@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import fnmatch
+from concurrent.futures import ThreadPoolExecutor
 import os
 import time
 from pathlib import Path
 
-from .core import SOURCE_EXT, PolicyError
+from .core import BLOCK_DIRS, MAX_TEXT, SOURCE_EXT, PolicyError
 
 
 def read_files(agent, project, paths):
@@ -17,14 +18,32 @@ def read_files(agent, project, paths):
         or any(not isinstance(p, str) for p in paths)
     ):
         raise PolicyError("Provide 1..20 source paths")
-    rows = []
-    size = 0
-    for path in paths:
-        row = agent.read(project, path)
-        size += len(row["text"].encode("utf8"))
-        if size > 512 * 1024:
+    # Preflight every individual path using the SAME owner/project policy.
+    # Refuse an oversized aggregate before reading any file in a worker.
+    total_bytes = 0
+    for relative in paths:
+        file_path = agent.path(project, relative)
+        if (
+            not file_path.is_file()
+            or (
+                file_path.suffix.lower() not in SOURCE_EXT
+                and file_path.name.lower() not in SOURCE_EXT
+            )
+        ):
+            raise PolicyError("Only small source/text files may be read")
+        total_bytes += file_path.stat().st_size
+        if total_bytes > MAX_TEXT:
             raise PolicyError("Combined source response exceeds 512 KiB")
-        rows.append(row)
+    # Concurrent disk reads are bounded to four; map preserves user order.
+    # Every read independently re-checks current policy and emits its audit.
+    if len(paths) == 1:
+        rows = [agent.read(project, paths[0])]
+    else:
+        with ThreadPoolExecutor(max_workers=min(4, len(paths))) as pool:
+            rows = list(pool.map(lambda p: agent.read(project, p), paths))
+    size = sum(len(row["text"].encode("utf-8")) for row in rows)
+    if size > MAX_TEXT:
+        raise PolicyError("Combined source response exceeds 512 KiB")
     return {"files": rows, "bytes": size}
 
 
@@ -49,6 +68,7 @@ def search_files(agent, project, path=".", pattern="*", text="", limit=100):
     scanned = 0
     byte_count = 0
     truncated = False
+    truncation_reason = None
     deadline = time.monotonic() + 3
     while pending and scanned < 10000 and time.monotonic() < deadline:
         folder = pending.pop()
@@ -59,28 +79,32 @@ def search_files(agent, project, path=".", pattern="*", text="", limit=100):
                     scanned += 1
                     if scanned > 10000 or time.monotonic() >= deadline:
                         truncated = True
+                        truncation_reason = (
+                            "scan_cap" if scanned > 10000 else "time_budget"
+                        )
                         break
                     try:
-                        # Filter unrelated names before a costly policy lookup;
-                        # every traversed folder and candidate remains scoped.
-                        if not entry.is_dir(follow_symlinks=False) and (
-                            Path(entry.name).suffix.lower() not in SOURCE_EXT
-                            or not fnmatch.fnmatch(
-                                entry.name.casefold(), folded_pattern
+                        # Reject known excluded folders and glob misses before
+                        # the expensive policy lookup. ALL candidates and
+                        # traversed directories still pass agent.path().
+                        name = entry.name.casefold()
+                        directory = entry.is_dir(follow_symlinks=False)
+                        if directory and name in BLOCK_DIRS:
+                            continue
+                        if not directory and (
+                            (
+                                Path(name).suffix not in SOURCE_EXT
+                                and name not in SOURCE_EXT
                             )
+                            or not fnmatch.fnmatch(name, folded_pattern)
                         ):
                             continue
                         rel = Path(entry.path).relative_to(root).as_posix()
                         target = agent.path(project, rel)
-                        if target.is_dir():
+                        if directory:
                             pending.append(target)
                             continue
-                        if (
-                            target.suffix.lower() not in SOURCE_EXT
-                            or not fnmatch.fnmatch(
-                                target.name.casefold(), folded_pattern
-                            )
-                        ):
+                        if not target.is_file():
                             continue
                         row = {"path": rel}
                         if text:
@@ -88,6 +112,7 @@ def search_files(agent, project, path=".", pattern="*", text="", limit=100):
                             byte_count += len(data)
                             if byte_count > 4 * 1024 * 1024:
                                 truncated = True
+                                truncation_reason = "byte_budget"
                                 pending.clear()
                                 break
                             lines = data.decode("utf-8-sig").splitlines()
@@ -103,16 +128,23 @@ def search_files(agent, project, path=".", pattern="*", text="", limit=100):
                         matches.append(row)
                         if len(matches) >= limit:
                             truncated = True
+                            truncation_reason = "result_limit"
                             pending.clear()
                             break
                     except (PolicyError, OSError, UnicodeError):
                         continue
         except (PolicyError, OSError):
             continue
+    if pending and not truncated:
+        truncated = True
+        truncation_reason = "scan_cap" if scanned >= 10000 else "time_budget"
     return {
         "items": matches,
         "scanned": min(scanned, 10000),
-        "truncated": truncated or bool(pending),
+        "truncated": truncated,
+        "truncation_reason": truncation_reason,
+        "matches_returned": len(matches),
+        "bytes_searched": byte_count,
         "protected_items_hidden": True,
         "literal_search": True,
     }

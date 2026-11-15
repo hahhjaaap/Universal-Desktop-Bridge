@@ -21,6 +21,32 @@ Interactive project terminals, arbitrary-PID process administration, the private
 browser and approved Sandbox desktop remain distinct scopes. Combining their
 names would obscure ownership, permissions or input semantics.
 
+## Open ChatGPT on the owner's Windows desktop
+
+`open_chatgpt()` is a **new explicit MCP tool** for one task only: request
+`https://chatgpt.com/` in a visible browser on the **selected device**.
+It needs the owner's existing `udb --access computer` grant, an unlocked
+interactive desktop, sufficient host capacity and the same user-input pause
+checks as `computer_desktop`. The URL is constant; the tool accepts **no
+credentials, URL, prompt, participant name or profile**.
+
+If Google Chrome already has a visible running window, UDB reuses its existing
+`open_chrome_tab` path. If Chrome has no open window, UDB asks Windows once to
+launch the default browser URL handler. It does **not** create a private CDP
+session, attach to another tab or examine login state.
+
+The result reports `launch_mode=existing_chrome_tab|default_browser`,
+`requested=true` and separate fields for the evidence actually observed.
+A successful request is **not proof** that ChatGPT finished loading or the
+user is logged in. Do not automatically replay an uncertain request;
+inspect the desktop first. If user input, a locked screen, a revoked grant
+or a paused desktop blocks the action, UDB refuses rather than bypassing it.
+This operation does not post messages, run an AI model, or wake other chats.
+
+Multi-machine gateways must pass a verified `device_id` and explicitly
+grant the new tool in Cloudflare's owner tool allowlist. Source updates do not
+install a new Windows binary or deploy the Cloudflare Worker automatically.
+
 ## Native UI Automation
 
 List windows, retain a fresh `window_id`, then inspect `snapshot`. Snapshot reports

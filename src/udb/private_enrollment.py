@@ -33,9 +33,10 @@ def setup_relay():
     """Exact allowlisted new-device enrollment origin; no arbitrary URL override."""
     relay = os.environ.get("UDB_SETUP_RELAY", PRIVATE_RELAY)
     if relay not in (PRIVATE_RELAY, FLEET_TEST_RELAY):
-        raise ValueError("Unsupported UDB setup relay; existing credentials are untouched")
+        raise ValueError(
+            "Unsupported UDB setup relay; existing credentials are untouched"
+        )
     return relay
-
 
 
 def _request_json(opener, url, *, method="GET", data=None, proof=None):

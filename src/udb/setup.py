@@ -360,11 +360,6 @@ def run(
             fleet = remote.get("account_fleet") is True
             if fleet:
                 phase = "fleet_link"
-                _, link_status = _request_json(
-                    opener,
-                    relay + "/v1/devices/" + device_id + "/fleet/status",
-                    proof=token,
-                )
                 linked = fleet_link_status(opener, relay, device_id, token)
                 if not linked:
                     link_existing(

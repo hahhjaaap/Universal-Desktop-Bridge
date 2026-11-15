@@ -16,8 +16,8 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from udb._version import VERSION
 from udb import hyperspeed_perf as perf
+from udb._version import VERSION
 from udb.catalog import public_catalog, resolve_call
 from udb.concurrency import MAX_CONCURRENT
 from udb.fleet import FleetRouter, text_result

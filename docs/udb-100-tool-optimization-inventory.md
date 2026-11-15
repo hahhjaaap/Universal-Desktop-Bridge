@@ -1,6 +1,6 @@
 # Kiểm kê và đề xuất hoàn tất 100 tối ưu từng công cụ UDB
 
-**Ngày kiểm kê:** 2026-11-15. **Nguồn catalog:** `cloudflare/src/fleet-tool-catalog.json` (blob SHA `964100ee09a339efdd97e68af2b18cd88ccbed25`, 40 public tools trên `main`). **Phạm vi:** repository `hahhjaaap/Universal-Desktop-Bridge`. **Trạng thái:** BẢN KẾ HOẠCH ĐỀ XUẤT, không phải một đợt benchmark hay chứng nhận đã triển khai.
+**Ngày kiểm kê:** 2026-11-15. **Nguồn catalog:** `cloudflare/src/fleet-tool-catalog.json` (blob SHA `339931936ceff3190b2b7a9e92bf3e1889901154`, 41 public tools trên `main`). **Phạm vi:** repository `hahhjaaap/Universal-Desktop-Bridge`. **Trạng thái:** BẢN KẾ HOẠCH ĐỀ XUẤT, không phải một đợt benchmark hay chứng nhận đã triển khai.
 
 ## 1. Quy tắc xác nhận hoàn thành
 
@@ -8,13 +8,13 @@
 - **Có tối ưu lịch sử**: khác với 100-step ledger; một công cụ có thể đã sửa hiệu năng ở PR khác nhưng chưa có benchmark mới. Không được gọi là “chưa hề tối ưu”.
 - **Chưa có chứng cứ**: không đồng nghĩa công cụ chưa hoạt động hoặc chưa tối ưu. Cần benchmark baseline + tests trước khi sửa.
 - **31–40**: người dùng xác nhận mốc hiện tại là bước 40, nhưng chưa tìm thấy bảng từng bước, PR và kết quả đo đủ tin cậy để lập mapping. **Giữ 10 số này là “chờ đối chiếu”; không phát minh rằng một PR khác đã làm xong chúng.**
-- **41–100**: là phương án phân bổ 60 tối ưu **đề xuất** để lấp các khoảng trống của 40 public tools và các backend. Trước khi thực hiện từng bước phải đối chiếu ledger 31–40 để chống làm lại; có thể đổi thứ tự hoặc loại bỏ mục đã hoàn tất.
+- **41–100**: là phương án phân bổ 60 tối ưu **đề xuất** để lấp các khoảng trống của 41 public tools và các backend. Trước khi thực hiện từng bước phải đối chiếu ledger 31–40 để chống làm lại; có thể đổi thứ tự hoặc loại bỏ mục đã hoàn tất.
 
 ## 2. Bằng chứng đã merge
 
 | Số bước | Công cụ/chức năng | Bằng chứng |
 | --- | --- | --- |
-| 1–2 | Cloudflare fleet `list_devices` (không thuộc 40 public tools local) | [#184](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/184) |
+| 1–2 | Cloudflare fleet `list_devices` (không thuộc 41 public tools local) | [#184](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/184) |
 | 3–4 | `bridge_status` | [#184](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/184) |
 | 5–6 | `list_projects` | [#184](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/184) |
 | 7–8 | `host_status` | [#184](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/184) |
@@ -41,7 +41,7 @@ Các hiệu năng đã được cải tiến **ngoài 100-step ledger**:
 
 **[#192](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/192) vẫn là draft độc lập** về host mailbox; **không tính cho 31–40**.
 
-## 3. Ma trận kiểm kê đầy đủ 40 công cụ public
+## 3. Ma trận kiểm kê đầy đủ 41 công cụ public
 
 Cột “Chưa thấy PR chuyên biệt” chỉ mô tả bằng chứng kiểm kê, **không phải kết luận chưa được tối ưu**. Một public tool có thể có nhiều action/native handlers.
 
@@ -87,8 +87,12 @@ Cột “Chưa thấy PR chuyên biệt” chỉ mô tả bằng chứng kiểm 
 | 38 | `system_process` | Chưa thấy PR tối ưu chuyên biệt trong ledger 1–30 | Cần baseline theo công cụ | 92–93 |
 | 39 | `project_files` | Đã có tối ưu trong roadmap 1–30 | 19–20, #188 | Theo dõi benchmark hồi quy |
 | 40 | `browser` | Có tối ưu lịch sử; chưa xác minh theo 100 bước | #32: tối ưu CDP/DOM/wait_for; chưa phải bước 1–30 | 64–69 |
+| 41 | `open_chatgpt` | Mới được bổ sung, chưa có benchmark tối ưu chuyên biệt | [#193](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/193) merged; launch hiện còn cần đo | Theo dõi trong nhóm host/browser 61–69 và fleet 94–96 |
 
-**Tổng hợp:** 15/40 public tools có bằng chứng gắn với 1–30; 25/40 cần rà soát ngoài ledger 1–30, trong đó `browser` có bằng chứng tối ưu lịch sử #32. `list_devices` thuộc lớp Cloudflare fleet, được ghi riêng.
+**Tổng hợp:** 15/41 public tools có bằng chứng gắn với 1–30; 26/41 cần rà soát ngoài ledger 1–30, trong đó `browser` có bằng chứng tối ưu lịch sử #32. `list_devices` thuộc lớp Cloudflare fleet, được ghi riêng.
+
+
+**Catalog đổi sau kiểm kê:** PR [#193](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/193) đã thêm `open_chatgpt` thành công, nên `main` hiện có **41** công cụ public. Công cụ thứ 41 nằm ở bảng trên và cần benchmark host/browser riêng; thay đổi số công cụ không làm số bước roadmap tăng quá 100.
 
 ## 4. Kế hoạch ưu tiên 6 đợt, bước 41–100
 
@@ -165,7 +169,7 @@ Mỗi bước phải có: (1) benchmark trước/sau trên fixture có thể tá
 | 96 | `MCP proxy initialize/tools_list` | Profile p95 startup và copy schema, chỉ tối ưu bottleneck mới | Không lặp #37–38; deterministic catalog, no mixed-backend grants |
 | 97 | `tool family dispatch` | Giảm chuyển alias/action/arguments khi đã validate | Giữ cùng original grant, không nâng quyền family |
 | 98 | `udb setup / doctor --cloud` | Tối ưu health check/connection diagnostic theo deadline | Không gọi ra remote bí mật, không chuyển từ read-only sang mutate |
-| 99 | `udb tools + packaged catalog` | Tối ưu catalog load/read trong wheel/EXE | 40 public + native parity, frozen catalog và version chính xác |
+| 99 | `udb tools + packaged catalog` | Tối ưu catalog load/read trong wheel/EXE | số công cụ public hiện tại + native parity, frozen catalog và version chính xác |
 | 100 | `udb install/update/rollback` | Profile cold start và update/rollback kiểm chứng | Không xóa owner state; signed identity/manifest và rollback test |
 
 ## 6. Quy trình kiểm thử, số đo và bàn giao

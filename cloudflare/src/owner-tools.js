@@ -34,6 +34,7 @@ export const OWNER_TOOLS = Object.freeze([
   "computer_execute",
   "computer_process",
   "computer_desktop",
+  "open_chatgpt",
 ]);
 export const isOwnerTool = (name) => OWNER_TOOLS.includes(name);
 const record = (value) => value && typeof value === "object" && !Array.isArray(value);

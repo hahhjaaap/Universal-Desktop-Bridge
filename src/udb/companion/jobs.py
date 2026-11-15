@@ -99,13 +99,11 @@ class Task:
 
     def stop(self):
         with self.lock:
-            changed = False
+            # A repeated cancellation request must not create an extra dirty
+            # journal checkpoint. The worker is still terminated on every
+            # call if present, so cleanup never relies on a cached outcome.
             if not self.committed and not self.cancel.is_set():
                 self.cancel.set()
-                changed = True
-            if self.worker:
-                changed = True
-            if changed:
                 self._checkpoint_version += 1
             if self.worker:
                 self.worker.terminate()

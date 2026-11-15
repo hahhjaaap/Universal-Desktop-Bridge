@@ -105,9 +105,7 @@ def test_41_valid_job_keeps_approval_and_source_manifest(project, monkeypatch):
     assert proposal["language"] == "python"
 
 
-def test_42_snapshot_preserves_2000_source_file_cap(
-    project, monkeypatch
-):
+def test_42_snapshot_preserves_2000_source_file_cap(project, monkeypatch):
     agent, root = project
     (root / "hello.py").unlink()
     for index in range(2001):

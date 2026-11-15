@@ -229,7 +229,7 @@ def test_windows_powershell_two_rejected_requests_keep_worker_alive():
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     try:
-        data, stderr = process.communicate((json.dumps(fixture) + "\n") * 2, timeout=18)
+        data, stderr = process.communicate(((json.dumps(fixture) + "\n") * 2).encode("utf-8"), timeout=18)
     except subprocess.TimeoutExpired:
         process.kill()
         process.communicate()

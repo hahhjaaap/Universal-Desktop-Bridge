@@ -386,6 +386,7 @@ public static class UDBEdit {
  [DllImport("user32.dll", EntryPoint="SendMessageTimeoutW", CharSet=CharSet.Unicode)] public static extern IntPtr ReadText(IntPtr h, uint m, UIntPtr w, StringBuilder b, uint flags, uint ms, out UIntPtr result);
 }
 '@
+            }
             $handle=[IntPtr][long]$target.Current.NativeWindowHandle
             $class=[Text.StringBuilder]::new(256);[UDBEdit]::GetClassName($handle,$class,256)>$null
             [uint32]$ownerPid=0;[UDBEdit]::GetWindowThreadProcessId($handle,[ref]$ownerPid)>$null

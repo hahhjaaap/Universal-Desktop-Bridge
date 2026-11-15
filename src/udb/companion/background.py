@@ -425,14 +425,18 @@ class Background(SearchMixin):
                     stack.pop()
                     continue
                 p = self.files.path(str(p))
-                meta = identity(p)
-                is_dir = p.is_dir()
+                # ScopedFiles checks links/ownership. Reuse one fresh stat
+                # result for source identity and file/directory type instead
+                # of calling stat again for is_file() and is_dir().
+                info = p.stat()
+                meta = _identity_from_stat(info)
+                is_dir = stat.S_ISDIR(info.st_mode)
                 entries.append(
                     (p, p.relative_to(src) if p != src else Path("."), is_dir, meta)
                 )
                 if len(entries) > 20000:
                     raise ValueError("Tree exceeds 20,000 entries")
-                if p.is_file():
+                if stat.S_ISREG(info.st_mode):
                     total += meta[2]
                     if total > MAX_LARGE:
                         raise ValueError("Tree exceeds 16 GiB total limit")

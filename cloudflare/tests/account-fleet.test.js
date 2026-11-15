@@ -238,7 +238,7 @@ test("issuer-sub Fleet works with a signed JWT when Cloudflare omits ctx.access"
   let fetched = 0;
   const fetchKeys = async (url, opts) => {
     assert.equal(url, TEAM + "/cdn-cgi/access/certs");
-    assert.equal(opts.redirect, "error");
+    assert.equal(opts.redirect, "manual");
     fetched++;
     return Response.json({ keys: [{ ...jwk, kid: "fleet-signed-test" }] });
   };

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .browser_actions import dispatch_browser
 from .core import PolicyError, reject_links
+from .fastpath import compile_plan, gate, is_mutation, matches
 from .host_client import _read_json, atomic_json, enabled
 from .resources import require_capacity
 
@@ -54,14 +55,22 @@ def prepare(args):
     steps = args.get("steps")
     if not isinstance(steps, list) or not 1 <= len(steps) <= 12:
         raise PolicyError("Browser batch requires 1..12 steps")
-    for step in steps:
-        if not isinstance(step, dict) or not isinstance(step.get("action"), str):
-            raise PolicyError("Every browser step requires an action")
-        action = step["action"]
-        if action not in FIELDS or set(step) - (FIELDS[action] | {"action"}):
-            raise PolicyError("Unsupported/nested browser step or unknown fields")
+    fastpath = args.get("action") == "fastpath"
+    if fastpath:
+        compile_plan(steps, FIELDS)
+    else:
+        for step in steps:
+            if not isinstance(step, dict) or not isinstance(step.get("action"), str):
+                raise PolicyError("Every browser step requires an action")
+            action = step["action"]
+            if action not in FIELDS or set(step) - (FIELDS[action] | {"action"}):
+                raise PolicyError("Unsupported/nested browser step or unknown fields")
+    # Preserve the exact old digest for legacy batch receipts.
+    envelope = {"tab_id": args.get("tab_id", ""), "steps": steps}
+    if fastpath:
+        envelope["fastpath"] = 1
     raw = json.dumps(
-        {"tab_id": args.get("tab_id", ""), "steps": steps},
+        envelope,
         sort_keys=True,
         ensure_ascii=True,
         allow_nan=False,
@@ -105,6 +114,9 @@ class BatchRunner:
         sid, rid = args.get("session_id"), args.get("request_id")
         path = receipt_path(service.folder, sid, rid)
         steps, digest = prepare(args)
+        fastpath = args.get("action") == "fastpath"
+        plan = compile_plan(steps, FIELDS) if fastpath else None
+        observed = {}
         if path.exists():
             old = _read_json(path, 4096)
             if old.get("digest") != digest:
@@ -176,9 +188,46 @@ class BatchRunner:
                     raise PolicyError("Browser control changed; inspect session")
                 browser.deadline = deadline
                 tick = time.monotonic()
+                current = plan[index] if fastpath else None
+                if current is not None:
+                    try:
+                        execute = gate(current, observed)
+                    except PolicyError as exc:
+                        results.append(
+                            {
+                                "index": index,
+                                "action": step["action"],
+                                "step_id": current.step_id,
+                                "ok": False,
+                                "error_type": type(exc).__name__,
+                                "error": "FastPath verification evidence unavailable",
+                            }
+                        )
+                        state, failed_index = "failed", index
+                        break
+                    if not execute:
+                        observed[current.step_id] = {
+                            "skipped": True,
+                            "ok": True,
+                            "value": None,
+                        }
+                        results.append(
+                            {
+                                "index": index,
+                                "action": step["action"],
+                                "step_id": current.step_id,
+                                "ok": True,
+                                "skipped": True,
+                                "reason": "condition_or_dependency_not_met",
+                            }
+                        )
+                        row["considered_steps"] = len(results)
+                        atomic_json(path, row)
+                        continue
                 try:
+                    call_args = current.arguments if current is not None else step
                     value = dispatch_browser(
-                        browser, dict(step, tab_id=args.get("tab_id", ""))
+                        browser, dict(call_args, tab_id=args.get("tab_id", ""))
                     )
                     uncertain = isinstance(value, dict) and any(
                         value.get(key) is True
@@ -195,15 +244,36 @@ class BatchRunner:
                             },
                             False,
                         )
-                    results.append(
-                        {
-                            "index": index,
-                            "action": step["action"],
+                    verified = True
+                    if ok and current is not None and current.verify is not None:
+                        try:
+                            verified = matches(value, current.verify)
+                        except PolicyError:
+                            verified = False
+                        if not verified:
+                            ok = False
+                            # Input may have succeeded before verification
+                            # failed: never claim the result is safe to retry.
+                            uncertain = is_mutation(step["action"])
+                    entry = {
+                        "index": index,
+                        "action": step["action"],
+                        "ok": ok,
+                        "elapsed_ms": round((time.monotonic() - tick) * 1000, 2),
+                    }
+                    if current is None or current.return_result:
+                        entry["result"] = value
+                    if current is not None:
+                        entry.update(
+                            step_id=current.step_id,
+                            verified=verified,
+                        )
+                        observed[current.step_id] = {
+                            "skipped": False,
                             "ok": ok,
-                            "result": value,
-                            "elapsed_ms": round((time.monotonic() - tick) * 1000, 2),
+                            "value": value,
                         }
-                    )
+                    results.append(entry)
                     if not ok:
                         state, failed_index = (
                             "outcome_unknown" if uncertain else "failed",
@@ -215,6 +285,7 @@ class BatchRunner:
                         {
                             "index": index,
                             "action": step["action"],
+                            **({"step_id": current.step_id} if current is not None else {}),
                             "ok": False,
                             "error_type": type(exc).__name__,
                             "error": "Browser step failed; inspect page before retrying a mutation",
@@ -222,7 +293,10 @@ class BatchRunner:
                     )
                     state, failed_index = "outcome_unknown", index
                     break
-                row["completed_steps"] = len(results)
+                row["completed_steps"] = sum(
+                    1 for item in results if item["ok"] and not item.get("skipped")
+                )
+                row["considered_steps"] = len(results)
                 atomic_json(path, row)
                 capture = getattr(service, "captures", None)
                 if capture:
@@ -232,10 +306,11 @@ class BatchRunner:
             results.append(
                 {"index": failed_index, "ok": False, "error_type": type(exc).__name__}
             )
-        completed = sum(r["ok"] for r in results)
+        completed = sum(r["ok"] and not r.get("skipped") for r in results)
         row.update(
             state=state,
             completed_steps=completed,
+            considered_steps=len(results),
             finished_at=time.time(),
             failed_index=failed_index,
         )
@@ -244,9 +319,11 @@ class BatchRunner:
         result = {
             "request_id": rid,
             "state": state,
+            **({"mode": "fastpath"} if fastpath else {}),
             "ok": state == "completed",
             "results": results,
             "completed_steps": completed,
+            "considered_steps": len(results),
             "failed_index": failed_index,
             "replayed": False,
             "elapsed_ms": round((time.monotonic() - started) * 1000, 2),

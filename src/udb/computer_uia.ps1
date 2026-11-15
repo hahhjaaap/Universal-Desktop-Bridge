@@ -17,7 +17,7 @@ try {
     $raw=[Console]::In.ReadToEnd()
     if($raw.Length -gt 100000){throw 'Request too large'}
     $r=$raw|ConvertFrom-Json
-    if($r.mode -notin @('snapshot','set_value','invoke','uia_focus','wait_for','read_text','set_checked','select','expand','collapse','scroll_into_view')){throw 'Unsupported UIA mode'}
+    if($r.mode -notin @('snapshot','set_value','invoke','uia_focus','wait_for','read_text','set_checked','select','expand','collapse','scroll_into_view','poll_chatgpt_reply')){throw 'Unsupported UIA mode'}
     $root=[Windows.Automation.AutomationElement]::FromHandle([IntPtr][long]$r.hwnd)
     if(!$root -or $root.Current.ProcessId -ne [int]$r.pid){throw 'Observed window changed'}
     # Initialize AutomationElement before registering the standard .NET proxies.
@@ -29,6 +29,70 @@ try {
     # created before the standard Win32 proxies were available.
     $root=[Windows.Automation.AutomationElement]::FromHandle([IntPtr][long]$r.hwnd)
     if(!$root -or $root.Current.ProcessId -ne [int]$r.pid){throw 'Observed window changed'}
+    if($r.mode -eq 'poll_chatgpt_reply') {
+        # Dedicated read-only post-submit observer. No browser CDP, cross-tab
+        # search, credentials, arbitrary selectors, clipboard or user input.
+        if([string]::IsNullOrWhiteSpace([string]$r.text) -or
+            ([string]$r.text).Length -gt 5000 -or
+            [int]$r.wait_ms -lt 500 -or [int]$r.wait_ms -gt 10000 -or
+            [int]$r.limit -lt 1 -or [int]$r.limit -gt 5000) {
+            throw 'Invalid ChatGPT reply observation limits'
+        }
+        $expected=[string]$r.text
+        $wait=[int]$r.wait_ms
+        $maxText=[int]$r.limit
+        $condition=[Windows.Automation.PropertyCondition]::new(
+            [Windows.Automation.AutomationElement]::ControlTypeProperty,
+            [Windows.Automation.ControlType]::Text
+        )
+        $timer=[Diagnostics.Stopwatch]::StartNew()
+        $response=''
+        $complete=$false
+        do {
+            # Re-validate observed window and process before each UIA read.
+            if(!$root.Current.IsEnabled -or $root.Current.ProcessId -ne [int]$r.pid) {
+                throw 'Observed Chrome window changed during reply'
+            }
+            $items=$root.FindAll([Windows.Automation.TreeScope]::Descendants,$condition)
+            $sent=$false
+            $assistant=$false
+            $done=$false
+            $response=''
+            foreach($node in $items) {
+                if($node.Current.IsPassword){continue}
+                $value=[string]$node.Current.Name
+                if($value -in @('Đã hoàn tất phản hồi','Response complete','Response finished')) {
+                    $done=$true
+                }
+                if($value -ceq $expected) { $sent=$true; continue }
+                if($sent -and $value -in @('ChatGPT đã nói:','ChatGPT said:')) {
+                    $assistant=$true; continue
+                }
+                if($assistant -and !$response -and $value -and
+                    $value -notin @('Hỏi ChatGPT','Ask ChatGPT','Sao chép',
+                                    'Copy','Phản hồi mới nhất','Latest response')) {
+                    $response=$value
+                }
+            }
+            if($sent -and $assistant -and $response -and $done) {
+                $complete=$true; break
+            }
+            if($timer.ElapsedMilliseconds -ge $wait){break}
+            Start-Sleep -Milliseconds 120
+        } while($true)
+        $truncated=$response.Length -gt $maxText
+        if($truncated) {
+            $n=$maxText
+            if($n -gt 0 -and [char]::IsHighSurrogate($response[$n-1]) -and
+                [char]::IsLowSurrogate($response[$n])) {$n--}
+            $response=$response.Substring(0,$n)
+        }
+        @{ok=$true;completed=$complete;reply=$(if($complete){$response}else{''});
+          elapsed_ms=$timer.ElapsedMilliseconds;truncated=$truncated;
+          timeout=(!$complete);replay_safe=$false} |
+            ConvertTo-Json -Compress -Depth 3
+        exit 0
+    }
     if($r.mode -eq 'snapshot') {
       $view='control'
       foreach($walker in @([Windows.Automation.TreeWalker]::ControlViewWalker,[Windows.Automation.TreeWalker]::RawViewWalker)) {

@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import os
-import shutil
+import stat
 import uuid
 from pathlib import Path
 
@@ -109,20 +109,29 @@ class Files:
         st = p.stat()
         return dict(
             path=str(p),
-            is_directory=p.is_dir(),
+            is_directory=stat.S_ISDIR(st.st_mode),
             bytes=st.st_size,
             modified=st.st_mtime,
-            sha256=self.digest(p) if p.is_file() and st.st_size <= MAX_FILE else None,
+            sha256=self.digest(p)
+            if stat.S_ISREG(st.st_mode) and st.st_size <= MAX_FILE
+            else None,
         )
 
-    def _list(self, p, offset, limit):
+    @staticmethod
+    def _bounded_range(offset, limit, max_offset, max_limit, message):
+        # bool subclasses int; reject it for all file pagination APIs.
         if (
-            not isinstance(offset, int)
-            or not 0 <= offset <= 10000
-            or not isinstance(limit, int)
-            or not 1 <= limit <= 500
+            type(offset) is not int
+            or type(limit) is not int
+            or not 0 <= offset <= max_offset
+            or not 1 <= limit <= max_limit
         ):
-            raise PolicyError("Listing offset 0..10000; limit 1..500")
+            raise PolicyError(message)
+
+    def _list(self, p, offset, limit):
+        self._bounded_range(
+            offset, limit, 10000, 500, "Listing offset 0..10000; limit 1..500"
+        )
         rows = []
         skipped = 0
         more = False
@@ -138,7 +147,11 @@ class Files:
                         break
                     st = q.stat()
                     rows.append(
-                        dict(name=q.name, is_directory=q.is_dir(), bytes=st.st_size)
+                        dict(
+                            name=q.name,
+                            is_directory=stat.S_ISDIR(st.st_mode),
+                            bytes=st.st_size,
+                        )
                     )
                 except (OSError, PolicyError):
                     continue
@@ -150,13 +163,9 @@ class Files:
         )
 
     def _read(self, p, encoding, offset, limit):
-        if (
-            not isinstance(offset, int)
-            or not 0 <= offset <= MAX_FILE
-            or not isinstance(limit, int)
-            or not 1 <= limit <= 512 * 1024
-        ):
-            raise PolicyError("Read offset 0..8 MiB; limit 1..512 KiB")
+        self._bounded_range(
+            offset, limit, MAX_FILE, 512 * 1024, "Read offset 0..8 MiB; limit 1..512 KiB"
+        )
         if encoding not in ("base64", "utf-8"):
             raise PolicyError("Encoding must be utf-8 or base64")
         checksum, size, part = self._scan(p, offset, limit)
@@ -240,7 +249,17 @@ class Files:
             reject_links(folder)
             folder.mkdir(exist_ok=True)
             recovery = uuid.uuid4().hex
-            shutil.copyfile(p, folder / recovery)
+            backup = folder / recovery
+            try:
+                with backup.open("xb") as stream:
+                    backup_sha, _, _ = self._scan(p, sink=stream)
+                    if backup_sha != expected_sha256:
+                        raise PolicyError("File changed during recovery backup")
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            except Exception:
+                backup.unlink(missing_ok=True)
+                raise
         temp = p.with_name(".udb-" + uuid.uuid4().hex + ".tmp")
         try:
             with temp.open("xb") as stream:

@@ -116,7 +116,10 @@ def command(agent, op, **args):
     if op == "computer" and args.get("mode") == "status" and not s.get("worker_ready"):
         from .computer import status_report
 
-        return status_report(agent, worker_ready=False)
+        return status_report(
+            agent, worker_ready=False,
+            brief=args.get("arguments", {}).get("brief") is True,
+        )
     if not s.get("worker_ready") and op not in ("close", "stop_all"):
         raise PolicyError("Run udb to start the background agent first")
     if op == "computer":

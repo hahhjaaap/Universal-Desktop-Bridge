@@ -47,6 +47,55 @@ Multi-machine gateways must pass a verified `device_id` and explicitly
 grant the new tool in Cloudflare's owner tool allowlist. Source updates do not
 install a new Windows binary or deploy the Cloudflare Worker automatically.
 
+## ChatGPT roundtrip in a single UDB call (experimental)
+
+`computer_desktop(action="chatgpt_roundtrip")` combines a verified send
+with a **local** UI Automation reply observer, avoiding another remote MCP
+call every time ChatGPT's answer changes. It is designed for an **already
+open, blank Vietnamese ChatGPT conversation** on a previously observed
+Chrome window. It does not open the site, authenticate an account, create a
+new chat, or wake an inactive second ChatGPT instance.
+
+```json
+{
+  "action": "chatgpt_roundtrip",
+  "window_id": "current-id-from-computer_desktop-list",
+  "text": "Hello",
+  "wait_ms": 6000
+}
+```
+
+The operation:
+1. Verifies that UI Automation exposes an untruncated `ChatGPT`
+   document and exactly one `Hỏi ChatGPT` editor, with no prior assistant
+   response in the observed view. If it cannot verify a blank conversation,
+   it refuses before modifying the page.
+2. Uses the existing owner-authorized `verified_submit` path. The
+   editor must be empty; typed text must match the requested text exactly
+   before the uniquely named `Gửi` button is invoked **once**.
+3. Polls the same window **locally** for the newly displayed response and
+   completion status, for `wait_ms=500..10000`. This makes one remote tool
+   request rather than a separate Cloudflare relay request for each poll.
+4. Returns a best-effort visible reply (currently a single UIA text block),
+   `reply_verified`, `status=complete|reply_timeout`, elapsed milliseconds
+   for local submission/observer and `replay_safe=false`.
+
+This is a UI automation experiment, not a supported ChatGPT-to-ChatGPT
+agent service. It depends on the current Chrome accessibility tree,
+Vietnamese labels, an unlocked interactive desktop, the existing owner's
+`udb --access computer` grant, and the local user-input pause. Other
+languages, UI changes, very long/structured replies and browser state
+changes may cause a refusal or timeout. A timeout **after** invoking
+`Gửi` does not mean the text was never sent; never automatically retry it.
+Do not interpret UIA-visible text as verified account identity.
+
+**Latency SLO (goal, not a promise):** 5–6 seconds measured by the
+requesting client from tool start to usable reply on an already prepared
+ChatGPT tab. The actual completion time includes Cloudflare/MCP transport
+and ChatGPT generation; local `timings_ms` exclude that transport. Compare
+median/p95 over repeated authorized tests. For a new tab or cold page,
+measure and report initialization separately.
+
 ## Fast verified desktop submission
 
 Use `computer_desktop(action="verified_submit")` when a visible owner-controlled

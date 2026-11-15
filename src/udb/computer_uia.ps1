@@ -1,4 +1,4 @@
-# Fixed current-user UI Automation helper. Caller checks a local owner grant.
+﻿# Fixed current-user UI Automation helper. Caller checks a local owner grant.
 # No arbitrary scripts/selectors, password reads, clipboard, elevation or input hooks.
 $ErrorActionPreference='Stop'
 [Console]::InputEncoding=[Text.UTF8Encoding]::new($false)

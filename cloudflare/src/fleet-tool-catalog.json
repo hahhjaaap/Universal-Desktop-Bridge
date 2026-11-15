@@ -821,6 +821,7 @@
             "batch",
             "displays",
             "open_chrome_tab",
+            "open_chatgpt",
             "verified_submit",
             "snapshot",
             "set_value",

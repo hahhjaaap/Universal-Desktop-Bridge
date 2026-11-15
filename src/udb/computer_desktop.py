@@ -615,6 +615,23 @@ class Desktop:
             return self.open_chrome_tab(text)
         if action == "open_chatgpt":
             return self.open_chatgpt()
+        if action == "chatgpt_roundtrip" and not window_id:
+            # Resolve only an already-foreground, visible, real Chrome window.
+            # A unique local observation avoids another remote list RPC.
+            rows = self.listing()["windows"]
+            candidates = [
+                row
+                for row in rows
+                if row["title"] == "ChatGPT - Google Chrome"
+                and row["foreground"]
+                and not row["minimized"]
+                and self._chrome_image_path(row["pid"]) is not None
+            ]
+            if len(candidates) != 1:
+                raise PolicyError(
+                    "No unique foreground ChatGPT Chrome window; nothing sent"
+                )
+            window_id = candidates[0]["window_id"]
         hwnd = self.resolve(
             window_id,
             focus=action

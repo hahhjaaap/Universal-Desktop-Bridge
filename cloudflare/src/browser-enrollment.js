@@ -12,7 +12,9 @@ const fail = (status, error) => json({ error }, status);
 const stub = env => env.DEVICES.get(env.DEVICES.idFromName(HUB));
 const enabled = env => enrollmentEnabled(env) && !!ownerEnrollmentConfig(env) &&
   env.UDB_AUTH_MODE === "cloudflare-access" && !!accessConfig(env) &&
-  env.UDB_ACCESS_AUD !== env.UDB_ENROLLMENT_ACCESS_AUD && env.UDB_TENANT_POLICY === undefined;
+  env.UDB_ACCESS_AUD !== env.UDB_ENROLLMENT_ACCESS_AUD && env.UDB_TENANT_POLICY === undefined &&
+  (env.UDB_FLEET_REQUIRE_REQUEST_PIN !== "true" ||
+    /^[a-f0-9]{32}$/.test(env.UDB_FLEET_ALLOWED_REQUEST_ID || ""));
 const ID = /^[a-f0-9]{32}$/;
 const label = s => typeof s === "string" && /^[A-Za-z0-9 _.-]{1,48}$/.test(s);
 const escape = s => String(s).replace(/[&<>"']/g, c =>
@@ -135,6 +137,11 @@ export async function routeBrowserEnrollment(request, env, forward, fetchImpl = 
           !label(b.device_name) || (link ? !ID.test(b.device_id) ||
           !fleetEnabled(env) : !HASH.test(b.device_token_sha256) || b.mode !== undefined))
         return fail(400, "invalid_request");
+      // Isolated Fleet lab: only the specifically pre-authorized Windows
+      // request may create or resume a pending approval. No public enrollment.
+      if (env.UDB_FLEET_REQUIRE_REQUEST_PIN === "true" &&
+          b.request_id !== env.UDB_FLEET_ALLOWED_REQUEST_ID)
+        return fail(404, "enrollment_not_allowed");
       let tokenHash = b.device_token_sha256;
       if (link) {
         const token = bearer(request);

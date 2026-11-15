@@ -371,6 +371,31 @@ def spreadsheet(files, a, output):
             from udb.companion.accounting import accounting_spreadsheet
 
             return accounting_spreadsheet(files, a, output)
+        # Reject invalid ranges/cell dictionaries before parsing the XLSX ZIP.
+        read_range = a.get("range", "A1:J50")
+        bounds = None
+        if action == "read":
+            bounds = range_boundaries(read_range)
+            x, y, right, bottom = bounds
+            if (
+                any(v is None for v in bounds)
+                or x < 1
+                or y < 1
+                or right < x
+                or bottom < y
+                or right > 16384
+                or bottom > 1048576
+                or (right - x + 1) * (bottom - y + 1) > 5000
+            ):
+                raise ValueError("Read range limit 5000 cells")
+        if action == "edit_cells":
+            cells = a.get("cells", {})
+            if not isinstance(cells, dict) or not 1 <= len(cells) <= 10000:
+                raise ValueError("Provide 1..10000 cell edits")
+            for address in cells:
+                if not re.fullmatch("[A-Za-z]{1,3}[1-9][0-9]{0,6}", address):
+                    raise ValueError("Invalid cell address")
+        allow_formulas = a.get("allow_formulas", False)
         if action == "write":
             book = openpyxl.Workbook()
             book.remove(book.active)
@@ -389,7 +414,7 @@ def spreadsheet(files, a, output):
                         put_cell(
                             sheet.cell(row_index, col),
                             value,
-                            a.get("allow_formulas", False),
+                            allow_formulas,
                         )
                         count += 1
                         if count > 10000:
@@ -412,24 +437,12 @@ def spreadsheet(files, a, output):
                 formulas_evaluated=False,
             )
         if action in ("read", "edit_cells"):
-            name = a.get("sheet") or book.sheetnames[0]
+            name = a.get("sheet") or book.worksheets[0].title
             if name not in book:
                 raise ValueError("Unknown sheet")
             sheet = book[name]
             if action == "read":
-                bounds = range_boundaries(a.get("range", "A1:J50"))
                 x, y, right, bottom = bounds
-                if (
-                    any(v is None for v in bounds)
-                    or x < 1
-                    or y < 1
-                    or right < x
-                    or bottom < y
-                    or right > 16384
-                    or bottom > 1048576
-                    or (right - x + 1) * (bottom - y + 1) > 5000
-                ):
-                    raise ValueError("Read range limit 5000 cells")
                 values = []
                 cropped = 0
                 for row in sheet.iter_rows(
@@ -439,25 +452,24 @@ def spreadsheet(files, a, output):
                     max_col=right,
                     values_only=True,
                 ):
-                    cropped += sum(isinstance(v, str) and len(v) > 2000 for v in row)
-                    values.append([cell_value(v) for v in row])
+                    formatted = []
+                    for value in row:
+                        if isinstance(value, str) and len(value) > 2000:
+                            cropped += 1
+                        formatted.append(cell_value(value))
+                    values.append(formatted)
                 return dict(
                     sheet=name,
-                    range=a.get("range", "A1:J50"),
+                    range=read_range,
                     rows=values,
                     truncated_cells=cropped,
                     formulas_evaluated=False,
                 )
-            cells = a.get("cells", {})
-            if not isinstance(cells, dict) or not 1 <= len(cells) <= 10000:
-                raise ValueError("Provide 1..10000 cell edits")
             for address, value in cells.items():
-                if not re.fullmatch("[A-Za-z]{1,3}[1-9][0-9]{0,6}", address):
-                    raise ValueError("Invalid cell address")
                 cell = sheet[address]
                 if cell.column > 16384 or cell.row > 1048576:
                     raise ValueError("Cell outside XLSX limits")
-                put_cell(cell, value, a.get("allow_formulas", False))
+                put_cell(cell, value, allow_formulas)
         book.save(output)
         return dict(sheets=book.sheetnames, formulas_evaluated=False)
     finally:

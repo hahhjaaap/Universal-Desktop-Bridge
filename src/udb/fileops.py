@@ -6,6 +6,7 @@ import fnmatch
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
+from itertools import islice
 from pathlib import Path
 
 from .core import BLOCK_DIRS, MAX_TEXT, SOURCE_EXT, PolicyError
@@ -72,7 +73,13 @@ def search_files(agent, project, path=".", pattern="*", text="", limit=100):
         try:
             agent.path(project, folder.relative_to(root).as_posix())
             with os.scandir(folder) as entries:
-                for entry in entries:
+                # Bounded per-directory ordering: at most the remaining scan
+                # allowance plus a sentinel. Never sort an unbounded tree.
+                ordered = sorted(
+                    islice(entries, max(1, 10001 - scanned)),
+                    key=lambda entry: (entry.name.casefold(), entry.name),
+                )
+                for entry in ordered:
                     scanned += 1
                     if scanned > 10000 or time.monotonic() >= deadline:
                         truncated = True

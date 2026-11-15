@@ -45,8 +45,8 @@ function claims(segment) {
   } catch { throw new AuthError(); }
 }
 
-async function getKeys(url, fetchImpl) {
-  if (cachedJwks.url === url && Date.now() < cachedJwks.until)
+async function getKeys(url, fetchImpl, refresh = false) {
+  if (!refresh && cachedJwks.url === url && Date.now() < cachedJwks.until)
     return cachedJwks.keys;
   let response;
   let stage = "fetch";
@@ -121,11 +121,21 @@ export async function verifiedAccessIdentity(request, env, fetchImpl = fetch) {
     throw new AuthError("access_assertion_time");
   if (!emailSubject(payload.email)) throw new AuthError("access_assertion_identity");
   const url = config.team + "/cdn-cgi/access/certs";
-  const keys = await getKeys(url, fetchImpl);
-  const match = keys.filter((key) => key && key.kid === head.kid &&
+  const fromCache = cachedJwks.url === url && Date.now() < cachedJwks.until;
+  let keys = await getKeys(url, fetchImpl);
+  const matchingKeys = values => values.filter((key) =>
+    key && key.kid === head.kid &&
     key.kty === "RSA" && (key.alg === undefined || key.alg === "RS256") &&
     (key.use === undefined || key.use === "sig") &&
     typeof key.n === "string" && typeof key.e === "string");
+  let match = matchingKeys(keys);
+  // Cloudflare Access can rotate its signing key inside our short cache TTL.
+  // Refresh metadata once for an unknown kid; never bypass JWT verification.
+  // A duplicate/invalid JWK fails closed without an extra network request.
+  if (match.length === 0 && fromCache) {
+    keys = await getKeys(url, fetchImpl, true);
+    match = matchingKeys(keys);
+  }
   if (match.length !== 1) throw new AuthError("access_assertion_key");
   let valid = false;
   try {

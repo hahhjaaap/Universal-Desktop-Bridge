@@ -108,7 +108,8 @@ def make_server(agent: Agent):
         """List fresh project permissions. Optional pagination; limit=0 returns all."""
         return (
             agent.projects(offset=offset, limit=limit)
-            if offset or limit else agent.projects()
+            if offset or limit
+            else agent.projects()
         )
 
     @mcp.tool(annotations=read)
@@ -413,10 +414,19 @@ def make_server(agent: Agent):
         # Never cache owner-enabled status or private session metadata.
         resource = health["resources"]
         keys = (
-            "at", "cpu_percent", "ram_percent", "total_mib",
-            "available_mib", "commit_percent", "commit_available_mib",
-            "paused", "admission_ready", "reason", "pressure_causes",
-            "light_operations_ready", "light_reason",
+            "at",
+            "cpu_percent",
+            "ram_percent",
+            "total_mib",
+            "available_mib",
+            "commit_percent",
+            "commit_available_mib",
+            "paused",
+            "admission_ready",
+            "reason",
+            "pressure_causes",
+            "light_operations_ready",
+            "light_reason",
         )
         return {
             "enabled": health["enabled"],
@@ -586,7 +596,11 @@ def make_server(agent: Agent):
     @mcp.tool(annotations=read)
     def computer_status(brief: bool = False) -> dict:
         """Inspect current-user access and job capacity; brief omits the job list."""
-        return computer_call("status", {"brief": True}) if brief else computer_call("status")
+        return (
+            computer_call("status", {"brief": True})
+            if brief
+            else computer_call("status")
+        )
 
     @mcp.tool(
         annotations=ToolAnnotations(

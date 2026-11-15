@@ -25,10 +25,12 @@ def fake_desktop(previous=False, incomplete=False):
                 },
             ]
             if previous:
-                rows.append({
-                    "control_type": "ControlType.Text",
-                    "name": "ChatGPT đã nói:",
-                })
+                rows.append(
+                    {
+                        "control_type": "ControlType.Text",
+                        "name": "ChatGPT đã nói:",
+                    }
+                )
             return {"elements": rows, "truncated": False}
         if action == "poll_chatgpt_reply":
             return {
@@ -81,12 +83,15 @@ def test_timeout_preserves_uncertain_submission_without_retry():
     assert [op[0] for op in ops].count("verified_submit") == 1
 
 
-@pytest.mark.parametrize("message,wait_ms", [
-    ("", 6000),
-    ("Hello", 10001),
-    ("Hello", 0),
-    ("Hello", True),
-])
+@pytest.mark.parametrize(
+    "message,wait_ms",
+    [
+        ("", 6000),
+        ("Hello", 10001),
+        ("Hello", 0),
+        ("Hello", True),
+    ],
+)
 def test_bad_request_rejected_before_ui(message, wait_ms):
     desktop, ops = fake_desktop()
     with pytest.raises(PolicyError):
@@ -101,11 +106,13 @@ def test_ambiguous_editor_refused_without_sending():
     def duplicate(hwnd, action, **kwargs):
         result = original(hwnd, action, **kwargs)
         if action == "snapshot":
-            result["elements"].append({
-                "control_type": "ControlType.Edit",
-                "name": "Hỏi ChatGPT",
-                "offscreen": False,
-            })
+            result["elements"].append(
+                {
+                    "control_type": "ControlType.Edit",
+                    "name": "Hỏi ChatGPT",
+                    "offscreen": False,
+                }
+            )
         return result
 
     desktop.uia = duplicate

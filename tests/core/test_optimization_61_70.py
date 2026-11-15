@@ -164,8 +164,12 @@ def test_68_invalid_upload_preflight_never_contacts_browser(selector, data):
     )
     with pytest.raises(PolicyError):
         browser_files.upload(
-            browser, "tab", selector, SimpleNamespace(name="upload.txt"),
-            data, "https://example.com",
+            browser,
+            "tab",
+            selector,
+            SimpleNamespace(name="upload.txt"),
+            data,
+            "https://example.com",
         )
 
 

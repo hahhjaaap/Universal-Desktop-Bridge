@@ -541,9 +541,7 @@ class Desktop:
         )
         helper = _UIA_HELPER
         deadline = 7 + (
-            wait_ms / 1000
-            if mode in ("wait_for", "poll_chatgpt_reply")
-            else 0
+            wait_ms / 1000 if mode in ("wait_for", "poll_chatgpt_reply") else 0
         )
         from .uia_worker import PersistentUIA, enabled
 

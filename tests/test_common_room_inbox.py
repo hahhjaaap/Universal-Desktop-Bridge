@@ -2,7 +2,6 @@
 
 import argparse
 import importlib
-import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 

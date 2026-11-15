@@ -725,7 +725,14 @@ class Desktop:
                 not isinstance(row, dict)
                 or set(row) - fields
                 or row.get("action")
-                in ("list", "batch", "screenshot", "displays", "open_chrome_tab", "open_chatgpt")
+                in (
+                    "list",
+                    "batch",
+                    "screenshot",
+                    "displays",
+                    "open_chrome_tab",
+                    "open_chatgpt",
+                )
                 or "action" not in row
             ):
                 raise PolicyError("Invalid/nested batch step; capture/list separately")

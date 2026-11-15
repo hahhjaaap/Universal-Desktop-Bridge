@@ -22,8 +22,8 @@ from .cloud_pair import NoRedirect
 from .config import activate, checked
 from .launcher import child_environment, command
 from .onboarding import CHATGPT_URL, attended_console, paired_cloud
-from .private_enrollment import PRIVATE_RELAY, _request_json, setup_relay
-from .setup_enrollment import EnrollmentError, enroll, link_existing
+from .private_enrollment import FLEET_TEST_RELAY, PRIVATE_RELAY, _request_json, setup_relay
+from .setup_enrollment import EnrollmentError, enroll, link_existing, prepare_pending
 
 
 class SetupError(ValueError):
@@ -336,6 +336,21 @@ def run(
                     caps.get("protocol") != 2
                     or caps.get("browser_enrollment") is not True
                 ):
+                    if (
+                        caps.get("protocol") == 2
+                        and setup_relay() == FLEET_TEST_RELAY
+                    ):
+                        # No public request is sent while enrollment is locked.
+                        # A non-secret ID lets the relay operator pin ONLY this
+                        # device before this same setup command is resumed.
+                        pending = prepare_pending(settings.home)
+                        print("Fleet canary enrollment is locked.")
+                        print("Pending device ID: " + pending["id"])
+                        print(
+                            "Approve only this ID in the isolated Worker config, "
+                            "then rerun udb setup to resume. No device token was printed."
+                        )
+                        return 2
                     raise SetupError(
                         "Relay owner must configure private browser enrollment first; no URL or admin key is needed on Windows"
                     )

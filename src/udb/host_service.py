@@ -13,6 +13,7 @@ import threading
 import time
 import uuid
 
+from . import hyperspeed_perf as perf
 from .browser_actions import dispatch_browser
 from .browser_batch import BatchRunner
 from .browser_capture import CaptureCache
@@ -45,6 +46,7 @@ def pending_inbox_commands(folder):
 class HostService:
     def __init__(self, agent):
         self.agent = agent
+        perf.configure(agent.state)
         self.folder = agent.state / "host"
         reject_links(self.folder)
         for name in ("inbox", "replies", "profiles"):
@@ -537,13 +539,22 @@ class HostService:
                         "started_at": time.time(),
                     }
                     started, succeeded = time.monotonic(), False
+                    perf_started = time.perf_counter_ns()
                     try:
                         self.publish()
-                        result = self.dispatch(op, args)
+                        with perf.rpc_scope(data["id"]):
+                            result = self.dispatch(op, args)
                         succeeded = not (
                             isinstance(result, dict) and result.get("ok") is False
                         )
                     finally:
+                        perf.interval(
+                            "host.dispatch",
+                            "execution",
+                            perf_started,
+                            rpc_id=data["id"],
+                            ok=succeeded,
+                        )
                         self.last_operation = dict(
                             self.operation_detail,
                             ok=succeeded,

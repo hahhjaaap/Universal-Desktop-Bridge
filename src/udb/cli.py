@@ -318,6 +318,12 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         else:
             command = subcommands.add_parser(name)
         add_settings(command, suppress=True)
+        if name == "tools":
+            command.add_argument(
+                "--names",
+                action="store_true",
+                help="Print only the public tool names and counts (smaller JSON)",
+            )
         if name == "setup":
             command.add_argument(
                 "--status", action="store_true", help="Read-only setup diagnostics"
@@ -738,7 +744,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         if action == "tools":
             from .registry import catalog
 
-            print(json.dumps({"version": VERSION, **catalog()}, ensure_ascii=True))
+            inventory = catalog()
+            if getattr(args, "names", False):
+                # Preserve the full inventory by default; opt into a bounded,
+                # deterministic discovery payload for quick CLI inspection.
+                result = {
+                    "version": VERSION,
+                    "tool_count": inventory["tool_count"],
+                    "backend_count": inventory["backend_count"],
+                    "names": sorted(tool["name"] for tool in inventory["tools"]),
+                }
+            else:
+                result = {"version": VERSION, **inventory}
+            print(json.dumps(result, ensure_ascii=True))
             return 0
 
         settings = load(

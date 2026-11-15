@@ -108,6 +108,9 @@ class FleetRouter:
         self.home = home
         self.local_id = local_id
         self.remotes = dict(remotes)
+        # Configuration is immutable for a FleetRouter session. Sorting once
+        # avoids repeated key sorting in discovery without caching liveness.
+        self._sorted_remotes = tuple(sorted(self.remotes.items()))
 
     @classmethod
     def from_home(cls, home: Path) -> "FleetRouter | None":
@@ -176,23 +179,32 @@ class FleetRouter:
             "computers": [
                 {"id": self.local_id, "kind": "local"},
                 *[
-                    {"id": x, "kind": "remote", "endpoint": self.remotes[x]}
-                    for x in sorted(self.remotes)
+                    {"id": key, "kind": "remote", "endpoint": url}
+                    for key, url in self._sorted_remotes
                 ],
             ],
             "note": "Remote entries are configured, not verified online.",
         }
 
     def invoke(self, computer_id: str, tool: str, arguments: dict[str, Any]) -> dict:
-        if computer_id not in self.remotes:
+        if not valid_device_id(computer_id) or computer_id not in self.remotes:
             raise ValueError("Unknown remote computer; no fallback")
         if not isinstance(tool, str) or not tool or tool.startswith("fleet_"):
             raise ValueError("Invalid remote tool")
         if not isinstance(arguments, dict):
             raise ValueError("Arguments must be an object")
-        payload = json.dumps(
-            {"tool": tool, "arguments": arguments}, ensure_ascii=False
-        ).encode("utf-8")
+        # Keep a bounded, exact JSON envelope (no NaN) before loading a local
+        # token or opening a network connection. A compact wire form reduces
+        # traffic while preserving every argument and no-replay semantics.
+        try:
+            payload = json.dumps(
+                {"tool": tool, "arguments": arguments},
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        except (TypeError, ValueError):
+            raise ValueError("Fleet arguments must be valid JSON") from None
         if len(payload) > 256 * 1024:
             raise ValueError("Remote tool arguments exceed 256 KiB")
         req = Request(

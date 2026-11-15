@@ -167,6 +167,7 @@ class UnifiedProxy:
         self.send_lock = threading.Lock()
         self.tool_routes: dict[str, StdioChild] = {}
         self.tool_cache: list[dict[str, Any]] | None = None
+        self._tool_catalog_json: str | None = None
         self.public_tool_names: frozenset[str] = frozenset()
         self.route_lock = threading.Lock()
         self.startup_ok = False
@@ -329,7 +330,17 @@ class UnifiedProxy:
         # per tools/list request. Serialize concurrent first discoveries.
         with self.route_lock:
             if self.tool_cache is not None:
-                return {"tools": copy.deepcopy(self.tool_cache)}
+                # Tool schemas are JSON-only and immutable for this session.
+                # Parsing the cached compact payload is cheaper for repeated
+                # tools/list requests and still returns independent objects.
+                # Some tests directly inject tool_cache: preserve that route.
+                return {
+                    "tools": (
+                        json.loads(self._tool_catalog_json)
+                        if self._tool_catalog_json is not None
+                        else copy.deepcopy(self.tool_cache)
+                    )
+                }
             result: list[dict[str, Any]] = []
             routes: dict[str, StdioChild] = {}
             responses = self._backend_read_pair("tools/list")
@@ -352,8 +363,11 @@ class UnifiedProxy:
                 catalog.extend(self.fleet.tools())
             self.tool_routes = routes
             self.tool_cache = catalog
+            self._tool_catalog_json = json.dumps(
+                catalog, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+            )
             self.public_tool_names = frozenset(tool["name"] for tool in catalog)
-            return {"tools": copy.deepcopy(self.tool_cache)}
+            return {"tools": json.loads(self._tool_catalog_json)}
 
     def _authorize_companion(self, name, arguments):
         """Enforce existing grants before inspecting resource admission."""

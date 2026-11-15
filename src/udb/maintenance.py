@@ -162,6 +162,18 @@ def run(action, settings, *, check=False, as_json=False):
             "Use the managed launcher with its saved data home for update/rollback."
         )
     require_external_updater(settings.home)
+    # For an already-current installation, avoid locating PowerShell or the
+    # installer script. These are needed only for a real state change.
+    latest = None
+    if action == "update":
+        latest = latest_release()
+        if not newer(latest, record["version"]):
+            print(
+                json.dumps({"updated": False, "version": record["version"]})
+                if as_json
+                else "UDB is up to date."
+            )
+            return 0
     args = [
         system_executable("powershell.exe"),
         "-NoLogo",
@@ -181,14 +193,6 @@ def run(action, settings, *, check=False, as_json=False):
     if action == "rollback":
         args.append("-Rollback")
     else:
-        latest = latest_release()
-        if not newer(latest, record["version"]):
-            print(
-                json.dumps({"updated": False, "version": record["version"]})
-                if as_json
-                else "UDB is up to date."
-            )
-            return 0
         args += [
             "-FeedUrl",
             f"https://github.com/{REPOSITORY}/releases/download/v{latest}",

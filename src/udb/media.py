@@ -74,11 +74,13 @@ def validate(agent, url, filename):
         or p.port not in (None, 443)
     ):
         raise ValueError("Only approved HTTPS HLS addresses are allowed")
+    # Check the URL shape before reading/creating the owner's local
+    # allowlist. Invalid non-HLS requests must never touch approval state.
+    if not p.path.lower().endswith(".m3u8"):
+        raise ValueError("Input must be an HLS .m3u8 playlist")
     host = p.hostname.lower()
     if host not in _hosts(agent):
         raise ValueError("Video host is not on the owner's local allowlist")
-    if not p.path.lower().endswith(".m3u8"):
-        raise ValueError("Input must be an HLS .m3u8 playlist")
     downloads = Path.home() / "Downloads"
     if not downloads.is_dir() or downloads.is_symlink():
         raise ValueError("Downloads directory is missing or not a plain folder")

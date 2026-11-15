@@ -192,6 +192,10 @@ class ProcessCatalog:
                 "Process catalog unavailable: procfs uses a different PID namespace"
             )
         rows = []
+        # System-wide kernel conversion factors are fixed during one scan.
+        # Fetch them once rather than once per process in /proc.
+        ticks = os.sysconf("SC_CLK_TCK")
+        page_bytes = os.sysconf("SC_PAGE_SIZE")
         for folder in Path("/proc").iterdir():
             if not folder.name.isdigit():
                 continue
@@ -207,11 +211,8 @@ class ProcessCatalog:
                         same_user=folder.stat().st_uid == os.getuid(),
                         critical=int(folder.name) < 5,
                         image=os.readlink(folder / "exe"),
-                        cpu_seconds=(int(tail[11]) + int(tail[12]))
-                        / os.sysconf("SC_CLK_TCK"),
-                        working_set_mib=round(
-                            int(tail[21]) * os.sysconf("SC_PAGE_SIZE") / 1048576, 2
-                        ),
+                        cpu_seconds=(int(tail[11]) + int(tail[12])) / ticks,
+                        working_set_mib=round(int(tail[21]) * page_bytes / 1048576, 2),
                         private_commit_mib=None,
                     )
                 )
@@ -222,8 +223,14 @@ class ProcessCatalog:
     def list(self, match="", offset=0, limit=100):
         if not isinstance(match, str) or len(match) > 200:
             raise ValueError("Process-name filter limit: 200 characters")
-        if not 0 <= int(offset) <= 10000 or not 1 <= int(limit) <= 200:
+        # Bounds and filter normalization are cheap; reject before expensive
+        # OS process enumeration. Type checks prevent bool and float cursors.
+        if type(offset) is not int or type(limit) is not int:
             raise ValueError("Process offset/limit out of range")
+        if not 0 <= offset <= 10000 or not 1 <= limit <= 200:
+            raise ValueError("Process offset/limit out of range")
+        folded_match = match.casefold()
+        end = offset + limit
         rows = self._windows() if os.name == "nt" else self._linux()
         ancestors = {os.getpid()}
         parents = {r["pid"]: r["parent_pid"] for r in rows}
@@ -239,7 +246,7 @@ class ProcessCatalog:
         }
         selected = []
         for row in sorted(rows, key=lambda r: r["pid"]):
-            if match.casefold() not in row["name"].casefold():
+            if folded_match not in row["name"].casefold():
                 continue
             same_install = bool(
                 self.install
@@ -275,7 +282,7 @@ class ProcessCatalog:
             row.pop("critical", None)
             row.pop("creation", None)
             row["can_terminate"] = allowed
-            if allowed and int(offset) <= len(selected) < int(offset) + int(limit):
+            if allowed and offset <= len(selected) < end:
                 token = uuid.uuid4().hex
                 if len(self.observations) >= 2000:
                     self.observations.pop(next(iter(self.observations)))
@@ -286,16 +293,22 @@ class ProcessCatalog:
             selected.append(row)
         self.cpu = {k: v for k, v in self.cpu.items() if now - v[0] < 120}
         return {
-            "processes": selected[int(offset) : int(offset) + int(limit)],
+            "processes": selected[offset:end],
             "total": len(selected),
-            "next_offset": int(offset) + int(limit)
-            if int(offset) + int(limit) < len(selected)
-            else None,
+            "next_offset": end if end < len(selected) else None,
             "observation_expires_seconds": 60,
             "command_lines_included": False,
         }
 
     def terminate(self, observation_id):
+        # A synthetic/invalid token must not consume any observed process or
+        # invoke a privileged Windows/Linux process handle.
+        if (
+            not isinstance(observation_id, str)
+            or len(observation_id) != 32
+            or any(c not in "0123456789abcdef" for c in observation_id)
+        ):
+            raise ValueError("Observation expired; list processes again")
         row = self.observations.pop(observation_id, None)
         if not row or time.monotonic() > row["until"]:
             raise ValueError("Observation expired; list processes again")

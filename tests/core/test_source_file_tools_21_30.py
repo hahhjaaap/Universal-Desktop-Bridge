@@ -105,3 +105,52 @@ def test_listing_keyset_cursor_resists_insertions_before_cursor(tmp_path):
     (root / "AA.py").write_text("x=2\n", encoding="utf-8")
     subsequent = agent.listing("demo", limit=2, after=page["next_after"])
     assert [row["path"] for row in subsequent["items"]] == ["delta.py"]
+
+
+def test_scoped_utf8_page_exactly_completes_four_byte_character(tmp_path):
+    import pytest
+
+    from udb.companion.files import ScopedFiles
+
+    (tmp_path / "unicode.txt").write_text("A💡B", encoding="utf-8")
+    files = ScopedFiles(str(tmp_path))
+    first = files.read("unicode.txt", offset=0, limit=2)
+    assert first["content"] == "A💡"
+    assert first["next_offset"] == 5
+    second = files.read("unicode.txt", offset=5, limit=1)
+    assert second["content"] == "B"
+    assert second["remaining"] == 0
+    with pytest.raises(ValueError, match="UTF-8"):
+        files.read("unicode.txt", offset=3, limit=1)
+
+
+def test_streamed_line_read_handles_crlf_and_unicode_separator(tmp_path):
+    from types import SimpleNamespace
+
+    from udb.companion.extensions import _file_read_lines
+    from udb.companion.files import ScopedFiles
+
+    (tmp_path / "lines.txt").write_text("α\r\nb\u2028c\n", encoding="utf-8")
+    result = _file_read_lines(
+        SimpleNamespace(files=ScopedFiles(str(tmp_path))),
+        {"path": "lines.txt", "offset": 1, "length": 2},
+    )
+    assert "Lines: 2-3 of 3" in result
+    assert "2: b\n3: c" in result
+    assert "Next offset: 3" in result
+
+
+def test_scoped_replace_stale_sha_never_mutates_file(tmp_path):
+    import hashlib
+
+    import pytest
+
+    from udb.companion.files import ScopedFiles
+
+    target = tmp_path / "source.txt"
+    target.write_text("original\n", encoding="utf-8")
+    files = ScopedFiles(str(tmp_path))
+    stale = hashlib.sha256(b"outdated\n").hexdigest()
+    with pytest.raises(ValueError, match="changed"):
+        files.replace("source.txt", "original", "new", stale)
+    assert target.read_text(encoding="utf-8") == "original\n"

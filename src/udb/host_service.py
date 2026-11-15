@@ -459,6 +459,9 @@ class HostService:
         # Enumerate once and use DirEntry metadata. Never follow a redirected
         # reply or remove a non-regular entry during routine cleanup.
         try:
+            # Also reject a swapped/reparse mailbox directory, not just
+            # redirected children. Never prune through a linked parent.
+            reject_links(folder)
             with os.scandir(folder) as entries:
                 for entry in entries:
                     name = entry.name
@@ -476,8 +479,8 @@ class HostService:
                             (folder / name).unlink(missing_ok=True)
                     except OSError:
                         continue  # Reply may be consumed during this scan.
-        except OSError:
-            pass  # An unavailable mailbox must not terminate the worker.
+        except (OSError, PolicyError):
+            pass  # A missing or redirected mailbox must not stop the worker.
 
     def _process_command(self, path):
         reject_links(path)

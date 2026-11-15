@@ -185,7 +185,7 @@ try {
                 [char]::IsLowSurrogate($bestResponse[$n])) {$n--}
             $bestResponse=$bestResponse.Substring(0,$n)
         }
-        @{ok=$true;completed=$complete;partial=(!$complete -and !!$bestResponse);
+        @{ok=$true;completed=$complete;partial=(!$complete -and ($bestResponse.Length -gt 0));
           reply=$bestResponse;elapsed_ms=$timer.ElapsedMilliseconds;
           first_reply_ms=$(if($null -eq $firstReplyMs){-1}else{$firstReplyMs});
           truncated=$truncated;

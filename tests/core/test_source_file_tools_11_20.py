@@ -57,7 +57,7 @@ def test_list_files_offset_and_cursor_are_deterministic(project):
 def test_single_source_read_decodes_once_and_never_executes(project, monkeypatch):
     agent, root = project
     source = root / "demo.py"
-    source.write_text('raise RuntimeError("not executed")\n', encoding="utf-8")
+    source.write_bytes(b'raise RuntimeError("not executed")\n')
     calls = []
     original = Path.open
 
@@ -76,12 +76,12 @@ def test_single_source_read_decodes_once_and_never_executes(project, monkeypatch
         "executes_code": False,
     }
     assert calls == ["rb", "rb"]
-    source.write_text("def invalid(:\n", encoding="utf-8")
+    source.write_bytes(b"def invalid(:\n")
     result = agent.syntax_check("demo", "demo.py")
     assert not result["valid"] and result["executes_code"] is False
     assert result["line"] == 1 and result["column"] is not None
     assert "end_line" in result and "end_column" in result
-    (root / ".gitignore").write_text("*.log\n", encoding="utf-8")
+    (root / ".gitignore").write_bytes(b"*.log\n")
     assert agent.read("demo", ".gitignore")["text"] == "*.log\n"
 
 
@@ -163,7 +163,7 @@ def test_project_files_utf8_paging_is_byte_exact(tmp_path):
 
 def test_project_files_stat_listing_and_unicode_line_offsets(tmp_path):
     source = tmp_path / "notes.txt"
-    source.write_text("α\r\nb\u2028c\n", encoding="utf-8")
+    source.write_bytes("α\r\nb\u2028c\n".encode("utf-8"))
     files = ScopedFiles(str(tmp_path))
     rt = SimpleNamespace(files=files)
     listing = files.list(limit=10)

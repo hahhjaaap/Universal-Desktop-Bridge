@@ -149,7 +149,8 @@ def test_67_capture_stop_on_exact_tab_does_not_scan_other_keys():
     )
     assert cache.stop("session", "tab") == {"stopped": True}
     assert cache.stop("session", "tab") == {"stopped": False}
-    assert set(cache.streams) == {("session", "other"), ("else", "tab")}
+    assert set(cache.streams.keys()) == {("session", "other"), ("else", "tab")}
+    cache.streams = dict(cache.streams.items())
     assert cache.stop("session") == {"stopped": True}
     assert set(cache.streams) == {("else", "tab")}
 

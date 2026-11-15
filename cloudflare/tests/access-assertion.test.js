@@ -37,7 +37,7 @@ async function fixture() {
   let fetches = 0;
   const fetchImpl = async (url, options) => {
     assert.equal(url, TEAM + "/cdn-cgi/access/certs");
-    assert.equal(options.redirect, "error");
+    assert.equal(options.redirect, "manual");
     fetches++;
     return Response.json(jwks);
   };
@@ -317,4 +317,113 @@ test("issuer-sub mode rejects conflicting runtime identity and signed assertion"
   const result = await authorizeAccess(
     unavailable, f.env, DEVICE, request, f.fetchImpl);
   assert.equal(result.subject, qualified);
+});
+
+test("Cloudflare Access key rotation refreshes a stale JWKS once without trusting an unknown kid", async () => {
+  // Use an isolated team URL so this test cannot reuse the fixture's JWKS cache.
+  const team = "https://udb-rotation-check.cloudflareaccess.com";
+  const env = { UDB_ACCESS_TEAM_DOMAIN: team, UDB_ACCESS_AUD: AUD };
+  const first = await pairPromise;
+  const next = await crypto.subtle.generateKey({ name: "RSASSA-PKCS1-v1_5",
+    modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]),
+    hash: "SHA-256" }, true, ["sign", "verify"]);
+  let published = first;
+  let kid = "before-rotation";
+  let fetches = 0;
+  const fetchImpl = async (url, options) => {
+    assert.equal(url, team + "/cdn-cgi/access/certs");
+    assert.equal(options.redirect, "manual");
+    fetches++;
+    const jwk = await crypto.subtle.exportKey("jwk", published.publicKey);
+    return Response.json({ keys: [{ ...jwk, kid }] });
+  };
+  const signed = async (pair, signingKid) => {
+    const header = b64(JSON.stringify({ alg: "RS256", kid: signingKid }));
+    const payload = b64(JSON.stringify({ iss: team, aud: [AUD],
+      exp: Math.floor(Date.now() / 1000) + 300, email: EMAIL, sub: SUBJECT_ID }));
+    const message = header + "." + payload;
+    const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5",
+      pair.privateKey, new TextEncoder().encode(message));
+    return message + "." + b64(signature);
+  };
+  const request = jwt => new Request(RESOURCE,
+    { headers: { "Cf-Access-Jwt-Assertion": jwt } });
+
+  assert.equal(await verifyAccessAssertion(
+    request(await signed(first, kid)), env, fetchImpl), EMAIL);
+  assert.equal(fetches, 1);
+  published = next;
+  kid = "after-rotation";
+  assert.equal(await verifyAccessAssertion(
+    request(await signed(next, kid)), env, fetchImpl), EMAIL);
+  assert.equal(fetches, 2, "a new kid must bypass stale JWKS once");
+
+  // The refreshed key's signature is mandatory. A forged old-key token
+  // cannot authenticate even if it lies about the newly announced kid.
+  await assert.rejects(verifyAccessAssertion(
+    request(await signed(first, kid)), env, fetchImpl), AuthError);
+  assert.equal(fetches, 2);
+  // Two unrelated, attacker-controlled kids cannot force repeated JWKS
+  // refreshes immediately after a legitimate rollover.
+  for (const fakeKid of ["unrecognized-1", "unrecognized-2"]) {
+    await assert.rejects(verifyAccessAssertion(
+      request(await signed(first, fakeKid)), env, fetchImpl), AuthError);
+  }
+  assert.equal(fetches, 2);
+});
+
+test("Workers-compatible JWKS lookup never follows redirect or authenticates from redirects", async () => {
+  const f = await fixture();
+  const team = "https://udb-jwks-redirect-denied.cloudflareaccess.com";
+  f.env.UDB_ACCESS_TEAM_DOMAIN = team;
+  const jwt = await f.token({ iss: team });
+  let requests = 0;
+  const redirectFetch = async (_url, init) => {
+    requests++;
+    assert.equal(init.redirect, "manual",
+      "Cloudflare Workers rejects redirect:error before network I/O");
+    return new Response(null, { status: 302,
+      headers: { location: "https://untrusted.example/keys" } });
+  };
+  await assert.rejects(
+    verifyAccessAssertion(f.request(jwt), f.env, redirectFetch),
+    error => error instanceof AuthError &&
+      error.message === "access_keys_unavailable",
+  );
+  assert.equal(requests, 1, "never follow the redirect or try a second origin");
+});
+
+test("Access certificate outage is retryable, not a false login or OAuth consent failure", async () => {
+  // New team isolates this case from the module's 30-second valid JWKS cache.
+  const f = await fixture();
+  const team = "https://udb-cert-outage-check.cloudflareaccess.com";
+  f.env.UDB_ACCESS_TEAM_DOMAIN = team;
+  const jwt = await f.token({ iss: team });
+  let fetches = 0;
+  const offlineJwks = async () => {
+    fetches++;
+    return Response.json({ error: "synthetic outage" }, { status: 503 });
+  };
+  const { handleMcp } = await import("../src/mcp.js");
+  const denied = await handleMcp(f.request(jwt), f.env, DEVICE,
+    f.env.DEVICES.get(), offlineJwks);
+  assert.equal(denied.status, 503);
+  assert.equal((await denied.json()).error,
+    "cloudflare_access_keys_temporarily_unavailable");
+  assert.equal(f.forwards.length, 0, "no unverified request is dispatched");
+
+  f.env.UDB_ENABLE_ACCOUNT_FLEET = "true";
+  f.env.UDB_ENABLE_BROWSER_ENROLLMENT = "true";
+  f.env.UDB_ENABLE_LOCAL_TOOL_SYNC = "true";
+  const { handleAccountMcp } = await import("../src/account-fleet.js");
+  const accountRequest = new Request(ROOT + "/v1/account/mcp", {
+    method: "POST", headers: { "Cf-Access-Jwt-Assertion": jwt },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+  });
+  const fleetDenied = await handleAccountMcp(accountRequest, f.env, null, offlineJwks);
+  assert.equal(fleetDenied.status, 503);
+  assert.equal((await fleetDenied.json()).error,
+    "cloudflare_access_keys_temporarily_unavailable");
+  assert.equal(f.forwards.length, 0);
+  assert.equal(fetches, 2);
 });

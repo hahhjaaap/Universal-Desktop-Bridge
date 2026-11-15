@@ -143,7 +143,7 @@ SIMPLE_COMMAND_HELP_VI = {
 ADVANCED_COMMAND_HELP = """Advanced UDB commands (kept for compatibility)
 
 Connection and recovery:
-  udb mcp-config         Show the paired HTTPS MCP endpoint
+  udb mcp-config         Show the paired per-device HTTPS MCP endpoint
   udb connect            Open ChatGPT for an owner-enrolled device
   udb connect --enroll   Request private, owner-approved device pairing
   udb reconnect          Reconnect the existing Cloud Agent

@@ -91,7 +91,7 @@ function fixture() {
   f.route = async (path, method = "GET", body, headers = {}, access = null) => {
     const request = new Request(ROOT + path, { method, headers,
       body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body) });
-    return await routeBrowserEnrollment(request, env, (stub, req) => stub.fetch(req), keys, access) ??
+    return await routeBrowserEnrollment(request, env, (stub, req) => stub.fetch(req), f.keyFetch || keys, access) ??
       worker.fetch(request, env);
   };
   return f;
@@ -138,6 +138,36 @@ async function mcp(f, p, assertion, method = "tools/list", params = {}, access =
   }), f.env, p.id, f.env.DEVICES.get(p.id), keys, access);
 }
 
+test("isolated Fleet staging accepts only an operator-pinned Windows request ID", async () => {
+  const f = fixture();
+  f.env.UDB_ENABLE_ACCOUNT_FLEET = "true";
+  f.env.UDB_ENABLE_LOCAL_TOOL_SYNC = "true";
+  f.env.UDB_FLEET_REQUIRE_REQUEST_PIN = "true";
+  assert.equal((await (await f.route("/v1/setup")).json()).browser_enrollment, false);
+  assert.equal((await f.route("/v1/setup/enrollments", "POST", {})).status, 404);
+
+  const id = "a".repeat(32);
+  f.env.UDB_FLEET_ALLOWED_REQUEST_ID = id;
+  assert.equal((await (await f.route("/v1/setup")).json()).browser_enrollment, true);
+  assert.equal((await f.route("/v1/enrollments", "POST", {})).status, 404,
+    "legacy anonymous enrollment must remain disabled in the isolated lab");
+  const request = {
+    request_id: "b".repeat(32),
+    request_secret_sha256: hash("synthetic-proof"),
+    device_token_sha256: hash("synthetic-token"),
+    device_name: "Synthetic Windows",
+  };
+  const denied = await f.route("/v1/setup/enrollments", "POST", request);
+  assert.equal(denied.status, 404);
+  assert.equal(f.objects.size, 0, "unapproved request must not create state");
+  request.request_id = id;
+  const allowed = await f.route("/v1/setup/enrollments", "POST", request);
+  assert.equal(allowed.status, 201);
+  assert.equal((await allowed.json()).device_id, id);
+  const repeated = await f.route("/v1/setup/enrollments", "POST", request);
+  assert.equal(repeated.status, 201, "same pending identity can safely resume");
+});
+
 test("browser enrollment is opt-in and requires separate pinned owner application", async () => {
   for (const mutate of [
     env => delete env.UDB_ENABLE_BROWSER_ENROLLMENT,
@@ -181,6 +211,39 @@ test("owner approval rejects missing, forged, expired, other-account and MCP-aud
   const missing = await f.route(p.path + "/approval?code=" + hash(p.proof).slice(0, 10).toUpperCase());
   assert.equal(missing.status, 403);
   assert.equal(f.objects.has(p.id), false);
+});
+
+test("unverifiable Access runtime identity requires reauthentication without changing approval", async () => {
+  const f = fixture();
+  const p = await begin(f);
+  const url = p.path + "/approval?code=" + hash(p.proof).slice(0, 10).toUpperCase();
+  const access = { aud: APP, getIdentity: async () => {
+    throw new Error("synthetic expired or unavailable Access identity");
+  } };
+  const page = await f.route(url, "GET", undefined, {}, access);
+  assert.equal(page.status, 403);
+  const html = await page.text();
+  assert.match(html, /Sign in through the configured Cloudflare Access application/);
+  assert.match(html, /owner_runtime_unavailable/);
+  assert.doesNotMatch(html, /Approve device/);
+  assert.equal((await (await status(f, p)).json()).state, "pending");
+});
+
+test("temporary Access JWKS outage returns 503 and preserves pending owner approval", async () => {
+  const f = fixture(), p = await begin(f);
+  const team = "https://udb-approval-jwks-outage.cloudflareaccess.com";
+  f.env.UDB_ACCESS_TEAM_DOMAIN = team;
+  f.env.UDB_ENROLLMENT_OWNER_SUBJECTS = JSON.stringify([team + "#" + OWNER]);
+  f.keyFetch = async () => Response.json({ error: "synthetic certs outage" }, { status: 503 });
+  const url = p.path + "/approval?code=" + hash(p.proof).slice(0, 10).toUpperCase();
+  const response = await f.route(url, "GET", undefined,
+    { "Cf-Access-Jwt-Assertion": await jwt(APP, OWNER, { iss: team }) });
+  assert.equal(response.status, 503);
+  const html = await response.text();
+  assert.match(html, /temporarily unavailable/);
+  assert.match(html, /owner_keys_unavailable/);
+  assert.doesNotMatch(html, /Approve device/);
+  assert.equal((await (await status(f, p)).json()).state, "pending");
 });
 
 test("approval diagnostics identify the failing verification step without echoing credentials", async () => {
@@ -592,6 +655,7 @@ test("rate limits, public routing and handoff do not expose internal operations 
   const html = await handoff.text();
   assert.ok(html.includes("https://chatgpt.com/plugins"));
   assert.ok(html.includes("Copy MCP URL"));
+  assert.ok(html.includes("invoke bridge_status once"));
   assert.ok(!html.includes(ADMIN));
   assert.match(handoff.headers.get("content-security-policy"), /script-src 'nonce-/);
 });
@@ -667,7 +731,31 @@ test("fleet onboarding indexes approved devices and links an existing token only
   assert.equal((await f.route("/v1/setup")).status, 200);
   assert.equal((await (await f.route("/v1/setup")).json()).account_fleet, true);
   const handoff = await f.route("/v1/devices/" + device + "/connect-chatgpt");
-  assert.ok((await handoff.text()).includes(ROOT + "/v1/account/mcp"));
+  const handoffHtml = await handoff.text();
+  assert.ok(handoffHtml.includes(ROOT + "/v1/account/mcp"));
+  assert.ok(handoffHtml.includes("call list_devices"));
+  assert.ok(handoffHtml.includes("bridge_status with the chosen device_id"));
+});
+
+test("setup diagnostics never claim Fleet ready when Access configuration is incomplete", async () => {
+  const f = fixture();
+  f.env.UDB_ENABLE_ACCOUNT_FLEET = "true";
+  f.env.UDB_ENABLE_LOCAL_TOOL_SYNC = "true";
+  const p = await begin(f);
+  assert.equal((await approve(f, p)).status, 200);
+  assert.equal((await (await deviceStatus(f, p)).json()).account_fleet, true);
+
+  const team = f.env.UDB_ACCESS_TEAM_DOMAIN;
+  f.env.UDB_ACCESS_TEAM_DOMAIN = "https://invalid.example.com";
+  assert.equal((await (await deviceStatus(f, p)).json()).account_fleet, false);
+  assert.equal((await (await f.route("/v1/setup")).json()).account_fleet, false);
+  f.env.UDB_ACCESS_TEAM_DOMAIN = team;
+
+  const audience = f.env.UDB_ACCESS_AUD;
+  f.env.UDB_ACCESS_AUD = "";
+  assert.equal((await (await deviceStatus(f, p)).json()).account_fleet, false);
+  f.env.UDB_ACCESS_AUD = audience;
+  assert.equal((await (await deviceStatus(f, p)).json()).account_fleet, true);
 });
 
 test("fleet linking never steals a device already owned by a different identity", async () => {

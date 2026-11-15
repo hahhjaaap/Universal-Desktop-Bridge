@@ -14,6 +14,9 @@ const TEAM = /^https:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\
 // Access app-token sub is an account-scoped user UUID, not an email.
 const ACCESS_SUB = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 let cachedJwks = { url: "", until: 0, keys: [] };
+// Unknown untrusted kids must not turn one JWT request into an unbounded
+// JWKS fetch stream. Legitimate signing-key rollover retries within 1 second.
+let unknownKidRefresh = { url: "", nextAt: 0 };
 
 export function accessConfig(env) {
   const aud = env?.UDB_ACCESS_AUD;
@@ -45,13 +48,16 @@ function claims(segment) {
   } catch { throw new AuthError(); }
 }
 
-async function getKeys(url, fetchImpl) {
-  if (cachedJwks.url === url && Date.now() < cachedJwks.until)
+async function getKeys(url, fetchImpl, refresh = false) {
+  if (!refresh && cachedJwks.url === url && Date.now() < cachedJwks.until)
     return cachedJwks.keys;
   let response;
   let stage = "fetch";
   try {
-    response = await fetchImpl(url, { redirect: "error", signal: AbortSignal.timeout(3000),
+    // Cloudflare Workers does not implement Request.redirect="error". It throws
+    // TypeError before the network request. Manual mode never follows a
+    // redirect; the strict HTTP 200 + JSON check below rejects 3xx safely.
+    response = await fetchImpl(url, { redirect: "manual", signal: AbortSignal.timeout(3000),
       headers: { accept: "application/json" } });
     stage = "response";
     if (response.status !== 200 ||
@@ -121,11 +127,23 @@ export async function verifiedAccessIdentity(request, env, fetchImpl = fetch) {
     throw new AuthError("access_assertion_time");
   if (!emailSubject(payload.email)) throw new AuthError("access_assertion_identity");
   const url = config.team + "/cdn-cgi/access/certs";
-  const keys = await getKeys(url, fetchImpl);
-  const match = keys.filter((key) => key && key.kid === head.kid &&
+  const fromCache = cachedJwks.url === url && Date.now() < cachedJwks.until;
+  let keys = await getKeys(url, fetchImpl);
+  const matchingKeys = values => values.filter((key) =>
+    key && key.kid === head.kid &&
     key.kty === "RSA" && (key.alg === undefined || key.alg === "RS256") &&
     (key.use === undefined || key.use === "sig") &&
     typeof key.n === "string" && typeof key.e === "string");
+  let match = matchingKeys(keys);
+  // Cloudflare Access can rotate its signing key inside our short cache TTL.
+  // Refresh metadata once for an unknown kid; never bypass JWT verification.
+  // A duplicate/invalid JWK fails closed without an extra network request.
+  if (match.length === 0 && fromCache &&
+      (unknownKidRefresh.url !== url || Date.now() >= unknownKidRefresh.nextAt)) {
+    unknownKidRefresh = { url, nextAt: Date.now() + 1000 };
+    keys = await getKeys(url, fetchImpl, true);
+    match = matchingKeys(keys);
+  }
   if (match.length !== 1) throw new AuthError("access_assertion_key");
   let valid = false;
   try {
@@ -145,7 +163,7 @@ export async function verifyAccessAssertion(request, env, fetchImpl = fetch) {
 }
 
 export async function authorizeAccess(access, env, deviceId, request = null,
-    fetchImpl = fetch, enrolledGrant = null) {
+    fetchImpl = fetch, enrolledGrant = null, trustedFleetOwner = null) {
   const cfg = accessConfig(env);
   if (!cfg) throw new AuthError();
   const mode = env?.UDB_ACCESS_PRINCIPAL_MODE === undefined
@@ -158,28 +176,56 @@ export async function authorizeAccess(access, env, deviceId, request = null,
   let subject = null;
   let runtimeIdentity = null;
   if (mode === "issuer-sub") {
-    // Opt-in staging pilot: require the signed assertion even when ctx.access
-    // supplies a valid email. The authenticated issuer + account-scoped sub
-    // must match an explicit grant; email and legacy grants never substitute.
+    // Direct per-device routes still require the signed JWT. Only the account
+    // Fleet handler can pass a preverified owner, after Access identity,
+    // registry membership and the device's live owner proof were all checked.
     if (!cfg.team) throw new AuthError();
-    const identity = await verifiedAccessIdentity(request, env, fetchImpl);
-    if (typeof identity.sub !== "string" || !ACCESS_SUB.test(identity.sub))
-      throw new AuthError();
-    // If the Access runtime separately exposes an identity, it must not
-    // disagree with the signed assertion. WARP may expose only aud; in that
-    // case the signature remains the sole source of user identity.
-    if (typeof access?.getIdentity === "function") {
-      let observed = null;
-      try { observed = await access.getIdentity(); }
-      catch { /* Optional runtime identity unavailable; signed JWT required. */ }
-      if (observed) {
-        if ((emailSubject(observed.email) && observed.email !== identity.email) ||
-            (typeof observed.user_uuid === "string" &&
-              observed.user_uuid.toLowerCase() !== identity.sub.toLowerCase()))
-          throw new AuthError();
+    if (trustedFleetOwner !== null) {
+      if (typeof trustedFleetOwner !== "string") throw new AuthError();
+      let verified;
+      if (typeof access?.getIdentity === "function") {
+        // Runtime identity is authoritative when provided by Cloudflare Access.
+        const observed = await access.getIdentity();
+        if (typeof observed?.user_uuid !== "string" ||
+            !ACCESS_SUB.test(observed.user_uuid)) throw new AuthError();
+        verified = { sub: observed.user_uuid.toLowerCase(), email: observed.email };
+        // If Access also supplies a signed JWT, both identities must agree.
+        if (request?.headers?.get("Cf-Access-Jwt-Assertion")) {
+          const signed = await verifiedAccessIdentity(request, env, fetchImpl);
+          if (signed.sub?.toLowerCase() !== verified.sub ||
+              (emailSubject(verified.email) && signed.email !== verified.email))
+            throw new AuthError();
+        }
+      } else {
+        // Workers without ctx.access receive a signed Access assertion. Fleet
+        // verified it for registry lookup, but the per-device gateway also
+        // verifies the signature and checks the exact same immutable owner.
+        // Never trust an arbitrary header or the forwarded owner string alone.
+        verified = await verifiedAccessIdentity(request, env, fetchImpl);
+        if (!ACCESS_SUB.test(verified.sub)) throw new AuthError();
       }
+      subject = cfg.team + "#" + verified.sub.toLowerCase();
+      if (subject !== trustedFleetOwner) throw new AuthError();
+      runtimeIdentity = verified;
+    } else {
+      // Standalone device MCP: never exchange an email or runtime hint for
+      // the original issuer-sub JWT requirement.
+      const identity = await verifiedAccessIdentity(request, env, fetchImpl);
+      if (typeof identity.sub !== "string" || !ACCESS_SUB.test(identity.sub))
+        throw new AuthError();
+      if (typeof access?.getIdentity === "function") {
+        let observed = null;
+        try { observed = await access.getIdentity(); }
+        catch { /* Optional runtime identity unavailable; signed JWT required. */ }
+        if (observed) {
+          if ((emailSubject(observed.email) && observed.email !== identity.email) ||
+              (typeof observed.user_uuid === "string" &&
+                observed.user_uuid.toLowerCase() !== identity.sub.toLowerCase()))
+            throw new AuthError();
+        }
+      }
+      subject = cfg.team + "#" + identity.sub.toLowerCase();
     }
-    subject = cfg.team + "#" + identity.sub.toLowerCase();
   } else {
     if (access) {
       try {
@@ -225,6 +271,9 @@ export async function authorizeAccess(access, env, deviceId, request = null,
         if (!cfg.team || typeof runtimeIdentity.user_uuid !== "string" ||
             !ACCESS_SUB.test(runtimeIdentity.user_uuid)) throw new AuthError();
         verified = { email: runtimeIdentity.email, sub: runtimeIdentity.user_uuid };
+      } else if (mode === "issuer-sub" && trustedFleetOwner === subject &&
+                 runtimeIdentity) {
+        verified = runtimeIdentity;
       } else verified = await verifiedAccessIdentity(request, env, fetchImpl);
       if (verified.email !== (mode === "email" ? subject : verified.email))
         throw new AuthError();
@@ -240,7 +289,9 @@ export async function authorizeAccess(access, env, deviceId, request = null,
   // Preserve the legacy read-only authorization response exactly when the
   // opt-in profile is absent; existing Access integrations remain unchanged.
   const readScope = stagingFixtureProject ? { stagingFixtureProject } : {};
-  if (enrolledStatusOnly && mode === "email" && env.UDB_ENABLE_LOCAL_TOOL_SYNC === "true")
+  if (enrolledStatusOnly && (mode === "email" ||
+      (mode === "issuer-sub" && trustedFleetOwner === subject)) &&
+      env.UDB_ENABLE_LOCAL_TOOL_SYNC === "true")
     return { subject, allowTools: readTools, catalogTools: ENROLLED_CATALOG,
       enrolledOwner: true };
   return ownerTools.length

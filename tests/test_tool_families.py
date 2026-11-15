@@ -179,7 +179,10 @@ process.stdout.write(JSON.stringify(consolidateFamilies(JSON.parse(raw))));
         text=True,
         capture_output=True,
         check=True,
-        timeout=20,
+        # Windows hosted runners occasionally stall a cold Node subprocess
+        # when the parallel frozen-EXE job competes for CPU and disk I/O.
+        # Keep a bounded timeout while avoiding false schema regressions.
+        timeout=90,
     )
     assert json.loads(result.stdout) == catalog()["tools"]
 

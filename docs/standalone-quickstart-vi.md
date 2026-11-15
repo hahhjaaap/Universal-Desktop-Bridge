@@ -14,14 +14,18 @@ thực hiện ghép nối khi người dùng có mặt):
 
 ```powershell
 udb setup
-udb start
 ```
 
-`udb setup` hiển thị URL của thiết bị đã ghép hoặc nhận mã mời Cloudflare
-một lần. Dán URL MCP vào ChatGPT với OAuth. Gọi `bridge_status` trong
-ChatGPT để xác minh kết nối. `udb mcp-config` xuất cấu hình HTTPS của
-thiết bị, hoặc danh sách rỗng trước khi ghép nối. Cờ cũ `--edit`
-không còn mở wizard Tunnel và không thay thế quy trình `udb setup` hiện hành.
+`udb setup` tự tạo yêu cầu ghép nối có thể khôi phục và khởi động Cloud Agent.
+Chủ máy so sánh device ID/fingerprint và approve trên trang Cloudflare Access.
+Chỉ cần chạy `udb start` riêng khi chủ máy muốn khởi động lại phiên sau khi đã dừng. Không cần
+mã mời hoặc admin key. Trang handoff hiển thị URL MCP và hướng dẫn OAuth.
+Sau OAuth, gọi `bridge_status` để xác minh; ở Fleet mode, gọi
+`list_devices` trước rồi `bridge_status` với đúng `device_id`.
+`udb mcp-config` vẫn xuất URL HTTPS riêng của từng máy để tương thích.
+Khi account Fleet được bật và máy đã liên kết, hãy dùng URL chung
+`/v1/account/mcp` do `udb setup` hiển thị và chỉ thêm một plugin.
+Cờ cũ `--edit` không còn mở wizard Tunnel.
 Lỗi ghép nối phải được xử lý theo Cloudflare; không nhập runtime API key
 hoặc Tunnel ID vào trình thiết lập mới.
 
@@ -76,23 +80,13 @@ thực thi chúng và không tự đưa vào quy trình không kiểm soát.
 Đây là thay đổi mã nguồn mới, **không tự cập nhật bản UDB đang cài**;
 chỉ có hiệu lực sau một bản phát hành và cài đặt được phê duyệt.
 
-## Đăng ký máy mới không cần mã mời
+## Luồng enrollment tương thích cũ
 
-Trên bản UDB chứa tính năng mới, từ Terminal Windows trực tiếp:
-
-```powershell
-udb connect --enroll
-```
-
-Máy tự tạo yêu cầu ghép nối, chủ hệ thống xác minh và phê duyệt qua công cụ
-quản trị riêng. Không nhập admin key, mã mời dùng một lần hoặc token từ
-máy khác. Muốn bật Cloud Agent tự chạy khi đăng nhập Windows, dùng
-`udb connect --enroll --autostart` rồi `udb start` cho phiên hiện tại.
-
-**Chưa có hiệu lực trên máy đang cài** cho tới khi có bản phát hành được
-nghiệm thu và Worker bật tính năng riêng tư một cách có kiểm soát.
-Hướng dẫn đầy đủ và điều kiện bảo mật:
-[đăng ký thiết bị riêng tư](private-device-enrollment-vi.md).
+`udb connect --enroll` là lối enrollment legacy dành cho hệ thống còn dùng
+quy trình quản trị cũ. Không dùng nó thay cho luồng thiết lập mới.
+Trên máy mới, ưu tiên `udb setup` như phần trên; quy trình hiện hành dùng
+trang Access approval và Credential Manager recovery. Hướng dẫn về lệnh
+legacy được giữ tại [đăng ký thiết bị riêng tư](private-device-enrollment-vi.md).
 
 ## Kết nối ChatGPT
 

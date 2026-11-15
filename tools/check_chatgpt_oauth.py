@@ -18,7 +18,7 @@ UA = "UDB-ChatGPT-OAuth-Preflight/1.0"
 TIMEOUT = 12
 
 
-def staging_resource(relay, device_id):
+def staging_origin(relay):
     parsed = parse.urlsplit(relay)
     if (
         parsed.scheme != "https"
@@ -31,11 +31,20 @@ def staging_resource(relay, device_id):
         or parsed.path not in ("", "/")
         or parsed.query
         or parsed.fragment
-        or not DEVICE_PATTERN.fullmatch(device_id)
     ):
-        raise ValueError("Expected an exact staging Worker origin and 32-hex device ID")
-    origin = "https://" + parsed.hostname
+        raise ValueError("Expected an exact staging Worker HTTPS origin")
+    return "https://" + parsed.hostname
+
+
+def staging_resource(relay, device_id):
+    origin = staging_origin(relay)
+    if not isinstance(device_id, str) or not DEVICE_PATTERN.fullmatch(device_id):
+        raise ValueError("Expected a 32-hex device ID for per-device MCP")
     return origin + "/v1/devices/" + device_id + "/mcp"
+
+
+def staging_account_resource(relay):
+    return staging_origin(relay) + "/v1/account/mcp"
 
 
 def validate_callback(callback):
@@ -103,13 +112,28 @@ def http(opener, url, *, method="GET", data=None, accept="application/json"):
         return response.status, response.headers, doc
 
 
-def check(relay, device_id, *, callback=None, register_client=False, opener=None):
-    resource = staging_resource(relay, device_id)
+def check(
+    relay,
+    device_id=None,
+    *,
+    account_fleet=False,
+    callback=None,
+    register_client=False,
+    opener=None,
+):
+    if account_fleet and device_id is not None:
+        raise ValueError("Fleet account preflight must not select a device ID")
+    resource = (
+        staging_account_resource(relay)
+        if account_fleet
+        else staging_resource(relay, device_id)
+    )
     if register_client:
         validate_callback(callback or "")
     opener = opener or request.build_opener(NoRedirect())
-    origin = resource.split("/v1/devices/", 1)[0]
-    path = resource.split(origin, 1)[1]
+    parsed = parse.urlsplit(resource)
+    origin = parsed.scheme + "://" + parsed.netloc
+    path = parsed.path
     metadata_url = origin + "/.well-known/oauth-protected-resource" + path
     status, _, meta = http(opener, metadata_url)
     if (
@@ -165,6 +189,7 @@ def check(relay, device_id, *, callback=None, register_client=False, opener=None
             raise ValueError("Unauthenticated MCP request did not get OAuth 401")
     report = {
         "staging_only": True,
+        "resource_mode": "account_fleet" if account_fleet else "per_device",
         "exact_resource_metadata": "passed",
         "oauth_discovery": "passed",
         "pkce_s256": "supported",
@@ -234,7 +259,13 @@ def check(relay, device_id, *, callback=None, register_client=False, opener=None
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--relay", required=True)
-    parser.add_argument("--device-id", required=True)
+    target = parser.add_mutually_exclusive_group(required=True)
+    target.add_argument("--device-id", help="Legacy per-device MCP resource")
+    target.add_argument(
+        "--account-fleet",
+        action="store_true",
+        help="Shared account MCP resource; no device ID",
+    )
     parser.add_argument("--register-client", action="store_true")
     parser.add_argument("--callback", default=PUBLIC_CALLBACK)
     args = parser.parse_args(argv)
@@ -242,6 +273,7 @@ def main(argv=None):
         report = check(
             args.relay,
             args.device_id,
+            account_fleet=args.account_fleet,
             callback=args.callback,
             register_client=args.register_client,
         )

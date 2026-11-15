@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import secrets
 import time
 from pathlib import Path
@@ -22,7 +23,20 @@ from .onboarding import attended_console, paired_cloud
 
 # The *address* is not a secret. Server enrollment remains OFF by default.
 PRIVATE_RELAY = "https://udb-private-relay-staging.hkhoinguyen72.workers.dev"
+# Canary setup may target this separately protected Worker without ever
+# redirecting an already-paired device or accepting an arbitrary token sink.
+FLEET_TEST_RELAY = "https://udb-fleet-isolated-staging.hkhoinguyen72.workers.dev"
 ENROLLMENT_SECONDS = 600
+
+
+def setup_relay():
+    """Exact allowlisted new-device enrollment origin; no arbitrary URL override."""
+    relay = os.environ.get("UDB_SETUP_RELAY", PRIVATE_RELAY)
+    if relay not in (PRIVATE_RELAY, FLEET_TEST_RELAY):
+        raise ValueError(
+            "Unsupported UDB setup relay; existing credentials are untouched"
+        )
+    return relay
 
 
 def _request_json(opener, url, *, method="GET", data=None, proof=None):

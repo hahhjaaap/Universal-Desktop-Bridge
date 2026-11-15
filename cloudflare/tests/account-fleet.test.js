@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import worker, { DeviceRelay } from "../src/index.js";
-import { registerEnrolledDevice } from "../src/account-fleet.js";
+import { handleAccountMcp, registerEnrolledDevice } from "../src/account-fleet.js";
+import { handleMcp } from "../src/mcp.js";
 import { ENROLLED_CATALOG } from "../src/local-permissions.js";
+import canonicalTools from "../src/fleet-tool-catalog.json" with { type: "json" };
+import { fleetCanonicalCatalog } from "../src/fleet-catalog.js";
 
 const BASE = "https://fleet-test.workers.dev";
 const TEAM = "https://fleet-test.cloudflareaccess.com";
@@ -102,6 +105,34 @@ function fixture() {
   return f;
 }
 
+test("account discovery mirrors the authoritative Windows catalog and preserves exact schemas offline", async () => {
+  const f = fixture();
+  const canonical = fleetCanonicalCatalog();
+  const expected = new Map(canonicalTools.map(tool => [tool.name, tool]));
+  assert.equal(canonical.length, 40);
+  assert.deepEqual(canonical.map(tool => tool.name).sort(), [...expected.keys()].sort());
+  for (const tool of canonical) {
+    assert.deepEqual(tool.inputSchema, expected.get(tool.name).inputSchema, tool.name);
+    assert.ok(Array.isArray(tool.securitySchemes));
+    assert.ok(tool.annotations, "all public tools expose truthful annotations: " + tool.name);
+  }
+  const response = await f.call(OWNER);
+  const listed = (await response.json()).result.tools;
+  assert.equal(listed.length, canonicalTools.length + 1);
+  const byName = new Map(listed.map(tool => [tool.name, tool]));
+  for (const tool of canonicalTools) {
+    const discovered = byName.get(tool.name);
+    assert.ok(discovered, "missing canonical tool " + tool.name);
+    assert.ok(discovered.inputSchema.required.includes("device_id"), tool.name);
+    assert.equal(discovered.inputSchema.properties.device_id.pattern, "^[a-f0-9]{32}$");
+    const schema = structuredClone(discovered.inputSchema);
+    delete schema.properties.device_id;
+    schema.required = schema.required.filter(name => name !== "device_id");
+    if (!Object.hasOwn(tool.inputSchema, "required")) delete schema.required;
+    assert.deepEqual(schema, tool.inputSchema, "device routing must not alter native schema: " + tool.name);
+  }
+});
+
 test("opt-in fleet discovery is a distinct protected resource and unauthenticated calls fail", async () => {
   const f = fixture();
   const metadata = await worker.fetch(new Request(BASE +
@@ -117,6 +148,29 @@ test("opt-in fleet discovery is a distinct protected resource and unauthenticate
   assert.equal((await f.call(OWNER)).status, 404);
   assert.equal((await worker.fetch(new Request(BASE +
     "/.well-known/oauth-protected-resource/v1/account/mcp"), f.env)).status, 404);
+});
+
+test("offline account discovery is complete, stable, and ignores poisoned legacy catalog", async () => {
+  const f = fixture();
+  const before = (await (await f.call(OWNER)).json()).result.tools;
+  assert.ok(before.length >= 35, "offline fleet must expose every canonical public family");
+  assert.ok(before.some(t => t.name === "computer_process"));
+  assert.ok(before.every(t => t.name === "list_devices" ||
+    t.inputSchema.required?.includes("device_id")),
+    "every Windows operation has required device_id");
+  const fleetKey = [...f.objects.keys()].find(k => k.startsWith("__udb_account_fleet_v1__"));
+  assert.ok(fleetKey);
+  f.objects.get(fleetKey).values.set("fleet_catalog", [tool("bridge_status")]);
+  await f.add(deviceA, OWNER, "Legacy", false);
+  f.state.get(deviceA).online = false;
+  assert.deepEqual((await (await f.call(OWNER)).json()).result.tools, before,
+    "an offline machine and a truncated cached catalog cannot change discovery");
+  f.state.get(deviceA).online = true;
+  f.state.get(deviceA).granted = true;
+  await f.add(deviceB, OWNER, "New", true);
+  assert.deepEqual((await (await f.call(OWNER)).json()).result.tools, before);
+  assert.equal(f.invocations.filter(x => x.rpc.method === "tools/list").length, 0,
+    "fleet discovery must never query an online device");
 });
 
 test("two identically named devices share one plugin schema; a third needs no new schema", async () => {
@@ -170,6 +224,117 @@ test("immutable Access identity isolates fleet accounts despite identical emails
   }), f.env, { access: { aud: "other-audience",
     getIdentity: async () => ({ user_uuid: OWNER }) } });
   assert.equal(bad.status, 401);
+});
+
+test("issuer-sub Fleet works with a signed JWT when Cloudflare omits ctx.access", async () => {
+  const f = fixture();
+  f.env.UDB_ACCESS_PRINCIPAL_MODE = "issuer-sub";
+  await f.add(deviceA, OWNER, "Signed owner device", true);
+  const pair = await crypto.subtle.generateKey({
+    name: "RSASSA-PKCS1-v1_5", modulusLength: 2048,
+    publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256",
+  }, true, ["sign", "verify"]);
+  const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+  let fetched = 0;
+  const fetchKeys = async (url, opts) => {
+    assert.equal(url, TEAM + "/cdn-cgi/access/certs");
+    assert.equal(opts.redirect, "manual");
+    fetched++;
+    return Response.json({ keys: [{ ...jwk, kid: "fleet-signed-test" }] });
+  };
+  const encoded = value => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const sign = async (sub = OWNER) => {
+    const header = encoded({ alg: "RS256", kid: "fleet-signed-test" });
+    const claims = encoded({
+      iss: TEAM, aud: [APP], email: "same-name@example.test", sub,
+      exp: Math.floor(Date.now() / 1000) + 300,
+    });
+    const payload = header + "." + claims;
+    const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5",
+      pair.privateKey, new TextEncoder().encode(payload));
+    return payload + "." + Buffer.from(signature).toString("base64url");
+  };
+  const send = (jwt, name = "bridge_status") => new Request(
+    BASE + "/v1/account/mcp", {
+      method: "POST", headers: { "Content-Type": "application/json",
+        "MCP-Protocol-Version": "2025-11-25",
+        ...(jwt ? { "Cf-Access-Jwt-Assertion": jwt } : {}) },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 11, method: "tools/call",
+        params: { name, arguments: { device_id: deviceA } } }),
+    });
+  const valid = await sign();
+  const success = await handleAccountMcp(send(valid), f.env, null, fetchKeys);
+  assert.equal(success.status, 200,
+    "signed Access identity must work without native ctx.access");
+  assert.ok((await success.json()).result.content?.length);
+  assert.equal(f.invocations.filter(x => x.rpc.params?.name === "bridge_status").length, 1);
+  assert.equal(fetched, 1, "Access JWKS is cached across the two verification layers");
+  const dispatched = f.invocations.length;
+
+  // The internal owner delegation must not rely only on the forwarded string.
+  const wrongOwner = await handleMcp(send(valid), f.env, deviceA,
+    f.env.DEVICES.get(deviceA), fetchKeys, null, principal(OTHER));
+  assert.equal(wrongOwner.status, 401);
+  assert.equal(f.invocations.length, dispatched);
+
+  const mismatched = await handleAccountMcp(send(await sign(OTHER)), f.env,
+    null, fetchKeys);
+  assert.equal(mismatched.status, 403, "different Access owner cannot access device");
+  assert.equal(f.invocations.length, dispatched);
+  const unsigned = await handleAccountMcp(send(), f.env, null, fetchKeys);
+  assert.equal(unsigned.status, 401);
+  const parts = valid.split(".");
+  const forged = parts[0] + "." + parts[1] + "." +
+    (parts[2][0] === "A" ? "B" : "A") + parts[2].slice(1);
+  assert.equal((await handleAccountMcp(send(forged), f.env, null, fetchKeys)).status, 401);
+  assert.equal(f.invocations.length, dispatched);
+});
+
+test("issuer-sub native Access Fleet delegation reaches Windows without weakening per-device JWT", async () => {
+  const f = fixture();
+  f.env.UDB_ACCESS_PRINCIPAL_MODE = "issuer-sub";
+  await f.add(deviceA, OWNER, "Owned", true);
+  await f.add(deviceB, OTHER, "Other", true);
+  assert.deepEqual((await f.devices(OWNER)).map(x => x.device_id), [deviceA]);
+
+  const status = await f.call(OWNER, "tools/call",
+    { name: "bridge_status", arguments: { device_id: deviceA } });
+  assert.equal(status.status, 200, "native Access identity must survive internal delegation");
+  const body = (await status.json()).result;
+  assert.ok(body.content?.some(x => x.type === "text"));
+  assert.equal(f.invocations.filter(x => x.id === deviceA &&
+    x.rpc.params?.name === "bridge_status").length, 1);
+
+  const otherOwner = await f.call(OTHER, "tools/call",
+    { name: "bridge_status", arguments: { device_id: deviceA } });
+  assert.equal(otherOwner.status, 403);
+  const absentId = await f.call(OWNER, "tools/call",
+    { name: "bridge_status", arguments: {} });
+  assert.equal(absentId.status, 400);
+  // Bypassing the account Fleet route never unlocks issuer-sub without
+  // a valid signed per-device Access assertion, even for a known owner.
+  const direct = await worker.fetch(new Request(BASE + "/v1/devices/" + deviceA + "/mcp", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call",
+      params: { name: "bridge_status", arguments: {} } }),
+  }), f.env, f.access(OWNER));
+  assert.equal(direct.status, 401);
+});
+
+test("issuer-sub Fleet still requires local Windows permission for all non-status tools", async () => {
+  const f = fixture();
+  f.env.UDB_ACCESS_PRINCIPAL_MODE = "issuer-sub";
+  await f.add(deviceA, OWNER, "No desktop permission", false);
+  const denied = await f.call(OWNER, "tools/call", {
+    name: "computer_process",
+    arguments: { device_id: deviceA, action: "list" },
+  });
+  assert.equal(denied.status, 200);
+  assert.equal((await denied.json()).result.structuredContent.code,
+    "local_owner_permission_required");
+  assert.equal(f.invocations.filter(x => x.id === deviceA &&
+    x.rpc.params?.name === "computer_process").length, 0,
+  "no computer operation dispatched without Windows local approval");
 });
 
 test("local Windows permissions and revocation are evaluated on the target device every time", async () => {

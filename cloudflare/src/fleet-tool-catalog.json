@@ -750,6 +750,11 @@
           "title": "Offset",
           "type": "integer"
         },
+        "limit": {
+          "default": 30,
+          "title": "Limit",
+          "type": "integer"
+        },
         "program": {
           "title": "Program",
           "type": "string"

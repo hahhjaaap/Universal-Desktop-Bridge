@@ -14,6 +14,7 @@ import time
 import zipfile
 from datetime import timedelta
 from pathlib import Path
+from typing import NamedTuple
 
 from udb.launcher import worker_command
 from udb.pipe_io import write_all
@@ -21,6 +22,36 @@ from udb.pipe_io import write_all
 # The embeddable Windows runtime uses an isolated ._pth and omits the script
 # directory. Explicitly add this owned module directory for worker imports.
 MAX_DOCUMENT = 32 * 1024 * 1024
+
+DOCUMENT_ACTIONS = {
+    "spreadsheet": frozenset(
+        {"inspect", "read", "write", "edit_cells", "audit_invoices", "export_audit"}
+    ),
+    "word_document": frozenset({"inspect", "read", "write", "replace_text"}),
+    "pdf_document": frozenset({"inspect", "read", "write", "merge", "extract"}),
+}
+DOCUMENT_EXTENSIONS = {
+    "spreadsheet": ".xlsx",
+    "word_document": ".docx",
+    "pdf_document": ".pdf",
+}
+
+
+class DocumentPlan(NamedTuple):
+    """Validated immutable job metadata; mutable request data stays local."""
+
+    action: str
+    extension: str
+    path: Path
+    target: Path
+    target_expected: str
+    writing: bool
+    fingerprints: dict[str, str]
+    seconds: int
+    request: dict
+    replay_args: dict
+
+
 VERSIONS = {
     "openpyxl": "3.1.5",
     "python-docx": "1.2.0",
@@ -60,6 +91,107 @@ def checked_input(files, path, extension):
     return p
 
 
+def prepare_document_request(files, format, args):
+    """Validate scoped document IO, optimistic hashes and bounded worker input.
+
+    This function does not launch a worker or publish files. It reads fresh
+    source and target identities before the independently guarded commit.
+    """
+    action = args.get("action")
+    extension = DOCUMENT_EXTENSIONS[format]
+    if action not in DOCUMENT_ACTIONS[format]:
+        raise ValueError("Unsupported document action")
+    given = args.get("path", "")
+    path = files.path(given, allow_missing=action in ("write", "merge"))
+    if path.suffix.lower() != extension:
+        raise ValueError("Use " + extension + " paths")
+    expected = args.get("expected_sha256", "NEW")
+    destination = args.get("destination", "")
+    writing = action in (
+        "write",
+        "edit_cells",
+        "replace_text",
+        "merge",
+        "extract",
+        "export_audit",
+    )
+    inputs = []
+    if action not in ("write", "merge"):
+        inputs.append(checked_input(files, given, extension))
+    if action == "merge":
+        names = args.get("inputs", [])
+        if not isinstance(names, list) or not 2 <= len(names) <= 20:
+            raise ValueError("merge needs 2..20 PDF inputs")
+        inputs = [checked_input(files, n, ".pdf") for n in names]
+    fingerprints = {str(p): sha(p) for p in inputs}
+    if action in ("edit_cells", "replace_text", "extract", "export_audit"):
+        if (
+            not re.fullmatch("[0-9a-fA-F]{64}", expected)
+            or fingerprints[str(path)] != expected.lower()
+        ):
+            raise ValueError(
+                "Current source expected_sha256 is required for edits/extract"
+            )
+    elif (
+        action in ("read", "inspect", "audit_invoices")
+        and expected != "NEW"
+        and fingerprints[str(path)] != expected.lower()
+    ):
+        raise ValueError("Source SHA256 mismatch")
+    if action in ("extract", "export_audit") and not destination:
+        raise ValueError("extract/export_audit needs a new destination")
+    target = files.path(destination, allow_missing=True) if destination else path
+    if writing:
+        if target.suffix.lower() != extension or not target.parent.is_dir():
+            raise ValueError("Destination extension/parent is invalid")
+        target_expected = "NEW" if destination else expected
+        if target_expected == "NEW":
+            if target.exists():
+                raise FileExistsError(
+                    "Destination exists; use its SHA256 to replace"
+                )
+        elif (
+            not re.fullmatch("[0-9a-fA-F]{64}", target_expected)
+            or not target.is_file()
+            or target.stat().st_size > MAX_DOCUMENT
+            or sha(target) != target_expected.lower()
+        ):
+            raise ValueError("Destination SHA256 mismatch")
+    else:
+        target_expected = "NEW"
+    seconds = args.pop("timeout_seconds", 30)
+    if type(seconds) is not int or not 1 <= seconds <= 60:
+        raise ValueError("Document timeout 1..60 seconds")
+    # Serialize before starting a worker; reject unbounded/invalid input.
+    request = dict(
+        format=format,
+        arguments=args,
+        root=str(files.root),
+        inputs={str(p): fingerprints[str(p)] for p in inputs},
+    )
+    encoded = json.dumps(request, ensure_ascii=False, allow_nan=False).encode(
+        "utf-8"
+    )
+    if len(encoded) > 1024 * 1024:
+        raise ValueError("Document request exceeds 1 MiB")
+
+    replay_args = dict(args)
+    if action in ("read", "inspect", "audit_invoices"):
+        replay_args["expected_sha256"] = fingerprints[str(path)]
+    return DocumentPlan(
+        action=action,
+        extension=extension,
+        path=path,
+        target=target,
+        target_expected=target_expected,
+        writing=writing,
+        fingerprints=fingerprints,
+        seconds=seconds,
+        request=request,
+        replay_args=replay_args,
+    )
+
+
 class Documents:
     def __init__(self, background):
         self.bg = background
@@ -69,100 +201,16 @@ class Documents:
         from udb.companion.background import identity, publish_new
         from udb.companion.processes import ManagedProcess
 
-        actions = {
-            "spreadsheet": {
-                "inspect",
-                "read",
-                "write",
-                "edit_cells",
-                "audit_invoices",
-                "export_audit",
-            },
-            "word_document": {"inspect", "read", "write", "replace_text"},
-            "pdf_document": {"inspect", "read", "write", "merge", "extract"},
-        }
-        action = args.get("action")
-        extension = {
-            "spreadsheet": ".xlsx",
-            "word_document": ".docx",
-            "pdf_document": ".pdf",
-        }[format]
-        if action not in actions[format]:
-            raise ValueError("Unsupported document action")
         files = self.bg.files
-        given = args.get("path", "")
-        path = files.path(given, allow_missing=action in ("write", "merge"))
-        if path.suffix.lower() != extension:
-            raise ValueError("Use " + extension + " paths")
-        expected = args.get("expected_sha256", "NEW")
-        destination = args.get("destination", "")
-        writing = action in (
-            "write",
-            "edit_cells",
-            "replace_text",
-            "merge",
-            "extract",
-            "export_audit",
-        )
-        inputs = []
-        if action not in ("write", "merge"):
-            inputs.append(checked_input(files, given, extension))
-        if action == "merge":
-            names = args.get("inputs", [])
-            if not isinstance(names, list) or not 2 <= len(names) <= 20:
-                raise ValueError("merge needs 2..20 PDF inputs")
-            inputs = [checked_input(files, n, ".pdf") for n in names]
-        fingerprints = {str(p): sha(p) for p in inputs}
-        if action in ("edit_cells", "replace_text", "extract", "export_audit"):
-            if (
-                not re.fullmatch("[0-9a-fA-F]{64}", expected)
-                or fingerprints[str(path)] != expected.lower()
-            ):
-                raise ValueError(
-                    "Current source expected_sha256 is required for edits/extract"
-                )
-        elif (
-            action in ("read", "inspect", "audit_invoices")
-            and expected != "NEW"
-            and fingerprints[str(path)] != expected.lower()
-        ):
-            raise ValueError("Source SHA256 mismatch")
-        if action in ("extract", "export_audit") and not destination:
-            raise ValueError("extract/export_audit needs a new destination")
-        target = files.path(destination, allow_missing=True) if destination else path
-        if writing:
-            if target.suffix.lower() != extension or not target.parent.is_dir():
-                raise ValueError("Destination extension/parent is invalid")
-            target_expected = "NEW" if destination else expected
-            if target_expected == "NEW":
-                if target.exists():
-                    raise FileExistsError(
-                        "Destination exists; use its SHA256 to replace"
-                    )
-            elif (
-                not re.fullmatch("[0-9a-fA-F]{64}", target_expected)
-                or not target.is_file()
-                or target.stat().st_size > MAX_DOCUMENT
-                or sha(target) != target_expected.lower()
-            ):
-                raise ValueError("Destination SHA256 mismatch")
-        else:
-            target_expected = "NEW"
-        seconds = args.pop("timeout_seconds", 30)
-        if type(seconds) is not int or not 1 <= seconds <= 60:
-            raise ValueError("Document timeout 1..60 seconds")
-        # Serialize before starting a worker; reject unbounded/invalid input.
-        request = dict(
-            format=format,
-            arguments=args,
-            root=str(files.root),
-            inputs={str(p): fingerprints[str(p)] for p in inputs},
-        )
-        encoded = json.dumps(request, ensure_ascii=False, allow_nan=False).encode(
-            "utf-8"
-        )
-        if len(encoded) > 1024 * 1024:
-            raise ValueError("Document request exceeds 1 MiB")
+        plan = prepare_document_request(files, format, args)
+        action = plan.action
+        extension = plan.extension
+        target = plan.target
+        target_expected = plan.target_expected
+        writing = plan.writing
+        fingerprints = plan.fingerprints
+        seconds = plan.seconds
+        request = plan.request
 
         def run(task):
             temp = None
@@ -290,13 +338,10 @@ class Documents:
                 ):
                     temp.unlink()
 
-        replay_args = dict(args)
-        if action in ("read", "inspect", "audit_invoices"):
-            replay_args["expected_sha256"] = fingerprints[str(path)]
         return self.bg.new(
             format + "_" + action,
             run,
-            recovery=dict(tool=format, arguments=replay_args)
+            recovery=dict(tool=format, arguments=plan.replay_args)
             if action in ("read", "inspect", "audit_invoices")
             else None,
         )
@@ -659,11 +704,7 @@ def worker():
         config = json.loads(line)
         files = ScopedFiles(config["root"])
         a = config["arguments"]
-        extension = {
-            "spreadsheet": ".xlsx",
-            "word_document": ".docx",
-            "pdf_document": ".pdf",
-        }[config["format"]]
+        extension = DOCUMENT_EXTENSIONS[config["format"]]
         for name, digest in config["inputs"].items():
             if sha(checked_input(files, name, extension)) != digest:
                 raise ValueError("Document input changed before parsing")

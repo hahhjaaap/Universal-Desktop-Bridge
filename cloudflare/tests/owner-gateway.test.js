@@ -118,9 +118,9 @@ test("legacy JWT resource cannot inherit Access-only owner tool scope", async ()
   assert.equal(forwarded.length, 0);
 });
 
-test("explicit full owner grant compacts the legacy 36-tool catalog without auto-running them", async () => {
+test("explicit full owner grant compacts the legacy 37-tool catalog without auto-running them", async () => {
   const all = [...READ_TOOLS, ...OWNER_TOOLS];
-  assert.equal(all.length, 36);
+  assert.equal(all.length, 37);
   const env = {
     ...base(),
     UDB_DEVICE_GRANTS: JSON.stringify({ [DEVICE]: { [OWNER]: READ_TOOLS } }),
@@ -142,7 +142,7 @@ test("explicit full owner grant compacts the legacy 36-tool catalog without auto
     env, DEVICE, stub, fetch, access());
   assert.equal(list.status, 200);
   const tools = (await list.json()).result.tools;
-  assert.equal(tools.length, 27);
+  assert.equal(tools.length, 28);
   assert.deepEqual(new Set(tools.map((tool) => tool.name)),
     new Set([...all.filter(name => !name.startsWith("desktop_") && name !== "host_screenshot" && name !== "host_browser"), "sandbox_desktop", "browser"]));
   assert.ok(tools.every((tool) => tool.inputSchema.type === "object"));

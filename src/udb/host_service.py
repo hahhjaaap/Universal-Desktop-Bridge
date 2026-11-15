@@ -170,13 +170,18 @@ class HostService:
             self.stop_event.wait(2)
 
     def _maintain(self):
+        # These values are reused only within one bounded maintenance pass.
+        # Dispatch continues to check owner enablement on every operation,
+        # and the monitor independently revokes owned processes.
+        owner_enabled = enabled(self.agent)
+        now = time.time()
         for sid, row in list(self.sessions.items()):
             try:
                 obj = row["object"]
                 if (
                     row.get("closing")
-                    or not enabled(self.agent)
-                    or time.time() > row["expires"]
+                    or not owner_enabled
+                    or now > row["expires"]
                     or obj.proc is None
                     or not obj.proc.alive()
                 ):
@@ -246,7 +251,7 @@ class HostService:
             raise PolicyError("Supported host apps: browser, workspace")
         if not isinstance(task, str) or not 1 <= len(task) <= 2000:
             raise PolicyError("Describe the authorized task")
-        if not isinstance(duration, int) or not 60 <= duration <= 1800:
+        if type(duration) is not int or not 60 <= duration <= 1800:
             raise PolicyError("Session duration: 60..1800 seconds")
         if len(self.sessions) >= LIMITS["max_sessions"]:
             raise PolicyError("Maximum 2 owned sessions; close a session first")
@@ -265,16 +270,17 @@ class HostService:
             from .host_workspace import Workspace
 
             obj = Workspace(self.agent.home, sid)
-        self.sessions[sid] = dict(
-            kind=kind, task=task, expires=time.time() + duration, object=obj
-        )
+        # Establish one expiry timestamp for the created session and its
+        # response, without a second dictionary read after browser startup.
+        expires = time.time() + duration
+        self.sessions[sid] = dict(kind=kind, task=task, expires=expires, object=obj)
         self.agent.audit("host_start", dict(session_id=sid, kind=kind))
         return dict(
             session_id=sid,
             kind=kind,
             no_user_input=True,
             tabs=obj.listing() if kind == "browser" else [],
-            expires=self.sessions[sid]["expires"],
+            expires=expires,
         )
 
     def _open_browser(self, args):

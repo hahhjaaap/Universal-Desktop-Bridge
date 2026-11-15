@@ -89,6 +89,30 @@ def run(samples=15, backend_delay_ms=15):
 
         glob_ms = measure(lambda: sorted(folder.glob("*.json")))
         listdir_ms = measure(lambda: pending_inbox_commands(folder))
+
+        # Mixed inbox fixture: compare the previous all-name sort against
+        # filtering JSON candidates before sorting. Neither variant reads or
+        # executes mailbox payloads.
+        mixed = folder / "mixed"
+        mixed.mkdir()
+        for index in range(120):
+            (mixed / f"unrelated_{index:03}.txt").write_bytes(b"x")
+        for index in range(12):
+            (mixed / f"message_{index:03}.json").write_bytes(b"{}")
+
+        def previous_mixed_listing():
+            names = os.listdir(mixed)
+            if os.name == "nt":
+                return [
+                    mixed / n
+                    for n in sorted(names, key=os.path.normcase)
+                    if n.lower().endswith(".json")
+                ]
+            return [mixed / n for n in sorted(names) if n.endswith(".json")]
+
+        assert previous_mixed_listing() == pending_inbox_commands(mixed)
+        mixed_all_sort_ms = measure(previous_mixed_listing)
+        mixed_filtered_sort_ms = measure(lambda: pending_inbox_commands(mixed))
     a, b = statistics.median(sequential_ms), statistics.median(parallel_ms)
     waiter = waiter_roundtrip_microbenchmark()
     return {
@@ -100,6 +124,10 @@ def run(samples=15, backend_delay_ms=15):
         "tool_discovery_ratio": round(a / max(b, 0.000001), 3),
         "empty_inbox_glob_ms_per_scan": round(glob_ms, 5),
         "empty_inbox_listdir_ms_per_scan": round(listdir_ms, 5),
+        "mixed_inbox_sort_all_ms_per_scan": round(mixed_all_sort_ms, 5),
+        "mixed_inbox_filter_then_sort_ms_per_scan": round(
+            mixed_filtered_sort_ms, 5
+        ),
         "rpc_waiter_bounded_queue_us_per_roundtrip": waiter["bounded"],
         "rpc_waiter_simple_queue_us_per_roundtrip": waiter["simple"],
         "os": os.name,

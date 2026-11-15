@@ -47,6 +47,44 @@ Multi-machine gateways must pass a verified `device_id` and explicitly
 grant the new tool in Cloudflare's owner tool allowlist. Source updates do not
 install a new Windows binary or deploy the Cloudflare Worker automatically.
 
+## Fast verified desktop submission
+
+Use `computer_desktop(action="verified_submit")` when a visible owner-controlled
+Windows application has one unique UI Automation `Edit` control and one unique
+`Button` with a known exact label. It combines editor inspection, focus,
+typing, exact readback and one submit invocation into **one MCP call**.
+This avoids several remote round trips, but does not bypass the original
+local computer grant, desktop user-activity checks or UIA protections.
+
+Example for a ChatGPT page already open in a Chrome window (Vietnamese UI):
+
+```json
+{
+  "action": "verified_submit",
+  "window_id": "freshly-observed-window-id",
+  "name": "Hỏi ChatGPT",
+  "submit_name": "Gửi",
+  "text": "Hello"
+}
+```
+
+Call `computer_desktop(action="list")` first and use the returned fresh
+`window_id`; verify the destination and correct account in the visible
+window before submitting. If Chrome is not on ChatGPT, open it via the
+separate approved `open_chrome_tab` action. Exact UIA names vary by
+app, locale and version. The new action refuses to overwrite a draft:
+the existing editor must be empty (or expose its exact UIA label as the
+placeholder). If the readback differs even by one character, it does not
+press the button. A failed/uncertain action is **not replay-safe**;
+inspect the window rather than automatically retrying.
+
+Successful return means the exact input text was confirmed and the
+uniquely named button was invoked. It does **not** verify server-side
+delivery, login or model response. Observe those separately when needed.
+This is **not** headless DOM control, a second ChatGPT agent or permission
+to read/send arbitrary private chats. A human can interrupt; local pause
+or physical-input handoff always remains authoritative.
+
 ## Native UI Automation
 
 List windows, retain a fresh `window_id`, then inspect `snapshot`. Snapshot reports

@@ -9,10 +9,43 @@ from .resources import require_capacity, require_light_capacity
 from .windows_actions import READ_ACTIONS
 
 
-def status_report(agent, processes=None, *, worker_ready=True):
-    """Report the local grant even when the process supervisor is unavailable."""
+def status_report(agent, processes=None, *, worker_ready=True, usage=None, brief=False):
+    """Read the owner grant afresh; report capacity without claiming free slots.
+
+    Other terminal and background jobs share the same 10-slot pool, so the
+    remaining figure is an UPPER bound rather than guaranteed availability.
+    """
     from .desktop_control import browser_handoff, paused
 
+    if (
+        usage is None
+        and processes is not None
+        and isinstance(processes.get("jobs"), list)
+    ):
+        jobs = processes["jobs"]
+        usage = {
+            "known_computer_jobs": len(jobs),
+            "active_computer_jobs": sum(
+                job.get("status") in ("running", "cleanup_failed") for job in jobs
+            ),
+        }
+    active = usage["active_computer_jobs"] if usage is not None else None
+    capacity = {
+        "available": usage is not None,
+        "known_computer_jobs": usage["known_computer_jobs"]
+        if usage is not None
+        else None,
+        "active_computer_jobs": active,
+        "remaining_shared_slots_upper_bound": (
+            max(0, MAX_CONCURRENT - active) if active is not None else None
+        ),
+        "other_background_jobs_not_included": True,
+    }
+    process_state = (
+        processes if processes is not None else dict(jobs=[], available=False)
+    )
+    if brief and processes is not None:
+        process_state = {"available": worker_ready, "jobs_omitted": True}
     return dict(
         desktop_paused=paused(agent) or browser_handoff(agent),
         **access.summary(agent),
@@ -24,9 +57,8 @@ def status_report(agent, processes=None, *, worker_ready=True):
             output_bytes=4 * 1024 * 1024,
             memory_mib=4096,
         ),
-        processes=processes
-        if processes is not None
-        else dict(jobs=[], available=False),
+        job_usage=capacity,
+        processes=process_state,
     )
 
 
@@ -45,6 +77,13 @@ class Computer:
 
     def dispatch(self, mode, args, resource):
         if mode == "status":
+            if args.get("brief") is True:
+                return status_report(
+                    self.agent,
+                    processes={"available": True, "jobs_omitted": True},
+                    usage=self.jobs.usage(),
+                    brief=True,
+                )
             return status_report(self.agent, self.jobs.process("list"))
         if mode == "process" and args.get("action") == "stop":
             return self.jobs.process("stop", args.get("job_id", ""))

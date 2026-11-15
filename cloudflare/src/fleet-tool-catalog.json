@@ -1,9 +1,15 @@
 [
   {
     "name": "bridge_status",
-    "description": "Check Windows bridge version, project count, sandbox availability and projects with owner-granted Sandbox autonomy. Safe connectivity test.",
+    "description": "Check Windows bridge readiness. Optional brief mode skips expensive ancillary scans.",
     "inputSchema": {
-      "properties": {},
+      "properties": {
+        "brief": {
+          "default": false,
+          "title": "Brief",
+          "type": "boolean"
+        }
+      },
       "title": "bridge_statusArguments",
       "type": "object"
     },
@@ -16,9 +22,20 @@
   },
   {
     "name": "list_projects",
-    "description": "List locally registered projects and separate read/write permissions.",
+    "description": "List fresh project permissions. Optional pagination; limit=0 returns all.",
     "inputSchema": {
-      "properties": {},
+      "properties": {
+        "offset": {
+          "default": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "limit": {
+          "default": 0,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
       "title": "list_projectsArguments",
       "type": "object"
     },
@@ -510,9 +527,15 @@
   },
   {
     "name": "host_status",
-    "description": "CPU/RAM totals, resource pressure and UDB-owned host sessions only. Never inspects user tab/window content.",
+    "description": "Host resource state and owned sessions. Brief mode omits session details.",
     "inputSchema": {
-      "properties": {},
+      "properties": {
+        "brief": {
+          "default": false,
+          "title": "Brief",
+          "type": "boolean"
+        }
+      },
       "title": "host_statusArguments",
       "type": "object"
     },
@@ -614,9 +637,15 @@
   },
   {
     "name": "computer_status",
-    "description": "Inspect optional current-user computer access and owned job limits. Does not grant access or inspect user windows. Owner activation is local: udb --access computer.",
+    "description": "Inspect current-user access and job capacity; brief omits the job list.",
     "inputSchema": {
-      "properties": {},
+      "properties": {
+        "brief": {
+          "default": false,
+          "title": "Brief",
+          "type": "boolean"
+        }
+      },
       "title": "computer_statusArguments",
       "type": "object"
     },

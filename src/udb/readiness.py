@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 
-def report(manager: dict, host: dict, computer: dict, projects: list) -> dict:
+def report(
+    manager: dict, host: dict, computer: dict, projects: list, *, project_totals=None
+) -> dict:
     worker_ready = host.get("worker_ready") is True
     agent_ready = manager.get("mode") == "headless" or worker_ready
     background = host.get("enabled") is True
     computer_enabled = computer.get("enabled") is True
-    writable = sum(bool(p.get("writable")) for p in projects)
+    if project_totals is None:
+        readable = len(projects)
+        writable = sum(bool(p.get("writable")) for p in projects)
+    else:
+        readable, writable = project_totals
     paused = host.get("resources", {}).get("paused", True) is not False
     if not agent_ready or not worker_ready:
         state = "agent_unavailable"
@@ -42,7 +48,7 @@ def report(manager: dict, host: dict, computer: dict, projects: list) -> dict:
         "worker_ready": worker_ready,
         "computer_authorized": computer_enabled,
         "background_authorized": background,
-        "readable_projects": len(projects),
+        "readable_projects": readable,
         "writable_projects": writable,
         "resource_paused": paused,
         "next_actions": actions,

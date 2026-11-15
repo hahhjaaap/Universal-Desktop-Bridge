@@ -96,17 +96,21 @@ def make_server(agent: Agent):
     )
 
     @mcp.tool(annotations=read)
-    def bridge_status() -> dict:
-        """Check Windows bridge version, project count, sandbox availability and projects with owner-granted Sandbox autonomy. Safe connectivity test."""
+    def bridge_status(brief: bool = False) -> dict:
+        """Check Windows bridge readiness. Optional brief mode skips expensive ancillary scans."""
         agent.audit("bridge_status", {"transport_call": True})
-        result = agent.diagnostics()
+        result = agent.diagnostics(brief=True) if brief else agent.diagnostics()
         result.setdefault("readiness", {})["transport_verified"] = True
         return result
 
     @mcp.tool(annotations=read)
-    def list_projects() -> list[dict]:
-        """List locally registered projects and separate read/write permissions."""
-        return agent.projects()
+    def list_projects(offset: int = 0, limit: int = 0) -> list[dict]:
+        """List fresh project permissions. Optional pagination; limit=0 returns all."""
+        return (
+            agent.projects(offset=offset, limit=limit)
+            if offset or limit
+            else agent.projects()
+        )
 
     @mcp.tool(annotations=read)
     def list_files(
@@ -399,11 +403,37 @@ def make_server(agent: Agent):
         return desktop_vm.command(agent, session_id, "batch", steps=steps)
 
     @mcp.tool(annotations=read)
-    def host_status() -> dict:
-        """CPU/RAM totals, resource pressure and UDB-owned host sessions only. Never inspects user tab/window content."""
+    def host_status(brief: bool = False) -> dict:
+        """Host resource state and owned sessions. Brief mode omits session details."""
         from .host_client import status
 
-        return status(agent)
+        health = status(agent)
+        if not brief:
+            return health
+        # Keep the same fresh resource/pause evidence used by admission.
+        # Never cache owner-enabled status or private session metadata.
+        resource = health["resources"]
+        keys = (
+            "at",
+            "cpu_percent",
+            "ram_percent",
+            "total_mib",
+            "available_mib",
+            "commit_percent",
+            "commit_available_mib",
+            "paused",
+            "admission_ready",
+            "reason",
+            "pressure_causes",
+            "light_operations_ready",
+            "light_reason",
+        )
+        return {
+            "enabled": health["enabled"],
+            "worker_ready": health["worker_ready"],
+            "session_count": len(health["sessions"]),
+            "resources": {key: resource[key] for key in keys if key in resource},
+        }
 
     @mcp.tool(annotations=propose)
     def host_start_session(kind: str, task: str, duration_seconds: int = 900) -> dict:
@@ -564,9 +594,13 @@ def make_server(agent: Agent):
         return command(agent, "computer", mode=mode, arguments=arguments or {})
 
     @mcp.tool(annotations=read)
-    def computer_status() -> dict:
-        """Inspect optional current-user computer access and owned job limits. Does not grant access or inspect user windows. Owner activation is local: udb --access computer."""
-        return computer_call("status")
+    def computer_status(brief: bool = False) -> dict:
+        """Inspect current-user access and job capacity; brief omits the job list."""
+        return (
+            computer_call("status", {"brief": True})
+            if brief
+            else computer_call("status")
+        )
 
     @mcp.tool(
         annotations=ToolAnnotations(

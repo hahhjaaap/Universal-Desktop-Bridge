@@ -107,6 +107,15 @@ A fresh read-back confirmed Managed OAuth, ChatGPT DCR callback patterns,
 a one-hour Access session, and **one deny-everyone policy**. The application
 is hidden from the app launcher; no test accounts are granted yet.
 
+The separate browser-owner approval application
+**UDB Fleet Isolated Device Approval** was also created on
+`udb-fleet-isolated-staging.hkhoinguyen72.workers.dev/v1/setup/enrollments/*/approval`
+with ID `b443dd85-179d-4ea5-b42d-92ff486bdba2`. This is a distinct
+non-OAuth Access application with its own audience; it also has one
+**deny-everyone** policy and is hidden from the app launcher. Both apps were
+read back from Cloudflare API after creation to verify exact path scopes
+and no allow/bypass policies.
+
 This is **Access app provisioning only**: no Worker is deployed on that name,
 no Durable Object exists for this isolated candidate, no device can enroll,
 and no authenticated ChatGPT OAuth roundtrip has occurred. The old

@@ -205,9 +205,7 @@ def inspect(settings, opener=None):
     if fleet:
         result["mcp_url"] = relay + "/v1/account/mcp"
         try:
-            result["fleet_linked"] = fleet_link_status(
-                opener, relay, device_id, token
-            )
+            result["fleet_linked"] = fleet_link_status(opener, relay, device_id, token)
         except (HTTPError, OSError, ValueError):
             result["fleet_linked"] = False
             result["failure"] = "fleet_status_unavailable"

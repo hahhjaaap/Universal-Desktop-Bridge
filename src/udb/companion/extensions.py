@@ -73,12 +73,16 @@ def _file_mkdir(rt, a):
     p = rt.files.path(a["path"], allow_missing=True)
     if p == rt.files.root:
         raise FileExistsError("Root already exists")
-    if p.exists() or p.is_symlink():
-        raise FileExistsError("Directory already exists")
     parent = rt.files.path(str(p.parent), allow_missing=True)
     if not parent.is_dir():
         raise FileNotFoundError("Parent directory not found")
-    p.mkdir(exist_ok=False)
+    # mkdir(exist_ok=False) is the final atomic no-overwrite check and
+    # catches case-insensitive collisions on Windows. Pre-checking exists()
+    # cannot prevent a concurrent process from creating the directory.
+    try:
+        p.mkdir(exist_ok=False)
+    except FileExistsError:
+        raise FileExistsError("Directory already exists") from None
     return "Created directory: " + str(p.relative_to(rt.files.root))
 
 

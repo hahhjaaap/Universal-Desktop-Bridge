@@ -180,3 +180,20 @@ Mỗi bước phải có: (1) benchmark trước/sau trên fixture có thể tá
 ## 7. Những việc tuyệt đối không được làm để cải thiện số đo
 
 Không bỏ authorization hoặc prompt approval; không giữ cache quyền khi owner đã thu hồi; không nới scope browser, Sandbox, đường dẫn, terminal; không tự replay side-effecting calls khi timeout; không bỏ SHA no-overwrite/recovery; không xóa profile/backup trên máy thật; không auto-deploy Cloudflare hoặc thay Windows EXE chỉ vì CI green.
+
+
+## 8. Bảng tiến độ triển khai 41–50 (PR #195)
+
+- **PR triển khai:** [#195](https://github.com/hahhjaaap/Universal-Desktop-Bridge/pull/195) — Draft, không được tính là merged/shipped.
+- **Bước 41:** code tiền kiểm request `propose_sandbox_job`, regression invalid inputs.
+- **Bước 42:** tái sử dụng `Path(parent)` mỗi thư mục và lọc hậu tố nhẹ hơn trong source snapshot; giữ nguyên quyền/caps.
+- **Bước 43:** fast path result JSON rỗng cho `get_request_status`.
+- **Bước 44:** tránh probe `exists` thừa trước khi đọc bounded job log.
+- **Bước 45:** `list_jobs(limit=1..30)` tùy chọn; mặc định trả 30, cập nhật generated Fleet catalog.
+- **Bước 46:** `propose_desktop_session` kiểm tra task và duration trước khi dò Sandbox.
+- **Bước 47:** guest command tái dùng session row đã xác thực trong cùng lượt, vẫn tái kiểm tra quyền khi chờ.
+- **Bước 48:** CRC PNG theo `memoryview` thay vì copy khối IDAT lớn.
+- **Bước 49:** internal readiness bỏ đọc `progress.json` dư; public desktop status vẫn đầy đủ.
+- **Bước 50:** bảng lock `desktop_control` tạo một lần ở Agent init, vẫn giữ transactional per-session lock và cancel/revocation.
+- **Nghiệm thu:** cross-platform CI, Windows EXE và relay validation phải đạt trên cùng SHA; trước đó trạng thái toàn nhóm là **code + tests, chờ merge**.
+- **Phạm vi chưa xác minh:** Windows Sandbox trên máy thật và chi phí toàn bộ end-to-end ChatGPT không được chứng minh chỉ bằng CI.

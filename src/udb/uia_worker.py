@@ -182,9 +182,7 @@ class PersistentUIA:
             finally:
                 if self._process is not None:
                     token = object()
-                    timer = threading.Timer(
-                        IDLE_SECONDS, self._expire, args=(token,)
-                    )
+                    timer = threading.Timer(IDLE_SECONDS, self._expire, args=(token,))
                     timer.daemon = True
                     self._idle_token = token
                     self._idle = timer

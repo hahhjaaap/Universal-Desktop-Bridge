@@ -242,6 +242,45 @@ class Desktop:
             user_input_injected=False,
         )
 
+    def open_chatgpt(self):
+        """Open only the official ChatGPT home; never inspect login or tabs.
+
+        Prefer the verified existing-Chrome path. If there is no running
+        Chrome window, ask Windows to launch the default URL handler once.
+        A successful request never proves the page loaded or the user logged in.
+        """
+        url = "https://chatgpt.com/"
+        self.interactive()
+        if self._chrome_windows():
+            result = self.open_chrome_tab(url)
+            return {
+                **result,
+                "url": url,
+                "launch_mode": "existing_chrome_tab",
+                "browser_launch_verified": result["native_tab_marker_verified"],
+                "page_loaded_verified": False,
+                "login_verified": False,
+                "replay_safe": False,
+            }
+        try:
+            os.startfile(url)
+        except (OSError, AttributeError) as exc:
+            raise PolicyError(
+                "Windows could not request the default browser; inspect "
+                "the desktop before retrying"
+            ) from exc
+        return {
+            "requested": True,
+            "url": url,
+            "launch_mode": "default_browser",
+            "browser_launch_verified": False,
+            "page_loaded_verified": False,
+            "login_verified": False,
+            "dom_attached": False,
+            "user_input_injected": False,
+            "replay_safe": False,
+        }
+
     def resolve(self, window_id, focus=True):
         self.interactive()
         row = self.windows.get(window_id)
@@ -464,6 +503,8 @@ class Desktop:
             return self.batch(window_id, steps)
         if action == "open_chrome_tab":
             return self.open_chrome_tab(text)
+        if action == "open_chatgpt":
+            return self.open_chatgpt()
         hwnd = self.resolve(
             window_id,
             focus=action
@@ -684,7 +725,7 @@ class Desktop:
                 not isinstance(row, dict)
                 or set(row) - fields
                 or row.get("action")
-                in ("list", "batch", "screenshot", "displays", "open_chrome_tab")
+                in ("list", "batch", "screenshot", "displays", "open_chrome_tab", "open_chatgpt")
                 or "action" not in row
             ):
                 raise PolicyError("Invalid/nested batch step; capture/list separately")

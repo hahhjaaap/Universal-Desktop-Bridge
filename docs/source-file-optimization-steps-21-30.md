@@ -11,9 +11,9 @@
 
 | Step | Target | Acceptance criterion |
 | --- | --- | --- |
-| 21 | Search byte budget preflight | Do not open the next candidate file after its size would exceed the 4-MiB search byte budget; report `byte_budget` explicitly. Retain the existing 512-KiB source-read cap. |
-| 22 | Search result determinism | Same unchanged project tree yields stable matches and line numbers without materializing an unbounded directory listing. |
-| 23 | Search error isolation | Failed UTF-8 decoding, disappeared files and permission revocation never expose forbidden content or abort unrelated safe matches. |
+| 21 ✅ Code + regression added; CI pending | Search byte budget preflight | Do not open the next candidate file after its size would exceed the 4-MiB search byte budget; report `byte_budget` explicitly. Retain the existing 512-KiB source-read cap. |
+| 22 ✅ Code + regression added; CI pending | Search result determinism | Same unchanged project tree yields stable matches and line numbers without materializing an unbounded directory listing. |
+| 23 ✅ Regression added; CI pending | Search error isolation | Failed UTF-8 decoding, disappeared files and permission revocation never expose forbidden content or abort unrelated safe matches. |
 | 24 | Batch read deduplication | Repeated paths retain repeated ordered output while avoiding redundant physical reads **only if** project policy and audits remain per-request and revocation-safe. |
 | 25 | Batch read output budget | Exact UTF-8 byte count, preflight + post-read limits, and no partial response on overflow or revocation. |
 | 26 | File listing pagination | Stable offset and keyset behavior on mixed-case names, ties and insertions, with explicit 10k scan truncation. |

@@ -79,10 +79,12 @@ def test_companion_guarded_write_and_replace_preserve_recovery(tmp_path):
     assert created["created"] is True
     updated = files.replace("hello.py", "🍀", "🌿", created["sha256"], occurrences=2)
     assert updated["replacements"] == 2
-    assert (tmp_path / "hello.py").read_text("utf-8") == current.replace("🍀", "🌿")
+    assert (tmp_path / "hello.py").read_bytes().decode("utf-8") == current.replace(
+        "🍀", "🌿"
+    )
     assert list((tmp_path / ".udb-recovery").glob("*.bak"))
     assert any(
-        p.read_text("utf-8") == current
+        p.read_bytes().decode("utf-8") == current
         for p in (tmp_path / ".udb-recovery").glob("*.bak")
     )
     for occurrences in (True, 0, 101, "2"):
@@ -92,7 +94,9 @@ def test_companion_guarded_write_and_replace_preserve_recovery(tmp_path):
             )
     with pytest.raises(ValueError, match="changed"):
         files.replace("hello.py", "🌿", "🍀", "0" * 64, occurrences=2)
-    assert (tmp_path / "hello.py").read_text("utf-8") == current.replace("🍀", "🌿")
+    assert (tmp_path / "hello.py").read_bytes().decode("utf-8") == current.replace(
+        "🍀", "🌿"
+    )
 
 
 def test_companion_mkdir_atomic_create_only_and_case_collision(tmp_path):

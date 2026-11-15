@@ -231,8 +231,12 @@ class Agent(AutonomyMixin):
 
         Pagination is opt-in. Never cache project rights across owner changes.
         """
-        if (type(offset) is not int or offset < 0 or type(limit) is not int
-                or not 0 <= limit <= 1000):
+        if (
+            type(offset) is not int
+            or offset < 0
+            or type(limit) is not int
+            or not 0 <= limit <= 1000
+        ):
             raise PolicyError("Project offset must be nonnegative; limit 0..1000")
         sql = "SELECT id, root, writable FROM projects ORDER BY id"
         args = ()

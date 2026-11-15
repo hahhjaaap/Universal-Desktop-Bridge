@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import fnmatch
-from concurrent.futures import ThreadPoolExecutor
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .core import BLOCK_DIRS, MAX_TEXT, SOURCE_EXT, PolicyError

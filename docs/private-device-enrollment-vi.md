@@ -1,5 +1,9 @@
 # Đăng ký UDB máy mới không cần mã mời (Private Enrollment)
 
+> **Luồng legacy/compatibility:** với cài đặt mới, dùng `udb setup` và
+> [hướng dẫn automatic setup](automatic-setup.md). `udb connect --enroll`
+> bên dưới được giữ cho quy trình quản trị cũ; không dùng thay cho setup mới.
+
 **Trạng thái: mã nguồn trong PR, chưa triển khai Cloudflare.** Quy trình này
 dùng riêng cho chủ hệ thống hoặc máy được chủ hệ thống phê duyệt. Không có
 đăng ký công khai và không tự cấp quyền Windows hoặc quyền ChatGPT.

@@ -2,10 +2,13 @@
 // No current-device globals, client-supplied owner IDs, or delegated Windows permissions.
 import { digest, readJson, validRpc, DEVICE_ID } from "./auth.js";
 import { accessConfig, verifiedAccessIdentity } from "./access.js";
+import { fleetEnabled } from "./fleet-policy.js";
+export { fleetEnabled } from "./fleet-policy.js";
 import { stableAccessSubject } from "./enrollment-owner.js";
 import { handleMcp } from "./mcp.js";
 import { ENROLLED_CATALOG } from "./local-permissions.js";
 import { publicToolNames } from "./tool-families.js";
+import { fleetCanonicalCatalog, FLEET_CATALOG_VERSION } from "./fleet-catalog.js";
 
 const MODERN = "2026-07-28";
 const LEGACY = new Set(["2025-03-26", "2025-06-18", "2025-11-25"]);
@@ -20,20 +23,12 @@ const fail = (status, code) => json({ error: code }, status);
 const result = (id, value, modern = false) => json({ jsonrpc: "2.0", id,
   result: modern ? { ...value, resultType: "complete",
     _meta: { ...value._meta, [META + "serverInfo"]:
-      { name: "udb-account-fleet", version: "0.1.0" } } } : value });
+      { name: "udb-account-fleet", version: FLEET_CATALOG_VERSION } } } : value });
 const denied = (request) => json({ error: "cloudflare_access_authentication_required" }, 401, {
   "www-authenticate": 'Bearer error="invalid_token", resource_metadata="' +
     new URL(request.url).origin +
     '/.well-known/oauth-protected-resource/v1/account/mcp", scope="udb:read"',
 });
-
-export const fleetEnabled = env =>
-  env?.UDB_ENABLE_ACCOUNT_FLEET === "true" &&
-  env?.UDB_ENABLE_BROWSER_ENROLLMENT === "true" &&
-  env?.UDB_ENABLE_LOCAL_TOOL_SYNC === "true" &&
-  env?.UDB_TENANT_POLICY === undefined &&
-  env?.UDB_AUTH_MODE === "cloudflare-access" &&
-  !!accessConfig(env)?.team && !!env.DEVICES?.get;
 
 export function fleetProtectedResource(request, env) {
   if (!fleetEnabled(env)) return fail(404, "account_fleet_disabled");
@@ -55,7 +50,10 @@ export async function fleetIdentity(request, env, access = null, fetchImpl = fet
     } catch { return null; }
   } else {
     try { identity = await verifiedAccessIdentity(request, env, fetchImpl); }
-    catch { return null; }
+    catch (error) {
+      if (error?.message === "access_keys_unavailable") throw error;
+      return null;
+    }
   }
   return stableAccessSubject(identity, config.team);
 }
@@ -186,8 +184,6 @@ async function verifiedDevice(env, owner, device) {
   } catch { return { stub, verified: false }; }
 }
 
-const STATUS_FANOUT = 12;
-
 async function deviceList(env, owner, entries) {
   // Bound Durable Object reads even for a full 100-device fleet. Preserve the
   // registry order and independently verify ownership on EVERY request.
@@ -278,7 +274,9 @@ export async function handleAccountMcp(request, env, access = null, fetchImpl = 
   const origin = request.headers.get("Origin");
   if (origin && origin !== new URL(request.url).origin) return fail(403, "invalid_origin");
   if (request.method !== "POST") return fail(405, "method_not_allowed");
-  const owner = await fleetIdentity(request, env, access, fetchImpl);
+  let owner;
+  try { owner = await fleetIdentity(request, env, access, fetchImpl); }
+  catch { return fail(503, "cloudflare_access_keys_temporarily_unavailable"); }
   if (!owner) return denied(request);
   let snapshot, rpc;
   try { snapshot = await fleetSnapshot(env, owner); }
@@ -299,35 +297,12 @@ export async function handleAccountMcp(request, env, access = null, fetchImpl = 
   if (rpc.method === "initialize")
     return result(rpc.id, { protocolVersion: LEGACY.has(rpc.params?.protocolVersion) ?
       rpc.params.protocolVersion : "2025-11-25", capabilities: { tools: { listChanged: false } },
-      serverInfo: { name: "udb-account-fleet", version: "0.1.0" } });
+      serverInfo: { name: "udb-account-fleet", version: FLEET_CATALOG_VERSION } });
   if (rpc.method === "ping") return result(rpc.id, {});
   if (rpc.method === "tools/list") {
-    let catalog = snapshot.catalog;
-    if (!catalog) {
-      for (const device of snapshot.devices) {
-        const current = await verifiedDevice(env, owner, device);
-        if (!current.verified || !current.online) continue;
-        const found = await handleMcp(forwardedRequest(request, rpc, device.id), env,
-          device.id, current.stub, fetchImpl, access);
-        if (!found.ok) continue;
-        let payload;
-        try { payload = await found.json(); } catch { continue; }
-        const tools = payload?.result?.tools;
-        if (!Array.isArray(tools) || !tools.length) continue;
-        const safe = tools.filter(x => x && ALLOWED.has(x.name) && x.inputSchema?.type === "object" &&
-          !Object.hasOwn(x.inputSchema.properties || {}, "device_id"));
-        if (!safe.length) continue;
-        const response = await snapshot.account.fetch(new Request("https://internal/fleet/catalog", {
-          method: "POST", headers: { "X-UDB-Owner": owner },
-          body: JSON.stringify({ tools: safe }),
-        }));
-        if (response.ok) {
-          try { catalog = (await response.json()).tools; } catch { catalog = null; }
-          if (Array.isArray(catalog)) break;
-        }
-      }
-    }
-    return result(rpc.id, { tools: [listTool, ...deviceCatalog(catalog || [])],
+    // Discovery is account-wide metadata, never a snapshot of the first online
+    // device. Ignore legacy fleet_catalog entries seeded by earlier versions.
+    return result(rpc.id, { tools: [listTool, ...deviceCatalog(fleetCanonicalCatalog())],
       ...(modern ? { ttlMs: 0, cacheScope: "private" } : {}) }, modern);
   }
   if (rpc.method !== "tools/call") return fail(400, "unsupported_rpc");
@@ -364,5 +339,6 @@ export async function handleAccountMcp(request, env, access = null, fetchImpl = 
   // No replay: delegate once to the existing per-device Access/local-permission
   // gateway and retain its response status, protocol adaptation and errors.
   return handleMcp(forwardedRequest(request, { ...rpc, params: {
-    ...rpc.params, arguments: rest } }, id), env, id, current.stub, fetchImpl, access);
+    ...rpc.params, arguments: rest } }, id), env, id, current.stub, fetchImpl,
+    access, owner);
 }

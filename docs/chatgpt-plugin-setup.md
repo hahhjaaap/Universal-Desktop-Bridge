@@ -2,13 +2,13 @@
 
 > **Docs reviewed 2026-11-13 — UDB 0.12.0:** **Staging/opt-in scope.** Features and grants described below are not enabled for arbitrary devices and are not proof of a live ChatGPT connection. Check [current-version.md](current-version.md) and the installed `udb --version` before using commands.
 
-## Staging example — obtain your own current device endpoint
+## Staging example — obtain the correct MCP resource
 
-The ChatGPT plugin package is maintained in `integrations/chatgpt-plugin/`. The following staging configuration is an example, not a universal current endpoint. Obtain the real device-scoped URL with `udb mcp-config` after attended pairing and confirm the actual Worker/Access configuration separately.
+The ChatGPT plugin package is maintained in `integrations/chatgpt-plugin/`. The following staging configuration is an example, not a universal current endpoint. `udb mcp-config` prints the legacy per-device URL. If the opt-in account Fleet feature is enabled and the device is linked, use the shared `/v1/account/mcp` URL printed by `udb setup` instead; add it once for the account, not once per device. Confirm the actual Worker/Access configuration separately.
 
 - **Plugin name:** UDB Desktop Bridge
 - **MCP transport:** Streamable HTTP
-- **MCP endpoint:** the reviewed, device-specific URL from `udb mcp-config`
+- **MCP endpoint:** the reviewed per-device URL from `udb mcp-config`, or the shared `/v1/account/mcp` URL from `udb setup` when Fleet is enabled
 - **OAuth:** Cloudflare Access Managed OAuth with Dynamic Client Registration
 - **Requested resource scope:** `udb:read`
 - **Environment:** staging only
@@ -26,12 +26,12 @@ The stable callback was added after a real DCR request returned HTTP 400 with `i
 
 ## Owner connection and acceptance
 
-1. Open the private **UDB Desktop Bridge** plugin in ChatGPT.
+1. Open the existing private **UDB Desktop Bridge** custom MCP connection in ChatGPT.
 2. Select Connect and complete the Cloudflare Access sign-in and OAuth consent.
 3. Confirm that the MCP server exposes `tools/list` after authentication.
-4. Call `bridge_status` if exposed and confirm that the active Windows device is online.
+4. In Fleet mode, call `list_devices`, choose the intended `device_id`, and call `bridge_status` with that ID. In per-device mode, verify the device bound to that URL.
 5. Read one synthetic fixture file that the owner has explicitly allowed; compare its SHA-256 with the known expected hash.
-6. Verify wrong-device, revoked-session, and unauthorized-write denials.
+6. Verify wrong-account, wrong-device, offline-device, revoked-session and unauthorized-write denials.
 
 Public metadata checks, DCR registration, and an HTTP 302 to the Access login page are pre-authentication checks only. They do not prove a user has authenticated or that a Windows tool call works. Do not report end-to-end connectivity as complete until the owner completes the steps above.
 

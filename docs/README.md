@@ -1,16 +1,19 @@
 # UDB documentation index — source 0.12.0
 
-> **Reviewed 2026-11-13:** This index organizes the current source docs.
-> The published v0.12.0 Windows installer (2026-11-11), source commits and
-> live Cloudflare Worker are not automatically synchronized.
-> See [version/status](current-version.md).
+> **Reviewed 2026-11-14:** This index organizes the current source docs.
+> The published v0.12.0 Windows installer, source commits and live Cloudflare
+> Worker are not automatically synchronized. See [version/status](current-version.md).
 
-## Private device enrollment (source feature, not yet deployed)
+## Setup and opt-in multi-device candidate
 
-- [Đăng ký máy Windows mới không cần mã mời](private-device-enrollment-vi.md)
-  — request → owner verification/approval → stored device token; initially
-  disabled on the Cloudflare Worker, independent of ChatGPT OAuth/Access
-  and all Windows owner permissions.
+- [Automatic Windows setup and recovery](automatic-setup.md) — `udb setup`,
+  owner approval, Credential Manager recovery, autostart and authenticated MCP proof.
+- [Account Fleet MCP](account-fleet-mcp.md) — opt-in shared `/v1/account/mcp`
+  endpoint, explicit per-call `device_id`, catalog and rollout gates. Not deployed.
+- [Pairing checklist (Vietnamese)](pairing-checklist-vi.md) — owner and operator
+  steps, exact endpoint selection, permission boundaries and rollback.
+- [Legacy private enrollment command](private-device-enrollment-vi.md) —
+  compatibility-only `udb connect --enroll` procedure.
 
 ## Start here (supported UDB 0.12.0 user procedures)
 

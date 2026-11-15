@@ -45,6 +45,35 @@ def remote(online=True, verified=False):
     }
 
 
+def test_locked_fleet_canary_stages_only_non_secret_request_id(
+    selected, monkeypatch, capsys
+):
+    from udb.private_enrollment import FLEET_TEST_RELAY
+
+    monkeypatch.setenv("UDB_SETUP_RELAY", FLEET_TEST_RELAY)
+    urls = []
+
+    def caps(opener, url, **kwargs):
+        urls.append(url)
+        return 200, {"protocol": 2, "browser_enrollment": False}
+
+    monkeypatch.setattr(setup, "_request_json", caps)
+    monkeypatch.setattr(
+        setup,
+        "prepare_pending",
+        lambda _: {"id": "c" * 32, "proof": "secret", "token": TOKEN},
+    )
+    monkeypatch.setattr(
+        setup, "enroll", lambda *a, **kw: pytest.fail("Enrollment must stay locked")
+    )
+    assert setup.run(selected, browser=lambda _: pytest.fail("No browser")) == 2
+    output = capsys.readouterr().out
+    assert urls == [FLEET_TEST_RELAY + "/v1/setup"]
+    assert "Pending device ID: " + "c" * 32 in output
+    assert "secret" not in output and TOKEN not in output
+    assert not selected.home.exists()
+
+
 def test_fresh_device_runs_every_phase_without_typing_secrets(
     selected, monkeypatch, capsys
 ):
@@ -174,6 +203,103 @@ def test_readonly_flags_never_create_files_browse_spawn_or_write_credentials(
     if flag == "--json":
         assert json.loads(capsys.readouterr().out)["chatgpt_connected"] is False
     assert not selected.home.exists()
+
+
+@pytest.mark.parametrize(("verified", "expected"), [(False, 2), (True, 0)])
+def test_readonly_setup_requires_authenticated_mcp_verification(
+    selected, monkeypatch, capsys, verified, expected
+):
+    report = {
+        "credential_valid": True,
+        "cloud_agent_online": True,
+        "authenticated_mcp_verified": verified,
+        "chatgpt_connected": False,
+    }
+    monkeypatch.setattr(setup, "inspect", lambda *_: report)
+
+    assert setup.run(selected, readonly=True, json_output=True) == expected
+    output = json.loads(capsys.readouterr().out)
+    assert output["authenticated_mcp_verified"] is verified
+    assert output["chatgpt_connected"] is False
+    assert not selected.home.exists()
+
+
+def test_readonly_setup_requires_fleet_link(selected, monkeypatch, capsys):
+    report = {
+        "credential_valid": True,
+        "cloud_agent_online": True,
+        "authenticated_mcp_verified": True,
+        "account_fleet": True,
+        "fleet_linked": False,
+        "chatgpt_connected": False,
+    }
+    assert "Fleet account link: not verified; run udb setup" in setup.render(report)
+    report["fleet_linked"] = True
+    assert "Fleet account link: verified" in setup.render(report)
+    report["fleet_linked"] = False
+    monkeypatch.setattr(setup, "inspect", lambda *_: report)
+    assert setup.run(selected, readonly=True, json_output=True) == 2
+    assert json.loads(capsys.readouterr().out)["fleet_linked"] is False
+
+    report["fleet_linked"] = True
+    assert setup.run(selected, readonly=True, json_output=True) == 0
+    assert json.loads(capsys.readouterr().out)["fleet_linked"] is True
+    assert not selected.home.exists()
+
+
+def test_inspect_fleet_uses_account_url_and_checks_registry_link(selected, monkeypatch):
+    pair(selected)
+    report = {**remote(verified=True), "account_fleet": True}
+    monkeypatch.setattr(setup, "device_status", lambda *a: report)
+    calls = []
+
+    def relay(opener, url, **kwargs):
+        calls.append((url, kwargs))
+        return 200, {"linked": True}
+
+    monkeypatch.setattr(setup, "_request_json", relay)
+    result = setup.inspect(selected, opener=object())
+    assert result["account_fleet"] is True
+    assert result["fleet_linked"] is True
+    assert result["mcp_url"] == RELAY + "/v1/account/mcp"
+    assert calls == [
+        (
+            RELAY + "/v1/devices/" + DEVICE + "/fleet/status",
+            {"proof": TOKEN},
+        )
+    ]
+
+
+def test_inspect_fleet_status_failure_is_not_ready(selected, monkeypatch):
+    pair(selected)
+    report = {**remote(verified=True), "account_fleet": True}
+    monkeypatch.setattr(setup, "device_status", lambda *a: report)
+
+    def unavailable(*args, **kwargs):
+        raise OSError("synthetic network failure")
+
+    monkeypatch.setattr(setup, "_request_json", unavailable)
+    result = setup.inspect(selected, opener=object())
+    assert result["credential_valid"] is True
+    assert result["account_fleet"] is True
+    assert result["fleet_linked"] is False
+    assert result["failure"] == "fleet_status_unavailable"
+    assert result["mcp_url"] == RELAY + "/v1/account/mcp"
+
+
+def test_inspect_does_not_publish_url_when_device_status_is_unavailable(
+    selected, monkeypatch
+):
+    pair(selected)
+
+    def unavailable(*args):
+        raise OSError("synthetic network failure")
+
+    monkeypatch.setattr(setup, "device_status", unavailable)
+    result = setup.inspect(selected, opener=object())
+    assert result["paired"] is True
+    assert result["credential_valid"] is False
+    assert "mcp_url" not in result
 
 
 def test_existing_autostart_is_never_rewritten(selected, monkeypatch):
@@ -474,11 +600,14 @@ def test_account_fleet_setup_links_existing_device_and_uses_single_mcp_url(
     report = {**remote(verified=False), "account_fleet": True}
     monkeypatch.setattr(setup, "device_status", lambda *a: report)
     calls = []
+    fleet_status_calls = 0
 
     def relay(opener, url, **kw):
+        nonlocal fleet_status_calls
         if url.endswith("/fleet/status"):
             assert kw["proof"] == TOKEN
-            return 200, {"linked": False}
+            fleet_status_calls += 1
+            return 200, {"linked": fleet_status_calls > 1}
         if url.endswith("/setup/challenge"):
             return 200, {"challenge_ready": True}
         pytest.fail("Unexpected relay request " + url)
@@ -504,6 +633,9 @@ def test_account_fleet_setup_links_existing_device_and_uses_single_mcp_url(
     assert (selected.home / "cloud-pairing.json").read_bytes() == before
     output = capsys.readouterr().out
     assert RELAY + "/v1/account/mcp" in output
+    assert "Fleet account link: verified" in output
+    assert "call list_devices" in output
+    assert "bridge_status with the chosen device_id" in output
     assert TOKEN not in output
     assert not (selected.home / "state/computer-access.dpapi").exists()
 
@@ -525,7 +657,11 @@ def test_fleet_setup_when_already_linked_never_reapproves_or_reenrolls(
     monkeypatch.setattr(setup, "enroll", lambda *a, **kw: pytest.fail("Already paired"))
     assert setup.run(selected, prompt=lambda _: "n") == 0
     assert (selected.home / "cloud-pairing.json").read_bytes() == before
-    assert RELAY + "/v1/account/mcp" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert RELAY + "/v1/account/mcp" in output
+    assert "Fleet account link: verified" in output
+    assert "call list_devices" in output
+    assert "bridge_status with the chosen device_id" in output
 
 
 def test_fleet_link_resumes_same_challenge_without_rotating_credential(

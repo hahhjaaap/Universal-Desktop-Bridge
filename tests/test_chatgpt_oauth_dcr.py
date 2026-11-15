@@ -9,6 +9,7 @@ import pytest
 from tools.check_chatgpt_oauth import (
     PUBLIC_CALLBACK,
     check,
+    staging_account_resource,
     staging_resource,
     validate_access_endpoint,
     validate_callback,
@@ -17,6 +18,7 @@ from tools.check_chatgpt_oauth import (
 ORIGIN = "https://udb-example-staging.example.workers.dev"
 DEVICE = "a" * 32
 RESOURCE = ORIGIN + "/v1/devices/" + DEVICE + "/mcp"
+ACCOUNT_RESOURCE = ORIGIN + "/v1/account/mcp"
 ISSUER = "https://example.cloudflareaccess.com"
 
 
@@ -68,6 +70,35 @@ def test_staging_resource_exact():
     assert staging_resource(ORIGIN, DEVICE) == RESOURCE
 
 
+def test_account_fleet_resource_is_staging_only_and_never_selects_a_device():
+    assert staging_account_resource(ORIGIN) == ACCOUNT_RESOURCE
+    for relay in [
+        "http://udb-example-staging.example.workers.dev",
+        "https://udb-example-production.example.workers.dev",
+        "https://udb-example-staging.example.workers.dev/other",
+        "https://udb-example-staging.example.workers.dev?foo=bar",
+    ]:
+        with pytest.raises(ValueError):
+            staging_account_resource(relay)
+
+
+def test_account_fleet_readonly_preflight_checks_exact_resource_without_dcr():
+    opener = StubOpener(resource=ACCOUNT_RESOURCE)
+    report = check(ORIGIN, account_fleet=True, opener=opener)
+    assert report["resource_mode"] == "account_fleet"
+    assert report["exact_resource_metadata"] == "passed"
+    assert report["unauthenticated_mcp"] == "denied"
+    assert report["dcr"] == "not_tested"
+    assert not any(path.endswith("/registration") for _, path in opener.requests)
+
+
+def test_account_fleet_does_not_accept_a_device_id_or_wrong_metadata():
+    with pytest.raises(ValueError, match="must not select"):
+        check(ORIGIN, DEVICE, account_fleet=True, opener=StubOpener())
+    with pytest.raises(ValueError, match="RFC 9728"):
+        check(ORIGIN, account_fleet=True, opener=StubOpener(resource=RESOURCE))
+
+
 def test_issuer_not_external():
     with pytest.raises(ValueError):
         validate_access_endpoint(
@@ -85,10 +116,13 @@ class Response(io.BytesIO):
 
 
 class StubOpener:
-    def __init__(self, *, missing_challenge=False, reject_callback=False):
+    def __init__(
+        self, *, missing_challenge=False, reject_callback=False, resource=RESOURCE
+    ):
         self.requests = []
         self.missing_challenge = missing_challenge
         self.reject_callback = reject_callback
+        self.resource = resource
 
     def open(self, req, timeout):
         assert timeout == 12
@@ -98,7 +132,7 @@ class StubOpener:
             return Response(
                 200,
                 {
-                    "resource": RESOURCE,
+                    "resource": self.resource,
                     "authorization_servers": [ISSUER],
                     "scopes_supported": ["udb:read"],
                 },
@@ -134,7 +168,7 @@ class StubOpener:
         if u.path.endswith("/authorization"):
             query = parse_qs(u.query)
             assert query["code_challenge_method"] == ["S256"]
-            if query["resource"] == [RESOURCE]:
+            if query["resource"] == [self.resource]:
                 return Response(
                     302,
                     {},

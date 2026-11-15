@@ -37,7 +37,8 @@ export async function routeEnrollment(request, env, forward) {
   if (!isBegin && !(statusMatch && request.method === "GET") &&
       !adminList && !(adminApprove && request.method === "POST") &&
       !(adminRevoke && request.method === "DELETE")) return null;
-  if (!enrollmentEnabled(env)) return fail(404, "enrollment_disabled");
+  if (!enrollmentEnabled(env) || env.UDB_FLEET_REQUIRE_REQUEST_PIN === "true")
+    return fail(404, "enrollment_disabled");
   const isAdmin = adminList || adminApprove || adminRevoke;
   if (isAdmin && !adminAuthorized(request, env)) return fail(401, "admin_auth_required");
   if (request.headers.get("Origin")) return fail(403, "browser_origin_not_supported");

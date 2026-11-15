@@ -15,6 +15,13 @@ import pytest
 from udb.core import Agent, PolicyError
 
 
+def test_agent_connections_wait_for_bounded_windows_audit_contention(tmp_path):
+    agent = Agent(tmp_path / "isolated-audit-home")
+    with agent.connect() as connection:
+        ms = connection.execute("PRAGMA busy_timeout").fetchone()[0]
+    assert 30000 <= ms <= 60000
+
+
 def test_ten_independent_agent_instances_read_and_deny_concurrently(tmp_path):
     home = tmp_path / "isolated-agent-home"
     project = tmp_path / "synthetic-project"

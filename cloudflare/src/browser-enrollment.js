@@ -12,7 +12,9 @@ const fail = (status, error) => json({ error }, status);
 const stub = env => env.DEVICES.get(env.DEVICES.idFromName(HUB));
 const enabled = env => enrollmentEnabled(env) && !!ownerEnrollmentConfig(env) &&
   env.UDB_AUTH_MODE === "cloudflare-access" && !!accessConfig(env) &&
-  env.UDB_ACCESS_AUD !== env.UDB_ENROLLMENT_ACCESS_AUD && env.UDB_TENANT_POLICY === undefined;
+  env.UDB_ACCESS_AUD !== env.UDB_ENROLLMENT_ACCESS_AUD && env.UDB_TENANT_POLICY === undefined &&
+  (env.UDB_FLEET_REQUIRE_REQUEST_PIN !== "true" ||
+    /^[a-f0-9]{32}$/.test(env.UDB_FLEET_ALLOWED_REQUEST_ID || ""));
 const ID = /^[a-f0-9]{32}$/;
 const label = s => typeof s === "string" && /^[A-Za-z0-9 _.-]{1,48}$/.test(s);
 const escape = s => String(s).replace(/[&<>"']/g, c =>
@@ -63,7 +65,10 @@ export async function routeBrowserEnrollment(request, env, forward, fetchImpl = 
       "Copy this device MCP URL, then add a custom MCP server in ChatGPT Plugins and approve OAuth.") + "</p>" +
       "<p><code id=endpoint>" + escape(endpoint) + "</code></p><button id=copy>Copy MCP URL</button> " +
       "<a href='https://chatgpt.com/plugins' target=_blank rel='noopener noreferrer'>Open ChatGPT Plugins</a>" +
-      "<p id=message></p><p>If custom MCP servers are unavailable for your account, ask your ChatGPT workspace administrator. Windows permissions remain separate.</p>" +
+      "<p id=message></p><p>" + (account ?
+        "After approving OAuth, call list_devices, then call bridge_status with the chosen device_id. Opening this page or discovering tools alone does not complete setup verification." :
+        "After approving OAuth, return to a ChatGPT chat and invoke bridge_status once. Opening this page or discovering tools alone does not complete setup verification.") + "</p>" +
+      "<p>If custom MCP servers are unavailable for your account, ask your ChatGPT workspace administrator. Windows permissions remain separate.</p>" +
       "<script nonce='" + nonce + "'>document.getElementById('copy').onclick=async()=>{try{await navigator.clipboard.writeText(document.getElementById('endpoint').textContent);document.getElementById('message').textContent='Copied. Paste it into Add custom MCP server.'}catch{document.getElementById('message').textContent='Select and copy the URL above.'}};</script>");
     response.headers.set("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-" + nonce + "'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'");
     return response;
@@ -87,8 +92,12 @@ export async function routeBrowserEnrollment(request, env, forward, fetchImpl = 
         // Static diagnostics only: never log assertions, cookies, identity or URL.
         console.warn(JSON.stringify({ event: "udb_owner_auth_denied", reason,
           runtime_present: Boolean(access), assertion_present: request.headers.has("Cf-Access-Jwt-Assertion") }));
-        return page("<p>Owner authentication could not be verified. Sign in through the configured Cloudflare Access application.</p>" +
-          "<p>Diagnostic: <code>" + reason + "</code>. If already signed in, ask the relay operator to check this code.</p>", 403);
+        const unavailable = reason === "owner_keys_unavailable";
+        return page("<p>" + (unavailable ?
+          "Cloudflare Access identity verification is temporarily unavailable. Your approval has not been changed; retry later." :
+          "Owner authentication could not be verified. Sign in through the configured Cloudflare Access application.") +
+          "</p><p>Diagnostic: <code>" + reason + "</code>. If already signed in, ask the relay operator to check this code.</p>",
+        unavailable ? 503 : 403);
       }
       if (request.method === "GET") {
         const code = url.searchParams.get("code");
@@ -128,6 +137,11 @@ export async function routeBrowserEnrollment(request, env, forward, fetchImpl = 
           !label(b.device_name) || (link ? !ID.test(b.device_id) ||
           !fleetEnabled(env) : !HASH.test(b.device_token_sha256) || b.mode !== undefined))
         return fail(400, "invalid_request");
+      // Isolated Fleet lab: only the specifically pre-authorized Windows
+      // request may create or resume a pending approval. No public enrollment.
+      if (env.UDB_FLEET_REQUIRE_REQUEST_PIN === "true" &&
+          b.request_id !== env.UDB_FLEET_ALLOWED_REQUEST_ID)
+        return fail(404, "enrollment_not_allowed");
       let tokenHash = b.device_token_sha256;
       if (link) {
         const token = bearer(request);

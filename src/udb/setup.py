@@ -22,8 +22,17 @@ from .cloud_pair import NoRedirect
 from .config import activate, checked
 from .launcher import child_environment, command
 from .onboarding import CHATGPT_URL, attended_console, paired_cloud
-from .private_enrollment import PRIVATE_RELAY, _request_json
-from .setup_enrollment import EnrollmentError, enroll, link_existing
+from .private_enrollment import (
+    FLEET_TEST_RELAY,
+    PRIVATE_RELAY,
+    _request_json,
+    setup_relay,
+)
+from .setup_enrollment import EnrollmentError, enroll, link_existing, prepare_pending
+
+# Legacy callers use setup.PRIVATE_RELAY; keep that exported while the
+# isolated canary setup origin is selected explicitly through setup_relay().
+__all__ = ["PRIVATE_RELAY"]
 
 
 class SetupError(ValueError):
@@ -124,6 +133,22 @@ def device_status(opener, relay, device_id, token):
     return result
 
 
+def fleet_link_status(opener, relay, device_id, token):
+    """Verify the account registry link using the existing device credential."""
+    status, result = _request_json(
+        opener,
+        relay + "/v1/devices/" + device_id + "/fleet/status",
+        proof=token,
+    )
+    if (
+        status != 200
+        or not isinstance(result, dict)
+        or type(result.get("linked")) is not bool
+    ):
+        raise SetupError("Fleet linking status was not verified")
+    return result["linked"]
+
+
 def inspect(settings, opener=None):
     """Read-only: no journals, credentials, browser, process or Run-key writes."""
     opener = opener or build_opener(NoRedirect())
@@ -142,14 +167,14 @@ def inspect(settings, opener=None):
     }
     pairing = paired_cloud(settings.home)
     if not pairing:
-        _, capabilities = _request_json(opener, PRIVATE_RELAY + "/v1/setup")
+        _, capabilities = _request_json(opener, setup_relay() + "/v1/setup")
         result.update(
             relay_reachable=True,
             browser_enrollment=capabilities.get("browser_enrollment") is True,
         )
         return result
     relay, device_id = pairing
-    result.update(paired=True, mcp_url=relay + "/v1/devices/" + device_id + "/mcp")
+    result.update(paired=True)
     try:
         token = cloud_secrets.load_device_token(settings.home, device_id)
     except Exception:
@@ -171,14 +196,32 @@ def inspect(settings, opener=None):
     except (OSError, ValueError):
         result["failure"] = "relay_unreachable"
         return result
+    fleet = remote.get("account_fleet") is True
+    result["mcp_url"] = (
+        relay + "/v1/account/mcp"
+        if fleet
+        else relay + "/v1/devices/" + device_id + "/mcp"
+    )
     result.update(
         credential_valid=True,
         relay_reachable=True,
         cloud_agent_online=remote.get("cloud_agent_online") is True,
         authenticated_mcp_verified=remote.get("authenticated_mcp_verified") is True,
+        account_fleet=fleet,
         verification_method=remote.get("verification_method"),
         verified_at=remote.get("verified_at"),
     )
+    if fleet:
+        result["mcp_url"] = relay + "/v1/account/mcp"
+        try:
+            result["fleet_linked"] = fleet_link_status(opener, relay, device_id, token)
+        except (HTTPError, OSError, ValueError):
+            result["fleet_linked"] = False
+            result["failure"] = "fleet_status_unavailable"
+            result["recovery"] = (
+                "Device credential is valid, but account Fleet linking could not be verified. "
+                "Run udb setup to resume or complete the owner-approved link."
+            )
     return result
 
 
@@ -276,7 +319,15 @@ def run(
             print(json.dumps(report, indent=2) if json_output else render(report))
             return (
                 0
-                if report.get("credential_valid") and report.get("cloud_agent_online")
+                if (
+                    report.get("credential_valid")
+                    and report.get("cloud_agent_online")
+                    and report.get("authenticated_mcp_verified")
+                    and (
+                        report.get("account_fleet") is not True
+                        or report.get("fleet_linked") is True
+                    )
+                )
                 else 2
             )
         if not attended_console():
@@ -289,11 +340,23 @@ def run(
             pairing = paired_cloud(settings.home)
             if not pairing:
                 phase = "owner_approval"
-                _, caps = _request_json(opener, PRIVATE_RELAY + "/v1/setup")
+                _, caps = _request_json(opener, setup_relay() + "/v1/setup")
                 if (
                     caps.get("protocol") != 2
                     or caps.get("browser_enrollment") is not True
                 ):
+                    if caps.get("protocol") == 2 and setup_relay() == FLEET_TEST_RELAY:
+                        # No public request is sent while enrollment is locked.
+                        # A non-secret ID lets the relay operator pin ONLY this
+                        # device before this same setup command is resumed.
+                        pending = prepare_pending(settings.home)
+                        print("Fleet canary enrollment is locked.")
+                        print("Pending device ID: " + pending["id"])
+                        print(
+                            "Approve only this ID in the isolated Worker config, "
+                            "then rerun udb setup to resume. No device token was printed."
+                        )
+                        return 2
                     raise SetupError(
                         "Relay owner must configure private browser enrollment first; no URL or admin key is needed on Windows"
                     )
@@ -318,17 +381,8 @@ def run(
             fleet = remote.get("account_fleet") is True
             if fleet:
                 phase = "fleet_link"
-                _, link_status = _request_json(
-                    opener,
-                    relay + "/v1/devices/" + device_id + "/fleet/status",
-                    proof=token,
-                )
-                if (
-                    not isinstance(link_status, dict)
-                    or type(link_status.get("linked")) is not bool
-                ):
-                    raise SetupError("Fleet linking status was not verified")
-                if not link_status["linked"]:
+                linked = fleet_link_status(opener, relay, device_id, token)
+                if not linked:
                     link_existing(
                         settings.home,
                         relay,
@@ -339,6 +393,10 @@ def run(
                         pause=pause,
                         clock=clock,
                     )
+                    if not fleet_link_status(opener, relay, device_id, token):
+                        raise SetupError(
+                            "Fleet owner approval completed, but the account registry link is not verified yet; run udb setup to resume"
+                        )
             safe = replace(settings, enable_terminal=False)
             phase = "cloud_agent"
             state["phase"] = phase
@@ -374,7 +432,16 @@ def run(
                 )
                 print("Cloud Agent online. Complete ChatGPT approval in your browser.")
                 print(
-                    "If this server is already added, call bridge_status through it; do not add a duplicate."
+                    "After OAuth, "
+                    + (
+                        "call list_devices, then bridge_status with the chosen device_id; "
+                        if fleet
+                        else "invoke bridge_status once; "
+                    )
+                    + "tool discovery alone does not complete setup."
+                )
+                print(
+                    "If this server is already added, use it; do not add a duplicate."
                 )
                 print(
                     "In "
@@ -406,10 +473,17 @@ def run(
                         "cloud_agent_online": online,
                         "authenticated_mcp_verified": verified,
                         "chatgpt_connected": False,
+                        "account_fleet": fleet,
+                        "fleet_linked": fleet,
                         "mcp_url": endpoint,
                     }
                 )
             )
+            if fleet:
+                print(
+                    "Fleet: call list_devices, then bridge_status with the chosen device_id; "
+                    "pass that device_id on every Windows tool call."
+                )
             return 0 if verified and online else 2
     except KeyboardInterrupt:
         print("Setup paused. Run udb setup to resume the saved request.")
@@ -440,22 +514,30 @@ def run(
 
 
 def render(report):
-    return "\n".join(
-        [
-            "Device paired: " + ("yes" if report.get("paired") else "no"),
-            "Cloud Agent: "
-            + ("online" if report.get("cloud_agent_online") else "pending"),
-            "Authenticated MCP: "
+    lines = [
+        "Device paired: " + ("yes" if report.get("paired") else "no"),
+        "Cloud Agent: " + ("online" if report.get("cloud_agent_online") else "pending"),
+        "Authenticated MCP: "
+        + (
+            "verified"
+            if report.get("authenticated_mcp_verified")
+            else "pending user OAuth"
+        ),
+        "ChatGPT client identity: not independently attested by this relay",
+        "MCP URL: " + report.get("mcp_url", "available after owner approval"),
+        report.get(
+            "recovery",
+            "Run udb setup again to resume or verify. No pairing reset is needed.",
+        ),
+    ]
+    if report.get("account_fleet") is True:
+        lines.insert(
+            1,
+            "Fleet account link: "
             + (
                 "verified"
-                if report.get("authenticated_mcp_verified")
-                else "pending user OAuth"
+                if report.get("fleet_linked") is True
+                else "not verified; run udb setup"
             ),
-            "ChatGPT client identity: not independently attested by this relay",
-            "MCP URL: " + report.get("mcp_url", "available after owner approval"),
-            report.get(
-                "recovery",
-                "Run udb setup again to resume or verify. No pairing reset is needed.",
-            ),
-        ]
-    )
+        )
+    return "\n".join(lines)

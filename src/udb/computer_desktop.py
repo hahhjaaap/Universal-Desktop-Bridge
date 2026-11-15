@@ -330,6 +330,77 @@ class Desktop:
             input_characters=len(text),
         )
 
+    def chatgpt_roundtrip(self, hwnd, window_id, text, wait_ms):
+        """One remote call: verify blank ChatGPT, submit, and wait for one reply.
+
+        The request is NOT idempotent. A timeout after submit must never
+        trigger a replay; inspect the same browser window instead.
+        """
+        if not isinstance(text, str) or not 1 <= len(text) <= 5000:
+            raise PolicyError("ChatGPT message must contain 1..5000 characters")
+        if type(wait_ms) is not int or not 500 <= wait_ms <= 10000:
+            raise PolicyError("ChatGPT reply wait_ms must be 500..10000")
+
+        started = time.monotonic()
+        observed = self.uia(hwnd, "snapshot")
+        rows = observed.get("elements", [])
+        if observed.get("truncated") or not isinstance(rows, list):
+            raise PolicyError("ChatGPT page cannot be confirmed; nothing sent")
+        document = any(
+            row.get("control_type") == "ControlType.Document"
+            and row.get("name") == "ChatGPT"
+            for row in rows
+        )
+        editor = [
+            row
+            for row in rows
+            if row.get("control_type") == "ControlType.Edit"
+            and row.get("name") == "Hỏi ChatGPT"
+            and not row.get("offscreen")
+        ]
+        previous_response = any(
+            row.get("control_type") == "ControlType.Text"
+            and row.get("name") in ("ChatGPT đã nói:", "ChatGPT said:")
+            for row in rows
+        )
+        if not document or len(editor) != 1 or previous_response:
+            raise PolicyError(
+                "Expected an empty Vietnamese ChatGPT conversation; "
+                "existing messages and other websites are refused"
+            )
+        # The existing exact-match submit path checks owner pause, draft
+        # emptiness, focus and exact post-typing UIA readback before Invoke.
+        sent = self.verified_submit(
+            hwnd, window_id, text, "Hỏi ChatGPT", "", "Gửi"
+        )
+        submitted_ms = round((time.monotonic() - started) * 1000)
+        # One UIA process polls locally instead of one remote MCP RPC/poll.
+        # If UIA fails after sending, outcome is unknown and not replay-safe.
+        reply = self.uia(
+            hwnd,
+            "poll_chatgpt_reply",
+            text=text,
+            wait_ms=wait_ms,
+            limit=3000,
+        )
+        total_ms = round((time.monotonic() - started) * 1000)
+        return {
+            "submit_requested": sent["submit_requested"],
+            "verified_text": sent["verified_text"],
+            "reply_verified": bool(reply.get("completed")),
+            "reply": reply.get("reply", ""),
+            "reply_truncated": reply.get("truncated", False),
+            "status": "complete" if reply.get("completed") else "reply_timeout",
+            "timings_ms": {
+                "desktop_operation": total_ms,
+                "verified_submit": submitted_ms,
+                "reply_wait": round(reply.get("elapsed_ms", 0)),
+            },
+            "replay_safe": False,
+            "login_verified": False,
+            "server_delivery_verified": bool(reply.get("completed")),
+        }
+
     def resolve(self, window_id, focus=True):
         self.interactive()
         row = self.windows.get(window_id)
@@ -581,6 +652,8 @@ class Desktop:
             return self.verified_submit(
                 hwnd, window_id, text, name, automation_id, submit_name
             )
+        if action == "chatgpt_roundtrip":
+            return self.chatgpt_roundtrip(hwnd, window_id, text, wait_ms)
         if action in UIA_ACTIONS:
             return self.uia(
                 hwnd,
@@ -787,6 +860,7 @@ class Desktop:
                     "open_chrome_tab",
                     "open_chatgpt",
                     "verified_submit",
+                    "chatgpt_roundtrip",
                 )
                 or "action" not in row
             ):

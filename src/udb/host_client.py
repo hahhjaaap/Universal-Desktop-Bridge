@@ -117,7 +117,8 @@ def command(agent, op, **args):
         from .computer import status_report
 
         return status_report(
-            agent, worker_ready=False,
+            agent,
+            worker_ready=False,
             brief=args.get("arguments", {}).get("brief") is True,
         )
     if not s.get("worker_ready") and op not in ("close", "stop_all"):

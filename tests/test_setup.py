@@ -604,6 +604,7 @@ def test_account_fleet_setup_links_existing_device_and_uses_single_mcp_url(
     assert (selected.home / "cloud-pairing.json").read_bytes() == before
     output = capsys.readouterr().out
     assert RELAY + "/v1/account/mcp" in output
+    assert "Fleet account link: verified" in output
     assert "call list_devices" in output
     assert "bridge_status with the chosen device_id" in output
     assert TOKEN not in output
@@ -629,6 +630,7 @@ def test_fleet_setup_when_already_linked_never_reapproves_or_reenrolls(
     assert (selected.home / "cloud-pairing.json").read_bytes() == before
     output = capsys.readouterr().out
     assert RELAY + "/v1/account/mcp" in output
+    assert "Fleet account link: verified" in output
     assert "call list_devices" in output
     assert "bridge_status with the chosen device_id" in output
 

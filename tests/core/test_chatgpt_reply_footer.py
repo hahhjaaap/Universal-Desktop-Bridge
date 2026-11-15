@@ -32,7 +32,9 @@ def test_powershell_footer_rejection_and_real_text(tmp_path):
     if executable is None:
         pytest.skip("PowerShell unavailable")
     body = reply_candidate_function()
-    script = body + """
+    script = (
+        body
+        + """
 $bad=@(
     'ChatGPT có thể mắc lỗi. Hãy kiểm tra thông tin quan trọng.',
     'ChatGPT can make mistakes. Check important info.',
@@ -50,6 +52,7 @@ foreach($s in $good) {
     }
 }
 """
+    )
     file = tmp_path / "test_chatgpt_reply_filter.ps1"
     file.write_text(script, encoding="utf-8-sig")
     result = subprocess.run(

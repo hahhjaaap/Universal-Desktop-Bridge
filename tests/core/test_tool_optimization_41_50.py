@@ -7,9 +7,7 @@ Performance numbers are informational; policy/response invariants are asserted.
 from __future__ import annotations
 
 import json
-import os
 import struct
-import time
 import tracemalloc
 import zlib
 
@@ -20,7 +18,7 @@ from udb import sandbox
 from udb.core import Agent, PolicyError
 from udb.server_project_tools import register_project_tools
 
-from .test_desktop_vm import desktop
+from .test_desktop_vm import desktop as guest_desktop_fixture
 
 
 @pytest.fixture
@@ -179,9 +177,9 @@ def test_46_invalid_desktop_task_fails_before_sandbox_probe(
 
 
 def test_47_49_dispatch_reuses_session_row_and_skips_progress_read(
-    desktop, monkeypatch
+    guest_desktop_fixture, monkeypatch
 ):
-    agent, sid, source, output = desktop
+    agent, sid, source, output = guest_desktop_fixture
     (output / "progress.json").write_text(
         json.dumps({"session_id": sid, "completed": 1})
     )
@@ -245,9 +243,9 @@ def test_48_guest_png_crc_verification_uses_bounded_extra_memory():
 
 
 def test_50_desktop_lock_schema_is_created_once_not_per_command(
-    desktop, monkeypatch
+    guest_desktop_fixture, monkeypatch
 ):
-    agent, sid, source, output = desktop
+    agent, sid, source, output = guest_desktop_fixture
     with agent.connect() as c:
         exists = c.execute(
             "SELECT name FROM sqlite_master WHERE name='desktop_control'"

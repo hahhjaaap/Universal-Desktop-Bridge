@@ -495,8 +495,7 @@ def run(
 def render(report):
     lines = [
         "Device paired: " + ("yes" if report.get("paired") else "no"),
-        "Cloud Agent: "
-        + ("online" if report.get("cloud_agent_online") else "pending"),
+        "Cloud Agent: " + ("online" if report.get("cloud_agent_online") else "pending"),
         "Authenticated MCP: "
         + (
             "verified"

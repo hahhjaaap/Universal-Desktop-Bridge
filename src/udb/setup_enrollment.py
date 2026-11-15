@@ -119,16 +119,8 @@ def commit_pairing(home, pending):
         temporary.unlink(missing_ok=True)
 
 
-def enroll(
-    home,
-    *,
-    opener=None,
-    store=None,
-    browser=None,
-    pause=time.sleep,
-    clock=time.monotonic,
-    wait=600,
-):
+def prepare_pending(home, *, store=None):
+    """Stage one recoverable device identity; no network call or pairing commit."""
     home = checked(home)
     if paired_cloud(home):
         raise EnrollmentError("Already paired; enrollment must not run")
@@ -137,7 +129,6 @@ def enroll(
             "Existing legacy credential detected; owner repair required"
         )
     store = store or PendingStore(home)
-    opener = opener or build_opener(NoRedirect())
     selected_relay = setup_relay()
     pending = store.load()
     if pending is None:
@@ -153,6 +144,21 @@ def enroll(
             "Pending enrollment belongs to another relay. Restore the original "
             "UDB_SETUP_RELAY to resume without rotating credentials."
         )
+    return pending
+
+
+def enroll(
+    home,
+    *,
+    opener=None,
+    store=None,
+    browser=None,
+    pause=time.sleep,
+    clock=time.monotonic,
+    wait=600,
+):
+    pending = prepare_pending(home, store=store)
+    opener = opener or build_opener(NoRedirect())
     relay, device_id = pending["relay"], pending["id"]
     fingerprint = hashlib.sha256(pending["proof"].encode("ascii")).hexdigest()
     # Expose only a non-secret request ID, even when relay enrollment is off.

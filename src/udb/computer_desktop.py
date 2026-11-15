@@ -10,17 +10,18 @@ import base64
 import ctypes
 import json
 import os
-import struct
 import subprocess
 import time
 import uuid
-import zlib
 from ctypes import wintypes as w
 from pathlib import Path
 
+from .computer_capture import encode_bgrx_png
 from .core import PolicyError
 from .desktop_guest import BitmapHeader, InputEvent, KeyInput, MouseInput
 from .windows_actions import DESKTOP_ACTIONS, UIA_ACTIONS
+
+_UIA_HELPER = Path(__file__).with_name("computer_uia.ps1")
 
 
 class Desktop:
@@ -90,9 +91,15 @@ class Desktop:
         self.interactive()
         rows = []
         observed = {}
+        # A single short-lived foreground observation describes this listing;
+        # identity and visibility are freshly verified again by resolve().
+        foreground = self.gui.GetForegroundWindow()
 
         def visit(hwnd, _):
-            if not self.gui.IsWindowVisible(hwnd) or not self.gui.GetWindowText(hwnd):
+            if not self.gui.IsWindowVisible(hwnd):
+                return
+            title = self.gui.GetWindowText(hwnd)
+            if not title:
                 return
             try:
                 if self.is_cloaked(hwnd):
@@ -100,22 +107,18 @@ class Desktop:
             except PolicyError:
                 return  # A window may disappear while EnumWindows is running.
             pid = self.process.GetWindowThreadProcessId(hwnd)[1]
+            kind = self.gui.GetClassName(hwnd)
             wid = uuid.uuid4().hex
-            observed[wid] = (
-                hwnd,
-                pid,
-                self.gui.GetClassName(hwnd),
-                time.monotonic() + 60,
-            )
+            observed[wid] = (hwnd, pid, kind, time.monotonic() + 60)
             rows.append(
                 dict(
                     window_id=wid,
-                    title=self.gui.GetWindowText(hwnd)[:300],
+                    title=title[:300],
                     pid=pid,
                     bounds=list(self.gui.GetWindowRect(hwnd)),
-                    foreground=hwnd == self.gui.GetForegroundWindow(),
+                    foreground=hwnd == foreground,
                     minimized=bool(self.gui.IsIconic(hwnd)),
-                    class_name=self.gui.GetClassName(hwnd),
+                    class_name=kind,
                 )
             )
 
@@ -416,7 +419,7 @@ class Desktop:
             Path(os.environ["SystemRoot"])
             / "System32/WindowsPowerShell/v1.0/powershell.exe"
         )
-        helper = Path(__file__).with_name("computer_uia.ps1")
+        helper = _UIA_HELPER
         try:
             result = subprocess.run(
                 [
@@ -429,7 +432,7 @@ class Desktop:
                     "-File",
                     str(helper),
                 ],
-                input=json.dumps(request),
+                input=json.dumps(request, separators=(",", ":")),
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
@@ -440,8 +443,10 @@ class Desktop:
             )
             if len(result.stdout) > 262144:
                 raise ValueError("UIA response exceeds limit")
-            data = json.loads(result.stdout.strip())
-            if result.returncode or not isinstance(data, dict) or not data.get("ok"):
+            if result.returncode:
+                raise ValueError("UIA command returned nonzero")
+            data = json.loads(result.stdout)
+            if not isinstance(data, dict) or not data.get("ok"):
                 raise ValueError("UIA declined")
             return data
         except (OSError, ValueError, subprocess.TimeoutExpired):
@@ -1154,34 +1159,9 @@ class Desktop:
                 != height
             ):
                 raise PolicyError("Windows refused bitmap readback")
-            raw = buffer.raw
-            rgb = bytearray(width * height * 3)
-            # GetDIBits uses an explicit negative height: top-down BGRX.
-            stride = width * 4
-            for y in range(height):
-                row = raw[y * stride : (y + 1) * stride]
-                target = y * width * 3
-                rgb[target : target + width * 3 : 3] = row[2::4]
-                rgb[target + 1 : target + width * 3 : 3] = row[1::4]
-                rgb[target + 2 : target + width * 3 : 3] = row[0::4]
-            rows = b"".join(
-                b"\0" + rgb[y * width * 3 : (y + 1) * width * 3] for y in range(height)
-            )
-
-            def chunk(kind, value):
-                return (
-                    struct.pack("!I", len(value))
-                    + kind
-                    + value
-                    + struct.pack("!I", zlib.crc32(kind + value) & 0xFFFFFFFF)
-                )
-
-            png = (
-                b"\x89PNG\r\n\x1a\n"
-                + chunk(b"IHDR", struct.pack("!IIBBBBB", width, height, 8, 2, 0, 0, 0))
-                + chunk(b"IDAT", zlib.compress(rows, 3))
-                + chunk(b"IEND", b"")
-            )
+            # Encode directly from the owned DIB buffer into bounded PNG
+            # scanlines; no full-size buffer.raw or separate RGB image copy.
+            png = encode_bgrx_png(buffer, width, height)
             return dict(
                 png_base64=base64.b64encode(png).decode(),
                 bounds=[left, top, right, bottom],

@@ -274,12 +274,14 @@ class Jobs:
             if action == "list":
                 if type(limit) is not int or not 1 <= limit <= 30:
                     raise PolicyError("Computer job list limit must be 1..30")
-                # Copy only the requested bounded number of owned metadata rows.
-                # Dict iteration preserves the legacy insertion order.
+                # Return the latest N owned jobs in legacy insertion order.
+                # islice skips older records without constructing metadata for
+                # rows the caller did not ask to transport.
+                skip = max(0, len(self.rows) - limit)
                 return dict(
                     jobs=[
                         dict(job_id=k, status=r["status"], exit_code=r["exit_code"])
-                        for k, r in itertools.islice(self.rows.items(), limit)
+                        for k, r in itertools.islice(self.rows.items(), skip, None)
                     ]
                 )
             if job_id not in self.rows:

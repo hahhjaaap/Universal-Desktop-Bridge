@@ -164,7 +164,8 @@ class Workspace:
         return result.value
 
     def read(self):
-        self.validate()
+        # message() validates the live owned HWND/Edit identity immediately
+        # before sending WM_GETTEXT; avoid an earlier duplicate Win32 probe.
         buf = ctypes.create_unicode_buffer(60001)
         self.message(0xD, len(buf), ctypes.addressof(buf))
         return dict(text=buf.value, scope="owned_native_window", no_activate=True)

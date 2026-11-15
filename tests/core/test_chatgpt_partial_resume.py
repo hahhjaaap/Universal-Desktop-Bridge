@@ -86,12 +86,15 @@ def test_fast_resume_reads_partial_only():
     assert calls[0][1]["condition"] == "first_text"
 
 
-@pytest.mark.parametrize("text,wait,fast", [
-    ("", 6000, False),
-    ("Hello", 0, False),
-    ("Hello", 6000, 1),
-    ("Hello", 10001, False),
-])
+@pytest.mark.parametrize(
+    "text,wait,fast",
+    [
+        ("", 6000, False),
+        ("Hello", 0, False),
+        ("Hello", 6000, 1),
+        ("Hello", 10001, False),
+    ],
+)
 def test_read_reply_invalid_request_rejected(text, wait, fast):
     desktop, calls = make_desktop()
     with pytest.raises(PolicyError):
@@ -135,9 +138,12 @@ def test_read_reply_foreground_auto_discovery():
     desktop._chrome_image_path = lambda pid: "C:\\Chrome\\chrome.exe"
     desktop.resolve = lambda wid, focus=True: 42
     desktop.chatgpt_read_reply = lambda *args: args
-    assert desktop._dispatch(
-        "chatgpt_read_reply", text="Hello", wait_ms=6000
-    ) == (42, "Hello", 6000, False)
+    assert desktop._dispatch("chatgpt_read_reply", text="Hello", wait_ms=6000) == (
+        42,
+        "Hello",
+        6000,
+        False,
+    )
 
 
 def test_chatgpt_poll_preserves_partial_text_on_timeout():

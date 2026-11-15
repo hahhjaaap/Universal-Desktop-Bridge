@@ -16,6 +16,7 @@ import uuid
 from ctypes import wintypes as w
 from pathlib import Path
 
+from . import hyperspeed_perf as perf
 from .computer_capture import encode_bgrx_png
 from .core import PolicyError
 from .desktop_guest import BitmapHeader, InputEvent, KeyInput, MouseInput
@@ -533,7 +534,10 @@ class Desktop:
         )
         helper = _UIA_HELPER
         try:
-            result = subprocess.run(
+            result = perf.timed_call(
+                "desktop.uia",
+                "execution",
+                subprocess.run,
                 [
                     str(exe),
                     "-NoLogo",

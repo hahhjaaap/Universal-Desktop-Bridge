@@ -16,6 +16,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+from udb import hyperspeed_perf as perf
 from udb._version import VERSION
 from udb.catalog import public_catalog, resolve_call
 from udb.concurrency import MAX_CONCURRENT
@@ -208,6 +209,10 @@ class UnifiedProxy:
             pass
 
     def send(self, message: dict[str, Any]) -> None:
+        with perf.rpc_scope(message.get("id")):
+            perf.timed_call("mcp.response", "response", self._send_raw, message)
+
+    def _send_raw(self, message: dict[str, Any]) -> None:
         with self.send_lock:
             data = compact_json(message)
             if len(data) > MAX_LINE:
@@ -493,6 +498,7 @@ class UnifiedProxy:
         tool = None
         call_id = uuid.uuid4().hex[:8]
         started = time.monotonic()
+        perf_started = time.perf_counter_ns()
         observed_result = None
         observed_error = None
         try:
@@ -551,6 +557,17 @@ class UnifiedProxy:
                     error=observed_error,
                     elapsed_ms=round((time.monotonic() - started) * 1000),
                 )
+            perf.interval(
+                "mcp.dispatch",
+                "dispatch",
+                perf_started,
+                rpc_id=ident,
+                ok=observed_error is None
+                and not (
+                    isinstance(observed_result, dict)
+                    and "_upstream_rpc_error" in observed_result
+                ),
+            )
             self.active_limit.release()
 
     def serve(self) -> None:
@@ -592,9 +609,11 @@ class UnifiedProxy:
                 for backend in (self.primary, self.companion):
                     backend.notification(message)
                 continue
+            queued_at = time.perf_counter_ns()
             if not self.active_limit.acquire(timeout=10):
                 self.send(rpc_error(message.get("id"), "UDB Unified is busy", -32003))
                 continue
+            perf.interval("mcp.dispatch", "queue", queued_at, rpc_id=message.get("id"))
             threading.Thread(target=self.handle, args=(message,), daemon=True).start()
 
 
@@ -609,6 +628,7 @@ def run(settings) -> int:
             file=sys.stderr,
         )
         return 2
+    perf.configure(home)
     if settings.core_backend == "installed":
         if not settings.core_exe or not settings.core_exe.is_file():
             raise ValueError("Configured installed core is missing")

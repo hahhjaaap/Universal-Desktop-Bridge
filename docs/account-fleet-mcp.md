@@ -97,6 +97,34 @@ A browser approval never grants local Windows computer access, and an MCP tool c
 approve enrollment or Windows permissions. A device going offline is never substituted
 by another machine. A failed or uncertain mutating call is **not** replayed.
 
+## Read-only OAuth preflight (isolated staging only)
+
+Once a separate owner-scoped Access application protects the **exact**
+`/v1/account/mcp` path, and the isolated Worker has all Fleet flags enabled,
+run the following without any login, device credentials or token registration:
+
+```powershell
+python tools/check_chatgpt_oauth.py --relay "$env:UDB_STAGING_RELAY" --account-fleet
+```
+
+This checks the account-specific RFC 9728 metadata, pinned Cloudflare Access
+OAuth issuer, PKCE S256, advertised refresh-token support and the expected
+unauthenticated 401 challenge on the **account** resource. A disabled Fleet
+endpoint or missing Access application must fail this check, not pass on the
+legacy device endpoint. The old `--device-id` mode is still supported for
+independent per-device staging diagnostics.
+
+By default, the preflight is **read-only**: no OAuth registration, login,
+consent, grant, token, device enrollment or Windows action. Its explicit
+`--register-client` option performs a DCR write and must only be used after
+separate owner/operator approval. Even successful discovery and DCR are **not**
+evidence of an authenticated ChatGPT call. Check actual `list_devices` and
+`bridge_status` after the owner approves OAuth.
+
+A temporary Cloudflare Access JWKS/key-service outage may return HTTP 503;
+it is not a request to rotate device credentials or approve OAuth again.
+An expired or unverifiable runtime identity still requires user sign-in.
+
 ## Verification boundary
 
 The synthetic Node tests cover identity isolation, duplicate display names,

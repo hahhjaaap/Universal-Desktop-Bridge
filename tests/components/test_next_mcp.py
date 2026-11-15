@@ -58,7 +58,7 @@ def main():
                 return client.rpc("tools/call", dict(name=name, arguments=a))
 
             tools = client.rpc("tools/list", {})["tools"]
-            assert len(tools) == 40
+            assert len(tools) == 41
             native = call(
                 "terminal_start",
                 program=sys.executable,

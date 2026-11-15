@@ -14,9 +14,7 @@ from dataclasses import dataclass
 from .core import PolicyError
 
 MAX_FASTPATH_STEPS = 12
-PLAN_FIELDS = frozenset(
-    {"step_id", "depends_on", "when", "verify", "return_result"}
-)
+PLAN_FIELDS = frozenset({"step_id", "depends_on", "when", "verify", "return_result"})
 RESULT_FIELDS = frozenset(
     {
         "ok",
@@ -62,7 +60,11 @@ def _predicate(raw, *, previous, dependency):
     if not isinstance(raw, dict):
         raise PolicyError("FastPath guard must be an object")
     fields = {"field", "equals"} | ({"step_id"} if previous else set())
-    if set(raw) != fields or raw.get("field") not in RESULT_FIELDS:
+    if (
+        set(raw) != fields
+        or not isinstance(raw.get("field"), str)
+        or raw["field"] not in RESULT_FIELDS
+    ):
         raise PolicyError("FastPath guard uses unsupported result field")
     if previous and raw.get("step_id") not in dependency:
         raise PolicyError("FastPath guard must reference a previous step")
@@ -83,7 +85,9 @@ def compile_plan(steps, allowed):
         if not isinstance(raw, dict):
             raise PolicyError("FastPath step must be an object")
         action = raw.get("action")
-        if action not in allowed or set(raw) - (allowed[action] | PLAN_FIELDS | {"action"}):
+        if not isinstance(action, str) or action not in allowed or set(raw) - (
+            allowed[action] | PLAN_FIELDS | {"action"}
+        ):
             raise PolicyError("FastPath contains unknown or nested browser action")
         step_id = raw.get("step_id", f"s{index}")
         if (
@@ -97,7 +101,9 @@ def compile_plan(steps, allowed):
             not isinstance(parents, list)
             or len(parents) > index
             or len(set(str(parent) for parent in parents)) != len(parents)
-            or any(not isinstance(parent, str) or parent not in known for parent in parents)
+            or any(
+                not isinstance(parent, str) or parent not in known for parent in parents
+            )
         ):
             raise PolicyError("FastPath dependency must reference an earlier step")
         when = (

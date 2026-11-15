@@ -62,7 +62,7 @@ class FakeProcess:
 def fake_worker(monkeypatch):
     worker = PersistentUIA(Path("fixed.exe"), Path("fixed.ps1"))
     responses = queue.Queue(maxsize=2)
-    fixture = FakeProcess(['{"ok":true,"verified_control_value":true}\n'], responses)
+    fixture = FakeProcess(['{"sequence":1,"result":{"ok":true,"verified_control_value":true}}\n'], responses)
 
     def begin():
         worker._process = fixture
@@ -75,7 +75,7 @@ def fake_worker(monkeypatch):
 
 def test_21_22_24_worker_reuses_one_private_process_for_two_requests(fake_worker):
     worker, fake, _ = fake_worker
-    fake.stdin.replies.append('{"ok":true,"matched":true}\n')
+    fake.stdin.replies.append('{"sequence":2,"result":{"ok":true,"matched":true}}\n')
     assert worker.call({"hwnd": 19, "pid": 33, "mode": "read_text"}, 1)["ok"]
     assert worker.call({"hwnd": 19, "pid": 33, "mode": "wait_for"}, 1)["ok"]
     assert len(fake.stdin.writes) == 2
@@ -91,7 +91,7 @@ def test_22_worker_never_launches_a_network_server(fake_worker):
 
 def test_23_worker_kills_process_after_bad_framing_without_replay(fake_worker):
     worker, fake, _ = fake_worker
-    fake.stdin.replies[:] = ['{"ok":true}\n']
+    fake.stdin.replies[:] = ['{"sequence":1,"result":{"ok":true}}']
     with pytest.raises(PolicyError, match="may be unknown"):
         worker.call({"mode": "invoke", "hwnd": 19}, 1)
     assert fake.killed
@@ -106,6 +106,21 @@ def test_23_worker_kills_process_on_timeout(fake_worker):
         worker.call({"mode": "set_value", "hwnd": 19}, 1)
     assert fake.killed
     assert len(fake.stdin.writes) == 1
+
+
+def test_23_stale_duplicate_sequence_cannot_be_reported_as_next_result(
+    fake_worker,
+):
+    worker, fake, _ = fake_worker
+    fake.stdin.replies[:] = [
+        '{"sequence":1,"result":{"ok":true}}\n',
+        '{"sequence":1,"result":{"ok":true}}\n',
+    ]
+    assert worker.call({"mode": "read_text"}, 1)["ok"]
+    with pytest.raises(PolicyError, match="may be unknown"):
+        worker.call({"mode": "invoke"}, 1)
+    assert fake.killed
+    assert len(fake.stdin.writes) == 2
 
 
 def test_24_worker_rejects_oversized_request_before_any_write(fake_worker):
@@ -126,7 +141,7 @@ def test_25_worker_rejects_nonfinite_or_unserializable_data(fake_worker):
 
 def test_26_worker_reports_app_refusal_without_replay(fake_worker):
     worker, fake, _ = fake_worker
-    fake.stdin.replies[:] = ['{"ok":false,"error":"control changed"}\n']
+    fake.stdin.replies[:] = ['{"sequence":1,"result":{"ok":false,"error":"control changed"}}\n']
     assert worker.call({"mode": "invoke", "hwnd": 19}, 1)["ok"] is False
     assert len(fake.stdin.writes) == 1
     assert not fake.killed
@@ -217,7 +232,8 @@ def test_windows_powershell_two_rejected_requests_keep_worker_alive():
     assert process.returncode == 0, stderr[:300]
     lines = data.decode("utf-8-sig").splitlines()
     assert len(lines) == 2, (lines, stderr[:300])
-    assert all(json.loads(line)["ok"] is False for line in lines)
+    assert [json.loads(line)["sequence"] for line in lines] == [1, 2]
+    assert all(json.loads(line)["result"]["ok"] is False for line in lines)
 
 
 def test_helper_keeps_per_request_pid_checks_and_refuses_password_reads():

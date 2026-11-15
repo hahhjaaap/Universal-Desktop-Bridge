@@ -42,9 +42,7 @@ def test_02_same_rpc_id_correlates_across_processes_without_exposing_it():
     assert perf.correlation_id("x" * 161) is None
 
 
-def test_02_trace_is_off_by_default_and_preserves_return_value(
-    monkeypatch, tmp_path
-):
+def test_02_trace_is_off_by_default_and_preserves_return_value(monkeypatch, tmp_path):
     monkeypatch.delenv("UDB_HYPERSPEED_TRACE", raising=False)
     assert perf.configure(tmp_path) is False
     assert perf.timed_call("desktop.uia", "execution", lambda a: a + 1, 9) == 10
@@ -58,19 +56,19 @@ def test_03_opt_in_phase_spans_are_bounded_and_redacted(monkeypatch, tmp_path):
     assert perf.configure(tmp_path)
     started = time.perf_counter_ns()
     with perf.rpc_scope("sensitive-rpc-request-id"):
-        assert perf.timed_call(
-            "browser.cdp", "execution", lambda: {"ok": True}
-        ) == {"ok": True}
+        assert perf.timed_call("browser.cdp", "execution", lambda: {"ok": True}) == {
+            "ok": True
+        }
         with perf.span("mcp.response", "response"):
             pass
         perf.interval("cloud.queue", "queue", started)
     filename = tmp_path / "hyperspeed" / "traces.jsonl"
     trace = perf.read_trace(filename)
     assert len(trace) == 3
-    assert {x["phase"] for x in trace} == {
-        "execution", "response", "queue"
-    }
-    assert all(x["trace_id"] == perf.correlation_id("sensitive-rpc-request-id") for x in trace)
+    assert {x["phase"] for x in trace} == {"execution", "response", "queue"}
+    assert all(
+        x["trace_id"] == perf.correlation_id("sensitive-rpc-request-id") for x in trace
+    )
     raw = filename.read_text(encoding="utf-8")
     for secret in ("sensitive-rpc-request-id", "password", "cookie", "url"):
         assert secret not in raw.lower()
@@ -135,7 +133,8 @@ def test_08_critical_path_selects_longest_dependency_chain():
         {"id": "end", "after": ["branch_a", "branch_b"], "duration_ms": 5},
     ]
     assert bench.critical_path(graph) == {
-        "duration_ms": 19, "steps": ["start", "branch_b", "end"]
+        "duration_ms": 19,
+        "steps": ["start", "branch_b", "end"],
     }
     with pytest.raises(ValueError, match="ordered"):
         bench.critical_path([{"id": "a", "after": ["b"], "duration_ms": 1}])
@@ -149,7 +148,8 @@ def test_09_redundant_poll_and_startup_detection_is_a_candidate_not_a_claim():
     }
     signals = bench.diagnostics([sample])
     assert {event["issue"] for event in signals} == {
-        "repeated_polling", "repeated_startup"
+        "repeated_polling",
+        "repeated_startup",
     }
     assert bench.diagnostics([dict(sample, poll_steps=1, startup_steps=1)]) == []
 

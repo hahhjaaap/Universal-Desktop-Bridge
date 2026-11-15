@@ -491,22 +491,31 @@ def run(
 
 
 def render(report):
-    return "\n".join(
-        [
-            "Device paired: " + ("yes" if report.get("paired") else "no"),
-            "Cloud Agent: "
-            + ("online" if report.get("cloud_agent_online") else "pending"),
-            "Authenticated MCP: "
+    lines = [
+        "Device paired: " + ("yes" if report.get("paired") else "no"),
+        "Cloud Agent: "
+        + ("online" if report.get("cloud_agent_online") else "pending"),
+        "Authenticated MCP: "
+        + (
+            "verified"
+            if report.get("authenticated_mcp_verified")
+            else "pending user OAuth"
+        ),
+        "ChatGPT client identity: not independently attested by this relay",
+        "MCP URL: " + report.get("mcp_url", "available after owner approval"),
+        report.get(
+            "recovery",
+            "Run udb setup again to resume or verify. No pairing reset is needed.",
+        ),
+    ]
+    if report.get("account_fleet") is True:
+        lines.insert(
+            1,
+            "Fleet account link: "
             + (
                 "verified"
-                if report.get("authenticated_mcp_verified")
-                else "pending user OAuth"
+                if report.get("fleet_linked") is True
+                else "not verified; run udb setup"
             ),
-            "ChatGPT client identity: not independently attested by this relay",
-            "MCP URL: " + report.get("mcp_url", "available after owner approval"),
-            report.get(
-                "recovery",
-                "Run udb setup again to resume or verify. No pairing reset is needed.",
-            ),
-        ]
-    )
+        )
+    return "\n".join(lines)

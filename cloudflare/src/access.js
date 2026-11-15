@@ -178,23 +178,32 @@ export async function authorizeAccess(access, env, deviceId, request = null,
     // registry membership and the device's live owner proof were all checked.
     if (!cfg.team) throw new AuthError();
     if (trustedFleetOwner !== null) {
-      if (typeof access?.getIdentity !== "function" ||
-          typeof trustedFleetOwner !== "string") throw new AuthError();
-      const observed = await access.getIdentity();
-      if (typeof observed?.user_uuid !== "string" ||
-          !ACCESS_SUB.test(observed.user_uuid)) throw new AuthError();
-      const trustedSubject = cfg.team + "#" + observed.user_uuid.toLowerCase();
-      if (trustedSubject !== trustedFleetOwner) throw new AuthError();
-      // An additional signed assertion must agree with the native identity.
-      if (request?.headers?.get("Cf-Access-Jwt-Assertion")) {
-        const signed = await verifiedAccessIdentity(request, env, fetchImpl);
-        if (signed.sub?.toLowerCase() !== observed.user_uuid.toLowerCase() ||
-            (emailSubject(observed.email) && signed.email !== observed.email))
-          throw new AuthError();
+      if (typeof trustedFleetOwner !== "string") throw new AuthError();
+      let verified;
+      if (typeof access?.getIdentity === "function") {
+        // Runtime identity is authoritative when provided by Cloudflare Access.
+        const observed = await access.getIdentity();
+        if (typeof observed?.user_uuid !== "string" ||
+            !ACCESS_SUB.test(observed.user_uuid)) throw new AuthError();
+        verified = { sub: observed.user_uuid.toLowerCase(), email: observed.email };
+        // If Access also supplies a signed JWT, both identities must agree.
+        if (request?.headers?.get("Cf-Access-Jwt-Assertion")) {
+          const signed = await verifiedAccessIdentity(request, env, fetchImpl);
+          if (signed.sub?.toLowerCase() !== verified.sub ||
+              (emailSubject(verified.email) && signed.email !== verified.email))
+            throw new AuthError();
+        }
+      } else {
+        // Workers without ctx.access receive a signed Access assertion. Fleet
+        // verified it for registry lookup, but the per-device gateway also
+        // verifies the signature and checks the exact same immutable owner.
+        // Never trust an arbitrary header or the forwarded owner string alone.
+        verified = await verifiedAccessIdentity(request, env, fetchImpl);
+        if (!ACCESS_SUB.test(verified.sub)) throw new AuthError();
       }
-      runtimeIdentity = { sub: observed.user_uuid.toLowerCase(),
-        email: observed.email };
-      subject = trustedSubject;
+      subject = cfg.team + "#" + verified.sub.toLowerCase();
+      if (subject !== trustedFleetOwner) throw new AuthError();
+      runtimeIdentity = verified;
     } else {
       // Standalone device MCP: never exchange an email or runtime hint for
       // the original issuer-sub JWT requirement.

@@ -134,6 +134,7 @@ def test_74_terminal_send_encodes_once_and_still_enforces_byte_limit():
 def test_75_terminal_capacity_slot_closed_once_on_repeated_stop():
     terminal = _terminal_with_fake_process()
     counts = []
+
     class Slot:
         def close(self):
             counts.append("slot")
@@ -150,6 +151,7 @@ def test_75_terminal_capacity_slot_closed_once_on_repeated_stop():
 
         def close(self):
             self.exit = 0
+
     terminal.process = Process()
     terminal.capacity = Slot()
     terminal.input_done = threading.Event()

@@ -22,6 +22,7 @@ from ._version import VERSION
 from .cloud_secrets import load_device_token, read_token_file
 from .config import serve_options
 from .launcher import child_environment, command
+from . import hyperspeed_perf as perf
 
 CLOUD_USER_AGENT = f"UniversalDesktopBridge/{VERSION}"
 
@@ -182,7 +183,10 @@ class LocalProxy:
             # A new WebSocket owns a fresh local proxy. Existing MCP clients
             # can resume with tools/list/call without another edge initialize.
             # Bootstrap locally before dispatch, never retry the caller's RPC.
-            answer = self._exchange(
+            answer = perf.timed_call(
+                "cloud.initialize",
+                "startup",
+                self._exchange,
                 {
                     "jsonrpc": "2.0",
                     "id": "udb-init-" + uuid.uuid4().hex,
@@ -196,7 +200,10 @@ class LocalProxy:
                 deadline,
             )
             self._accept_initialize(answer)
-        answer = self._exchange(rpc, deadline)
+        with perf.rpc_scope(rpc["id"]):
+            answer = perf.timed_call(
+                "cloud.stdio", "execution", self._exchange, rpc, deadline
+            )
         if rpc["method"] == "initialize":
             self._accept_initialize(answer)
         return answer
@@ -291,7 +298,11 @@ class ParallelLocalProxies:
         self.failed = threading.Event()
         self.closed = False
 
-    def _invoke(self, rpc: dict) -> dict:
+    def _invoke(self, rpc: dict, queued_at_ns=None) -> dict:
+        if queued_at_ns is not None:
+            perf.interval(
+                "cloud.queue", "queue", queued_at_ns, rpc_id=rpc.get("id")
+            )
         # A queued task must not start a new process after another worker has
         # poisoned the connection, even if it passed submit() earlier.
         if self.failed.is_set():
@@ -309,7 +320,10 @@ class ParallelLocalProxies:
         if self.failed.is_set():
             raise RuntimeError("Cloud RPC pool is unavailable")
         try:
-            return proxy.call(rpc)
+            with perf.rpc_scope(rpc.get("id")):
+                return perf.timed_call(
+                    "cloud.local_rpc", "execution", proxy.call, rpc
+                )
         except (RuntimeError, TimeoutError, ValueError):
             # A dead child process can be unusable without setting its flag:
             # LocalProxy.call() detects process.poll() before _exchange().
@@ -326,7 +340,7 @@ class ParallelLocalProxies:
                 raise RuntimeError("Cloud RPC pool is closed")
             if self.failed.is_set():
                 raise RuntimeError("Cloud RPC pool is unavailable")
-            return self.executor.submit(self._invoke, rpc)
+            return self.executor.submit(self._invoke, rpc, time.perf_counter_ns())
 
     def close(self):
         with self.lock:
@@ -408,6 +422,8 @@ def receive_relay_text(ws, websocket) -> str | None:
 def run(settings) -> int:
     """Connect only after local owner provisioned a paired device secret."""
     from .owner_command import CommandError, launch_gate
+
+    perf.configure(settings.home)
 
     try:
         # Older logon scripts can also start Cloud Agent. Prevent two sockets

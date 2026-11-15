@@ -37,7 +37,7 @@ async function fixture() {
   let fetches = 0;
   const fetchImpl = async (url, options) => {
     assert.equal(url, TEAM + "/cdn-cgi/access/certs");
-    assert.equal(options.redirect, "error");
+    assert.equal(options.redirect, "manual");
     fetches++;
     return Response.json(jwks);
   };
@@ -332,7 +332,7 @@ test("Cloudflare Access key rotation refreshes a stale JWKS once without trustin
   let fetches = 0;
   const fetchImpl = async (url, options) => {
     assert.equal(url, team + "/cdn-cgi/access/certs");
-    assert.equal(options.redirect, "error");
+    assert.equal(options.redirect, "manual");
     fetches++;
     const jwk = await crypto.subtle.exportKey("jwk", published.publicKey);
     return Response.json({ keys: [{ ...jwk, kid }] });

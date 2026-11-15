@@ -22,8 +22,18 @@ from .cloud_pair import NoRedirect
 from .config import activate, checked
 from .launcher import child_environment, command
 from .onboarding import CHATGPT_URL, attended_console, paired_cloud
-from .private_enrollment import FLEET_TEST_RELAY, PRIVATE_RELAY, _request_json, setup_relay
+from .private_enrollment import (
+    FLEET_TEST_RELAY,
+    PRIVATE_RELAY,
+    _request_json,
+    setup_relay,
+)
 from .setup_enrollment import EnrollmentError, enroll, link_existing, prepare_pending
+
+
+# Legacy callers use setup.PRIVATE_RELAY; keep that exported while the
+# isolated canary setup origin is selected explicitly through setup_relay().
+__all__ = ["PRIVATE_RELAY"]
 
 
 class SetupError(ValueError):

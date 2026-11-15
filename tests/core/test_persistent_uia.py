@@ -62,7 +62,10 @@ class FakeProcess:
 def fake_worker(monkeypatch):
     worker = PersistentUIA(Path("fixed.exe"), Path("fixed.ps1"))
     responses = queue.Queue(maxsize=2)
-    fixture = FakeProcess(['{"sequence":1,"result":{"ok":true,"verified_control_value":true}}\n'], responses)
+    fixture = FakeProcess(
+        ['{"sequence":1,"result":{"ok":true,"verified_control_value":true}}\n'],
+        responses,
+    )
 
     def begin():
         worker._process = fixture
@@ -141,7 +144,9 @@ def test_25_worker_rejects_nonfinite_or_unserializable_data(fake_worker):
 
 def test_26_worker_reports_app_refusal_without_replay(fake_worker):
     worker, fake, _ = fake_worker
-    fake.stdin.replies[:] = ['{"sequence":1,"result":{"ok":false,"error":"control changed"}}\n']
+    fake.stdin.replies[:] = [
+        '{"sequence":1,"result":{"ok":false,"error":"control changed"}}\n'
+    ]
     assert worker.call({"mode": "invoke", "hwnd": 19}, 1)["ok"] is False
     assert len(fake.stdin.writes) == 1
     assert not fake.killed

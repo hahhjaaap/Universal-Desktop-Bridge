@@ -35,6 +35,7 @@ class Desktop:
         self.windows = {}
         self.guard = guard
         self.control = control
+        self._uia_worker = None
         self.u = ctypes.WinDLL("user32", use_last_error=True)
         self.u.SendInput.argtypes = [w.UINT, ctypes.POINTER(InputEvent), ctypes.c_int]
         self.u.SendInput.restype = w.UINT
@@ -56,6 +57,12 @@ class Desktop:
             w.DWORD,
         ]
         self.dwm.DwmGetWindowAttribute.restype = ctypes.c_long
+
+    def close(self):
+        worker = getattr(self, "_uia_worker", None)
+        if worker is not None:
+            self._uia_worker = None
+            worker.close()
 
     def is_cloaked(self, hwnd):
         """WS_VISIBLE alone also includes hidden UWP/virtual-desktop shells."""
@@ -533,6 +540,30 @@ class Desktop:
             / "System32/WindowsPowerShell/v1.0/powershell.exe"
         )
         helper = _UIA_HELPER
+        deadline = 7 + (
+            wait_ms / 1000
+            if mode in ("wait_for", "poll_chatgpt_reply")
+            else 0
+        )
+        from .uia_worker import PersistentUIA, enabled
+
+        if enabled():
+            if getattr(self, "_uia_worker", None) is None:
+                self._uia_worker = PersistentUIA(exe, helper)
+            # A rejected, missing or late response never falls back to legacy
+            # subprocess.run; that could replay a successful mutation.
+            data = perf.timed_call(
+                "desktop.uia",
+                "execution",
+                self._uia_worker.call,
+                request,
+                deadline,
+            )
+            if not data.get("ok"):
+                raise PolicyError(
+                    "UI Automation was refused; inspect the target before retrying."
+                )
+            return data
         try:
             result = perf.timed_call(
                 "desktop.uia",
@@ -553,8 +584,7 @@ class Desktop:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                timeout=7
-                + (wait_ms / 1000 if mode in ("wait_for", "poll_chatgpt_reply") else 0),
+                timeout=deadline,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 shell=False,
             )

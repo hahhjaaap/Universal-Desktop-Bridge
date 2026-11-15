@@ -89,7 +89,8 @@ def _column(value, headers):
                 return idx - 1
         except ValueError:
             pass
-    hits = [i for i, h in enumerate(headers) if normalize(h) == normalize(value)]
+    desired = normalize(value)
+    hits = [i for i, h in enumerate(headers) if normalize(h) == desired]
     if len(hits) != 1:
         raise ValueError("Column header not found uniquely: " + value[:60])
     return hits[0]
@@ -216,7 +217,7 @@ def analyze(files, a):
         source, read_only=True, data_only=False, keep_links=False
     )
     try:
-        sheet_name = a.get("sheet") or book.sheetnames[0]
+        sheet_name = a.get("sheet") or book.worksheets[0].title
         if sheet_name not in book:
             raise ValueError("Unknown sheet")
         sheet = book[sheet_name]
@@ -347,8 +348,7 @@ def accounting_spreadsheet(files, a, output: Path | None):
 
     warnings = book.create_sheet("Canh bao")
     warnings.append(["Dong Excel", "Ma canh bao", "Mo ta"])
-    for row_number, code, detail in issues:
-        n = warnings.max_row + 1
+    for n, (row_number, code, detail) in enumerate(issues, 2):
         _put(warnings, n, 1, row_number)
         _put(warnings, n, 2, code)
         _put(warnings, n, 3, detail)

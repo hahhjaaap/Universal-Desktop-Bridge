@@ -345,10 +345,7 @@ def run(
                     caps.get("protocol") != 2
                     or caps.get("browser_enrollment") is not True
                 ):
-                    if (
-                        caps.get("protocol") == 2
-                        and setup_relay() == FLEET_TEST_RELAY
-                    ):
+                    if caps.get("protocol") == 2 and setup_relay() == FLEET_TEST_RELAY:
                         # No public request is sent while enrollment is locked.
                         # A non-secret ID lets the relay operator pin ONLY this
                         # device before this same setup command is resumed.

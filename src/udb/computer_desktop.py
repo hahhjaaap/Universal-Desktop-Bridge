@@ -382,6 +382,7 @@ class Desktop:
                 "desktop_operation": total_ms,
                 "verified_submit": submitted_ms,
                 "reply_wait": round(reply.get("elapsed_ms", 0)),
+                "reply_first_text": round(reply.get("first_reply_ms", -1)),
             },
             "replay_safe": False,
             "login_verified": False,

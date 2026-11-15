@@ -136,9 +136,7 @@ def test_foreground_changed_after_typing_prevents_submission():
     desktop, calls = fake_desktop(foreground=77)
     with pytest.raises(PolicyError, match="Foreground changed"):
         desktop.chatgpt_roundtrip(42, "w", "Hello", 6000)
-    assert "chatgpt_commit" not in [
-        op[1] for op in calls if op[0] == "uia"
-    ]
+    assert "chatgpt_commit" not in [op[1] for op in calls if op[0] == "uia"]
 
 
 def test_dispatch_routes_new_action():

@@ -102,13 +102,19 @@ class TerminalSession:
                 output += part[:available]
                 cursor += min(len(part), available)
             raw = bytes(output)
-            decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
-            decoded = decoder.decode(raw, final=self.done and cursor >= self.position)
-            pending = decoder.getstate()[0]
-            if pending:
-                # Incomplete UTF-8 bytes remain available at the next offset.
-                cursor -= len(pending)
-                raw = raw[: -len(pending)]
+            if raw:
+                decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+                decoded = decoder.decode(
+                    raw, final=self.done and cursor >= self.position
+                )
+                pending = decoder.getstate()[0]
+                if pending:
+                    # Incomplete UTF-8 bytes remain available at next offset.
+                    cursor -= len(pending)
+                    raw = raw[: -len(pending)]
+            else:
+                # The common idle-poll path needs no incremental codec.
+                decoded = ""
             code = self.process.poll()
             self.read_cursor = cursor
         return {
@@ -131,6 +137,7 @@ class TerminalSession:
     def finish_io(self):
         if self.process.poll() is not None and self.capacity is not None:
             self.capacity.close()
+            self.capacity = None
         self.input_done.set()
         try:
             self.process.stdin.close()
@@ -180,10 +187,13 @@ class TerminalSession:
             raise RuntimeError(
                 "Terminal input channel is closed; inspect output before retrying"
             )
-        if not isinstance(text, str) or len(text.encode("utf-8")) > 10000:
+        if not isinstance(text, str) or len(text) > 10000:
+            raise ValueError("Input limit: 10,000 UTF-8 bytes")
+        encoded = text.encode("utf-8")
+        if len(encoded) > 10000:
             raise ValueError("Input limit: 10,000 UTF-8 bytes")
         try:
-            self.input_queue.put_nowait(text.encode("utf-8"))
+            self.input_queue.put_nowait(encoded)
         except queue.Full:
             raise RuntimeError(
                 "Terminal input queue full; inspect output before retrying"
@@ -197,6 +207,7 @@ class TerminalSession:
         self.process.close()
         if self.capacity is not None:
             self.capacity.close()
+            self.capacity = None
         try:
             self.process.stdin.close()
         except (OSError, ValueError):

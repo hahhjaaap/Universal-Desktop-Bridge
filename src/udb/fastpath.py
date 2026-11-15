@@ -85,8 +85,10 @@ def compile_plan(steps, allowed):
         if not isinstance(raw, dict):
             raise PolicyError("FastPath step must be an object")
         action = raw.get("action")
-        if not isinstance(action, str) or action not in allowed or set(raw) - (
-            allowed[action] | PLAN_FIELDS | {"action"}
+        if (
+            not isinstance(action, str)
+            or action not in allowed
+            or set(raw) - (allowed[action] | PLAN_FIELDS | {"action"})
         ):
             raise PolicyError("FastPath contains unknown or nested browser action")
         step_id = raw.get("step_id", f"s{index}")

@@ -285,7 +285,11 @@ class BatchRunner:
                         {
                             "index": index,
                             "action": step["action"],
-                            **({"step_id": current.step_id} if current is not None else {}),
+                            **(
+                                {"step_id": current.step_id}
+                                if current is not None
+                                else {}
+                            ),
                             "ok": False,
                             "error_type": type(exc).__name__,
                             "error": "Browser step failed; inspect page before retrying a mutation",

@@ -15,6 +15,7 @@ import subprocess
 import threading
 from pathlib import Path
 
+from . import hyperspeed_perf as perf
 from .core import PolicyError
 
 MAX_REQUEST_BYTES = 100000
@@ -153,12 +154,15 @@ class PersistentUIA:
                 self._idle = None
                 self._idle_token = None
             try:
-                self._begin()
+                with perf.span("desktop.uia", "startup"):
+                    self._begin()
                 process = self._process
                 expected_sequence = self._sequence + 1
-                process.stdin.write(wire + "\n")
-                process.stdin.flush()
-                line = self._replies.get(timeout=timeout)
+                with perf.span("desktop.uia", "dispatch"):
+                    process.stdin.write(wire + "\n")
+                    process.stdin.flush()
+                with perf.span("desktop.uia", "observation"):
+                    line = self._replies.get(timeout=timeout)
                 if (
                     type(line) is not str
                     or not line.endswith("\n")

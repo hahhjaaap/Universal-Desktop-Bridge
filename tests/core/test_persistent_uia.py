@@ -17,6 +17,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from udb import hyperspeed_perf as perf
 from udb.computer_desktop import Desktop
 from udb.core import PolicyError
 from udb.uia_worker import PersistentUIA, enabled
@@ -268,3 +269,21 @@ def test_24_warm_worker_avoids_redundant_root_lookup_with_live_pid_guard():
     assert preflight.count("::FromHandle") == 2
     assert preflight.count("$root.Current.ProcessId -ne [int]$r.pid") == 2
     assert preflight.rfind("::FromHandle") < provider_end
+
+
+
+def test_30_opt_in_worker_trace_records_fixed_phases_only(fake_worker, monkeypatch, tmp_path):
+    worker, _, _ = fake_worker
+    perf.disable()
+    monkeypatch.setenv("UDB_HYPERSPEED_TRACE", "1")
+    assert perf.configure(tmp_path)
+    try:
+        assert worker.call({"hwnd": 19, "pid": 33, "mode": "read_text", "text": "private-fixture-data"}, 1)["ok"]
+        path = tmp_path / "hyperspeed" / "traces.jsonl"
+        events = perf.read_trace(path)
+        assert [event["phase"] for event in events] == ["startup", "dispatch", "observation"]
+        assert all(event["operation"] == "desktop.uia" for event in events)
+        assert all(event["duration_ns"] >= 0 for event in events)
+        assert "private-fixture-data" not in path.read_text(encoding="utf-8")
+    finally:
+        perf.disable()

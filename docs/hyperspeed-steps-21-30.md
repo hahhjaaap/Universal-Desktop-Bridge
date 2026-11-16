@@ -80,3 +80,14 @@ The warm path now avoids a second `AutomationElement.FromHandle` lookup
 when the standard Win32 client-side providers were already registered. Every
 request still obtains a fresh root and checks its observed PID. The first
 registration still reacquires and re-verifies the root after provider setup.
+
+### Payload-free phase tracing
+
+With the separate, already-existing owner-local `UDB_HYPERSPEED_TRACE=1`
+setting, the persistent UIA worker records three fixed timing phases under
+`desktop.uia`: `startup` (reuse or cold process creation), `dispatch`
+(private pipe write), and `observation` (waiting for the worker's reply).
+Tracing remains disabled by default and records neither the UIA request nor
+the response, selector, HWND, text or device identity. The operation's existing
+`execution` total remains intact. On uncertain mutation outcomes, the
+worker is still stopped with no replay or fallback.

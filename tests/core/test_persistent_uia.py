@@ -258,9 +258,7 @@ def test_24_warm_worker_avoids_redundant_root_lookup_with_live_pid_guard():
     script = (Path(__file__).parents[2] / "src" / "udb" / "computer_uia.ps1").read_text(
         encoding="utf-8-sig"
     )
-    start = script.index(
-        "    $root=[Windows.Automation.AutomationElement]::FromHandle"
-    )
+    start = script.index("    $root=[Windows.Automation.AutomationElement]::FromHandle")
     end = script.index("    if($r.mode -in @('chatgpt_prepare'", start)
     preflight = script[start:end]
     provider_start = preflight.index("    if (-not $script:UdbProvidersRegistered)")

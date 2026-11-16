@@ -144,9 +144,12 @@ def test_retention_and_concurrent_proxies_use_one_ordered_log(tmp_path, monkeypa
     ],
 )
 def test_pending_and_failure_are_never_logged_as_success(report, native, expected):
+    from udb.protocol import metadata
+
     result = {
         "structuredContent": report,
         "content": [{"type": "text", "text": native + " | fixture"}],
+        "_meta": {"udb": metadata(native)},
     }
     assert activity.completion(result)[0] == expected
 

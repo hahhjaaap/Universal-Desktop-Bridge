@@ -13,7 +13,7 @@ from contextlib import closing
 from pathlib import Path
 
 from .core import PolicyError, reject_links
-from .outcomes import native_status, report_outcome
+from .outcomes import report_outcome
 
 KEEP_ROWS = 2000
 MAX_DETAIL = 2048
@@ -100,42 +100,28 @@ def argument_details(arguments):
 
 
 def completion(result):
+    """Derive activity state from trusted structure, never user text."""
     if not isinstance(result, dict):
         return "ERROR", {}
     if "_upstream_rpc_error" in result:
         return "ERROR", {"error_type": "UpstreamRPCError"}
     report = result.get("structuredContent")
+    report = report if isinstance(report, dict) else {}
     blocks = result.get("content", [])
     blocks = blocks if isinstance(blocks, list) else []
-    first = next(
-        (
-            b.get("text", "")
-            for b in blocks
-            if isinstance(b, dict) and b.get("type") == "text"
-        ),
-        "",
-    )
-    if not isinstance(report, dict):
-        report = {}
-        for block in blocks:
-            text = block.get("text", "") if isinstance(block, dict) else ""
-            if isinstance(text, str) and len(text) <= 65536:
-                try:
-                    candidate = json.loads(text)
-                except (ValueError, TypeError):
-                    continue
-                if isinstance(candidate, dict):
-                    report = candidate
-                    break
-    state = report_outcome(report).status
-    native = native_status(first) if isinstance(first, str) else None
-    if result.get("isError") is True or native == "ERROR":
-        state = "ERROR"
-    elif state != "ERROR" and (native == "RUNNING" or state == "RUNNING"):
-        state = "RUNNING"
+    marker = result.get("_meta")
+    marker = marker.get("udb") if isinstance(marker, dict) else None
+    declared = marker.get("status") if isinstance(marker, dict) else None
+    structured_status = report_outcome(report).status if report else "PASS"
+    if result.get("isError") is True or "ERROR" in (structured_status, declared):
+        status = "ERROR"
+    elif "RUNNING" in (structured_status, declared):
+        status = "RUNNING"
+    else:
+        status = "PASS"
     details = argument_details(report)
     details["content_blocks"] = len(blocks)
-    return state, details
+    return status, details
 
 
 def activity_path(home):

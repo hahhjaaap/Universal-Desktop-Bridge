@@ -64,13 +64,18 @@ def test_status():
             "ERROR",
         ),
     ]
-    for data, expected in samples:
-        result = udb_unified.normalized_output("audit_tool", data)
-        line = result["content"][0]["text"].splitlines()[0]
-        assert line.startswith(expected + " |"), (expected, line)
-        if expected == "ERROR":
-            assert result["isError"] is True
-    print("PASS | backend error/status classification")
+    for data, _legacy_expected in samples:
+        result = udb_unified.normalized_output("file_read", data)
+        assert result == data
+        assert result.get("isError") is not True
+    status = {
+        "content": [{"type": "text", "text": "PASS | stale"}],
+        "structuredContent": {"status": "failed"},
+    }
+    error_result = udb_unified.normalized_output("get_job_status", status)
+    assert error_result["isError"] is True
+    assert error_result["content"][0]["text"].startswith("ERROR |")
+    print("PASS | explicit backend outcomes; untrusted text unchanged")
 
 
 def test_oversized_reply():

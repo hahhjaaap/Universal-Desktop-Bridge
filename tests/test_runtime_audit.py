@@ -228,16 +228,20 @@ def test_report_encodings_have_the_same_public_outcome(report, expected, encodin
             "structuredContent": report,
         }
     original_json = json.dumps(original)
-    row = normalized_output("fixture", original)
-    assert row["content"][0]["text"].startswith(expected + " |")
+    tool = "get_job_status" if encoding == "structured" else "read_file"
+    row = normalized_output(tool, original)
+    if encoding == "structured":
+        assert row["content"][0]["text"].startswith(expected + " |")
+        assert bool(row.get("isError")) is (expected == "ERROR")
+    else:
+        assert row == original
     assert protocol.result(report)["_meta"]["udb"]["status"] == expected
-    assert bool(row.get("isError")) is (expected == "ERROR")
     assert json.dumps(original) == original_json
 
 
-def test_error_heading_cannot_be_annotated_as_success():
+def test_untrusted_error_heading_does_not_override_backend_status():
     row = protocol.annotate({"content": [{"type": "text", "text": "ERROR | fixture"}]})
-    assert row["_meta"]["udb"]["status"] == "ERROR"
+    assert row["_meta"]["udb"]["status"] == "PASS"
 
 
 def test_terminal_checkpoint_skips_unchanged_snapshots():

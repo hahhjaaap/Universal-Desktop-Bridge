@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from udb.path_policy import is_data_container
+from udb.path_policy import canonical_relative_parts, is_data_container
 
 from .constants import (
     HIDDEN_DIRS_CASEFOLD,
@@ -64,6 +64,8 @@ class ScopedFiles:
         if not isinstance(given, str) or not given or "\x00" in given:
             raise ValueError("Missing or invalid file path")
         p = Path(given)
+        if any(x.endswith((".", " ")) for x in p.parts):
+            raise PermissionError("Trailing dot or space not allowed")
         raw = (p if p.is_absolute() else self.root / p).absolute()
         full = Path(os.path.normpath(str(raw)))
         if os.name == "nt" and (str(full).startswith("\\\\") or ":" in str(full)[2:]):
@@ -72,20 +74,26 @@ class ScopedFiles:
             rel = full.relative_to(self.root)
         except ValueError:
             raise PermissionError("Path is outside the authorized project") from None
-        if any(
-            part.casefold() in PROTECTED_NAMES
-            or is_data_container(part)
-            or part.casefold().startswith(PROTECTED_PREFIXES)
-            or part.lower().endswith(tuple(PROTECTED_SUFFIXES))
-            for part in rel.parts
-        ):
-            raise PermissionError("Protected file is not accessible")
-        if any(
-            part.casefold().startswith((".udb-stage-", ".udb-upload-", ".udb-write-"))
-            or part.casefold() in HIDDEN_DIRS_CASEFOLD
-            for part in rel.parts
-        ):
-            raise PermissionError("Protected directory is not accessible")
+
+        def deny_source_parts(names):
+            if any(
+                part.casefold() in PROTECTED_NAMES
+                or is_data_container(part)
+                or part.casefold().startswith(PROTECTED_PREFIXES)
+                or part.lower().endswith(tuple(PROTECTED_SUFFIXES))
+                for part in names
+            ):
+                raise PermissionError("Protected file is not accessible")
+            if any(
+                part.casefold().startswith(
+                    (".udb-stage-", ".udb-upload-", ".udb-write-")
+                )
+                or part.casefold() in HIDDEN_DIRS_CASEFOLD
+                for part in names
+            ):
+                raise PermissionError("Protected directory is not accessible")
+
+        deny_source_parts(rel.parts)
         walk = self.root
         for item in rel.parts:
             walk = walk / item
@@ -93,6 +101,7 @@ class ScopedFiles:
                 raise PermissionError("Links / reparse points are not allowed")
         if not full.resolve(strict=False).is_relative_to(self.root):
             raise PermissionError("Resolved path is outside the authorized project")
+        deny_source_parts(canonical_relative_parts(self.root, full))
         if full.is_file() and full.stat().st_nlink > 1:
             raise PermissionError("Hardlinked data files are not allowed")
         if not allow_missing and not full.exists():

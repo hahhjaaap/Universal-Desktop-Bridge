@@ -16,7 +16,7 @@ from pathlib import Path, PureWindowsPath
 
 from .core_autonomy import AutonomyMixin
 from .core_common import PolicyError, canonical, digest
-from .path_policy import is_data_container
+from .path_policy import canonical_relative_parts, is_data_container
 
 MAX_TEXT = 512 * 1024
 SOURCE_EXT = {
@@ -342,30 +342,38 @@ class Agent(AutonomyMixin):
         ):
             raise PolicyError("Only project-relative paths are allowed")
         parts = relative.replace("\\", "/").split("/")
-        for part in parts:
-            if part in ("", "."):
-                continue
-            if (
-                part == ".."
-                or part.endswith((" ", "."))
-                or any(ch in part for ch in '<>"|?*')
-            ):
-                raise PolicyError("Unsafe path segment")
-            lower = part.lower()
-            if (
-                part.split(".")[0].upper() in RESERVED
-                or lower in BLOCK_DIRS
-                or is_data_container(part)
-                or "checkpoint" in lower
-                or "training" in lower
-                or lower.startswith((".env", "credentials", "secrets", "id_rsa"))
-                or Path(part).suffix.lower() in BLOCK_EXT
-            ):
-                raise PolicyError("Protected data, credential, or reserved path")
+
+        def deny_source_parts(names):
+            for part in names:
+                if part in ("", "."):
+                    continue
+                if (
+                    part == ".."
+                    or part.endswith((" ", "."))
+                    or any(ch in part for ch in '<>"|?*')
+                ):
+                    raise PolicyError("Unsafe path segment")
+                lower = part.lower()
+                if (
+                    part.split(".")[0].upper() in RESERVED
+                    or lower in BLOCK_DIRS
+                    or is_data_container(part)
+                    or "checkpoint" in lower
+                    or "training" in lower
+                    or lower.startswith((".env", "credentials", "secrets", "id_rsa"))
+                    or Path(part).suffix.lower() in BLOCK_EXT
+                ):
+                    raise PolicyError("Protected data, credential, or reserved path")
+
+        deny_source_parts(parts)
         p = root.joinpath(*(q for q in parts if q not in ("", ".")))
         reject_links(p)
         if not is_under(p.resolve(), root):
             raise PolicyError("Path escaped project")
+        try:
+            deny_source_parts(canonical_relative_parts(root, p))
+        except PermissionError:
+            raise PolicyError("Cannot verify canonical project path") from None
         self.check_protected(p)
         return p
 

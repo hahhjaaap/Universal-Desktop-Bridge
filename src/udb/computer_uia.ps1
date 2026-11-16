@@ -48,11 +48,12 @@ try {
         $providers=[Reflection.Assembly]::Load('UIAutomationClientsideProviders, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35')
         [Windows.Automation.ClientSettings]::RegisterClientSideProviderAssembly($providers.GetName())
         $script:UdbProvidersRegistered=$true
+        # The first request must reacquire after registering Win32 proxies.
+        # Warm requests already use those proxies, so avoid a redundant
+        # cross-process FromHandle/PID read while keeping fresh validation.
+        $root=[Windows.Automation.AutomationElement]::FromHandle([IntPtr][long]$r.hwnd)
+        if(!$root -or $root.Current.ProcessId -ne [int]$r.pid){throw 'Observed window changed'}
     }
-    # Reacquire after provider registration; do not retain a generic wrapper
-    # created before the standard Win32 proxies were available.
-    $root=[Windows.Automation.AutomationElement]::FromHandle([IntPtr][long]$r.hwnd)
-    if(!$root -or $root.Current.ProcessId -ne [int]$r.pid){throw 'Observed window changed'}
     if($r.mode -in @('chatgpt_prepare','chatgpt_commit')) {
         # Targeted two-pass ChatGPT form automation. Only one exact editor
         # and the fixed Send button; no generic selectors or cookie access.

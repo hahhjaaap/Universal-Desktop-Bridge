@@ -252,3 +252,21 @@ def test_helper_keeps_per_request_pid_checks_and_refuses_password_reads():
     assert "Unsupported UIA mode" in script
     assert "[Console]::In.ReadLine()" in script
     assert "$script:UdbProvidersRegistered" in script
+
+
+def test_24_warm_worker_avoids_redundant_root_lookup_with_live_pid_guard():
+    script = (Path(__file__).parents[2] / "src" / "udb" / "computer_uia.ps1").read_text(
+        encoding="utf-8-sig"
+    )
+    start = script.index(
+        "    $root=[Windows.Automation.AutomationElement]::FromHandle"
+    )
+    end = script.index("    if($r.mode -in @('chatgpt_prepare'", start)
+    preflight = script[start:end]
+    provider_start = preflight.index("    if (-not $script:UdbProvidersRegistered)")
+    provider_end = preflight.index("\n    }", provider_start)
+    # Always resolve a fresh HWND/PID on each request. Only the first
+    # provider registration is allowed to reacquire the same root.
+    assert preflight.count("::FromHandle") == 2
+    assert preflight.count("$root.Current.ProcessId -ne [int]$r.pid") == 2
+    assert preflight.rfind("::FromHandle") < provider_end

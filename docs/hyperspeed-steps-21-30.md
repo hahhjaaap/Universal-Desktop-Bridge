@@ -66,3 +66,17 @@ receipt protections remain unchanged.
 - Rollout and real performance metrics are explicitly separate from merge.
   Compare at least 30 warm actions per app on an approved Windows test
   instance and record p50/p95, CPU, RSS, success and perceived UI correctness.
+
+### Warm-path microbenchmark (Windows CI/test machine only)
+
+After installing the development dependencies in an isolated Windows checkout,
+run `python tools/benchmark_uia_process.py --samples 30`. This explicitly
+sends a rejected zero-HWND/PID request, compares one-shot PowerShell startup
+with the existing worker's first and warm roundtrips, and reports p50/p95.
+No real window, input, credentials or owner permission is accessed. It does
+**not** exercise UIA element trees or measure end-to-end ChatGPT latency.
+
+The warm path now avoids a second `AutomationElement.FromHandle` lookup
+when the standard Win32 client-side providers were already registered. Every
+request still obtains a fresh root and checks its observed PID. The first
+registration still reacquires and re-verifies the root after provider setup.

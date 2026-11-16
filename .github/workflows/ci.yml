@@ -61,6 +61,11 @@ jobs:
         run: python tools/benchmark_rpc.py --calls 100 --parallel 4
       - name: Benchmark MCP startup and mailbox scans (informational)
         run: python tools/benchmark_hotpaths.py --samples 12 --backend-delay-ms 15
+      - name: Benchmark rejected-HWND Windows UIA worker (informational)
+        if: runner.os == 'Windows' && matrix.python == '3.11'
+        # Impossible HWND and PID: no desktop target, input, credentials, or
+        # owner grant. This measures PowerShell startup and private IPC only.
+        run: python tools/benchmark_uia_process.py --samples 30
       - name: Upload regression scenario report
         if: always()
         continue-on-error: true

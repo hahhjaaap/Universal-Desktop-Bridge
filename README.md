@@ -1,6 +1,6 @@
 # Universal Desktop Bridge (UDB)
 
-> **Version baseline (2026-11-13):** Source targets **UDB 0.12.0**; the published Windows v0.12.0 release is immutable and may use an earlier commit. The installed EXE, Cloudflare deployment and GitHub source are separate. See [version matrix](docs/current-version.md).
+> **Release candidate (2026-11-17):** Source targets **UDB 0.13.0**, but the latest verified published Windows release remains **v0.12.0** until the protected-main release gate succeeds. Source commits and CI artifacts do not update the installed EXE or Cloudflare deployment. See [version matrix](docs/current-version.md).
 
 **Windows-first MCP bridge for ChatGPT and other supported MCP clients.** UDB provides one Python package, one `udb` CLI and a derived public tool catalog (`udb tools` reports the actual count) for guarded local computer work. Its source of truth is `src/udb/`; the root-level `bridge.py` and `udb_*.py` files are compatibility launchers, not separate implementations.
 

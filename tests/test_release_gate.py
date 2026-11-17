@@ -63,6 +63,7 @@ def test_release_gate_requires_explicit_protection_before_publication():
         is True
     )
 
+
 def test_manual_unprotected_release_accepts_only_exact_green_main():
     # Explicit owner dispatch may waive branch protection, NEVER CI or SHA matching.
     assert decide(

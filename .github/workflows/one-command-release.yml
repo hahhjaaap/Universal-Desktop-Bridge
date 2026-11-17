@@ -18,6 +18,8 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main' &&
+      github.actor == github.repository_owner &&
+      github.triggering_actor == github.repository_owner &&
       inputs.confirm_unprotected_release == true
     runs-on: windows-latest
     timeout-minutes: 40

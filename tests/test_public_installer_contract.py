@@ -34,9 +34,7 @@ def test_acceptance_no_longer_infers_cloud_only_from_help_format():
     from pathlib import Path
 
     source = (
-        Path(__file__).resolve().parents[1]
-        / "tools"
-        / "check_public_installer.py"
+        Path(__file__).resolve().parents[1] / "tools" / "check_public_installer.py"
     ).read_text(encoding="utf-8")
     assert "cloud_only = is_cloudflare_only_release(version)" in source
     assert 'assert mcp["mcpServers"] == {}' in source

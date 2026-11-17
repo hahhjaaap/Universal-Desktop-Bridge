@@ -217,12 +217,36 @@ try {
         return
     }
     if($r.mode -eq 'snapshot') {
+      # Experimental read-only property cache; locally opt-in, per request.
+      # No AutomationElement, control selector, grant, HWND or PID is reused.
+      $snapshotCache=$null
+      if($env:UDB_UIA_SNAPSHOT_CACHE -ceq '1'){
+          $snapshotCache=[Windows.Automation.CacheRequest]::new()
+          $snapshotCache.TreeScope=[Windows.Automation.TreeScope]::Element
+          $snapshotCache.TreeFilter=[Windows.Automation.Condition]::TrueCondition
+          $snapshotCache.AutomationElementMode=[Windows.Automation.AutomationElementMode]::Full
+          foreach($property in @(
+              [Windows.Automation.AutomationElement]::NameProperty,
+              [Windows.Automation.AutomationElement]::AutomationIdProperty,
+              [Windows.Automation.AutomationElement]::ControlTypeProperty,
+              [Windows.Automation.AutomationElement]::IsEnabledProperty,
+              [Windows.Automation.AutomationElement]::IsOffscreenProperty,
+              [Windows.Automation.AutomationElement]::IsPasswordProperty,
+              [Windows.Automation.AutomationElement]::BoundingRectangleProperty
+          )){$snapshotCache.Add($property)}
+      }
       $view='control'
       foreach($walker in @([Windows.Automation.TreeWalker]::ControlViewWalker,[Windows.Automation.TreeWalker]::RawViewWalker)) {
         $queue=[Collections.Generic.Queue[object]]::new();$queue.Enqueue($root)
         $rows=[Collections.Generic.List[object]]::new()
         while($queue.Count -gt 0 -and $rows.Count -lt 200) {
-            $element=$queue.Dequeue();$c=$element.Current;$rect=$c.BoundingRectangle
+            $element=$queue.Dequeue()
+            # The root was obtained before the cache request; children are
+            # created via the cache-aware walker overload below.
+            $c=if($null -ne $snapshotCache -and $rows.Count -gt 0){
+                $element.Cached
+            }else{$element.Current}
+            $rect=$c.BoundingRectangle
             if($c.IsPassword) {
                 $rows.Add(@{name='<password>';password=$true;automation_id=$c.AutomationId})
             } else {
@@ -243,9 +267,16 @@ try {
                 $p=$null
                 if($element.TryGetCurrentPattern([Windows.Automation.ValuePattern]::Pattern,[ref]$p)){$state.readonly=$p.Current.IsReadOnly}
                 $rows.Add($state)
-                $child=$walker.GetFirstChild($element);$count=0
+                $child=if($null -ne $snapshotCache){
+                    $walker.GetFirstChild($element,$snapshotCache)
+                }else{$walker.GetFirstChild($element)}
+                $count=0
                 while($child -and $queue.Count -lt 400 -and $count -lt 100) {
-                    $queue.Enqueue($child);$child=$walker.GetNextSibling($child);$count++
+                    $queue.Enqueue($child)
+                    $child=if($null -ne $snapshotCache){
+                        $walker.GetNextSibling($child,$snapshotCache)
+                    }else{$walker.GetNextSibling($child)}
+                    $count++
                 }
             }
         }

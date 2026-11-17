@@ -15,6 +15,18 @@ import urllib.request
 from contextlib import contextmanager
 from pathlib import Path
 
+
+def is_cloudflare_only_release(version: str) -> bool:
+    """Use the release's declared transport contract, not mutable CLI help text.
+
+    UDB 0.12.0 retired local stdio registration; --help presentation has since
+    changed while the Cloudflare-only MCP contract remains the same.
+    """
+    if not isinstance(version, str) or not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise ValueError("Invalid published UDB version")
+    return tuple(map(int, version.split("."))) >= (0, 12, 0)
+
+
 API = "https://api.github.com/repos/hahhjaaap/Universal-Desktop-Bridge/releases/latest"
 FEED = "https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases/latest/download"
 
@@ -174,7 +186,7 @@ def main():
         )
         assert launcher.stdout.strip() == version
         mcp = json.loads((install / "mcp.json").read_text("utf-8"))
-        cloud_only = bool(re.search(r"[{,]live(?=[,}])", run([exe, "--help"]).stdout))
+        cloud_only = is_cloudflare_only_release(version)
         if cloud_only:
             assert mcp["mcpServers"] == {}
         else:

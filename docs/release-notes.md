@@ -17,7 +17,7 @@
 
 ## Install and rollback
 
-Publish only after the **exact v0.13.0 main commit** passes required checks and the release safety gate, including protected `main`. Once the genuine GitHub release exists, use the published HTTPS installer from `https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases/tag/v0.13.0`. Run the managed installer **outside any active UDB remote-control job**; retain the previous working installation until the new Cloud Agent and ChatGPT tool catalog are verified.
+Publish only after the **exact current v0.13.0 main commit** passes all CI and release acceptance checks. The workflow is **manual-only** and requires explicit owner confirmation if `main` is unprotected. Once the genuine GitHub release exists, use the published HTTPS installer from `https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases/tag/v0.13.0`. Run the managed installer **outside any active UDB remote-control job**; retain the previous working installation until the new Cloud Agent and ChatGPT tool catalog are verified.
 
 On an attended Windows terminal, after publication:
 
@@ -33,4 +33,4 @@ Use `udb rollback` if the managed update fails. Do not delete the prior executab
 
 ## Security and release status
 
-The Windows ZIP and executable are built and checked by CI. SHA-256 integrity checks do **not** establish publisher authentication; this candidate is **not Authenticode-signed**. The public release workflow intentionally blocks publication when `main` is not protected. A successful candidate build is not itself a published stable release or an installed upgrade.
+The Windows ZIP and executable are built and checked by CI. SHA-256 integrity checks do **not** establish publisher authentication; this candidate is **not Authenticode-signed**. Automatic publication is disabled. An explicit owner-triggered workflow dispatch on `main` may approve publication without Branch Protection, but only when the exact `main` revision has passed complete push CI and the installer/release acceptance checks. A successful candidate build is not itself a published stable release or an installed upgrade.

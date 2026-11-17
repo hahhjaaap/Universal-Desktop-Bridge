@@ -252,7 +252,15 @@ class UnifiedProxy:
                     )
                 )
                 if len(data) > MAX_LINE:
-                    raise ValueError("MCP response ID is too large")
+                    # A very long request ID must not make replies disappear.
+                    # Use a bounded null-ID response; never imply safe replay.
+                    data = compact_json(
+                        rpc_error(
+                            None, "MCP response ID too large; outcome unknown", -32005
+                        )
+                    )
+                    if len(data) > MAX_LINE:
+                        raise ValueError("MCP reply budget cannot hold an error")
             sys.stdout.buffer.write(data)
             sys.stdout.buffer.flush()
 
@@ -525,6 +533,26 @@ class UnifiedProxy:
         perf_started = time.perf_counter_ns()
         observed_result = None
         observed_error = None
+        reply_attempted = False
+
+        def deliver(payload):
+            # A response may already have been partially sent before raising.
+            # Never write a second frame after the first send attempt.
+            nonlocal reply_attempted
+            reply_attempted = True
+            self.send(payload)
+
+        def safely_report(error_message, code):
+            if reply_attempted:
+                return
+            try:
+                deliver(rpc_error(ident, error_message, code))
+            except Exception as output_error:
+                print(
+                    "UDB Unified: response failure " + type(output_error).__name__,
+                    file=sys.stderr,
+                )
+
         try:
             method = message.get("method")
             params = message.get("params") or {}
@@ -547,7 +575,7 @@ class UnifiedProxy:
                 result = self.call_tool(params)
                 observed_result = result
                 if "_upstream_rpc_error" in result:
-                    self.send(
+                    deliver(
                         {
                             "jsonrpc": "2.0",
                             "id": ident,
@@ -561,38 +589,51 @@ class UnifiedProxy:
                 # Keep all original UDB non-tool APIs functional.
                 reply = self.primary.request(method, params)
                 if reply.get("error"):
-                    self.send({"jsonrpc": "2.0", "id": ident, "error": reply["error"]})
+                    deliver({"jsonrpc": "2.0", "id": ident, "error": reply["error"]})
                     return
                 result = reply.get("result", {})
-            self.send({"jsonrpc": "2.0", "id": ident, "result": result})
+            deliver({"jsonrpc": "2.0", "id": ident, "result": result})
         except TimeoutError as e:
             observed_error = e
-            self.send(rpc_error(ident, str(e), -32002))
+            safely_report(str(e), -32002)
         except (OSError, ValueError, RuntimeError, KeyError, TypeError) as e:
             observed_error = e
-            self.send(rpc_error(ident, str(e)))
+            safely_report(str(e), -32000)
+        except Exception as e:
+            observed_error = e
+            # Unexpected error args may contain user content or secrets.
+            print("UDB Unified: internal " + type(e).__name__, file=sys.stderr)
+            safely_report("Internal error; inspect state before retrying", -32603)
         finally:
-            if tool is not None:
-                self.activity_event(
-                    "result",
-                    tool,
-                    call_id,
-                    result=observed_result,
-                    error=observed_error,
-                    elapsed_ms=round((time.monotonic() - started) * 1000),
+            try:
+                if tool is not None:
+                    self.activity_event(
+                        "result",
+                        tool,
+                        call_id,
+                        result=observed_result,
+                        error=observed_error,
+                        elapsed_ms=round((time.monotonic() - started) * 1000),
+                    )
+                perf.interval(
+                    "mcp.dispatch",
+                    "dispatch",
+                    perf_started,
+                    rpc_id=ident,
+                    ok=observed_error is None
+                    and not (
+                        isinstance(observed_result, dict)
+                        and "_upstream_rpc_error" in observed_result
+                    ),
                 )
-            perf.interval(
-                "mcp.dispatch",
-                "dispatch",
-                perf_started,
-                rpc_id=ident,
-                ok=observed_error is None
-                and not (
-                    isinstance(observed_result, dict)
-                    and "_upstream_rpc_error" in observed_result
-                ),
-            )
-            self.active_limit.release()
+            except Exception as telemetry_error:
+                # Logging must not block RPC completion or retain slots.
+                print(
+                    "UDB Unified: telemetry " + type(telemetry_error).__name__,
+                    file=sys.stderr,
+                )
+            finally:
+                self.active_limit.release()
 
     def serve(self) -> None:
         # A raw "for line in stdin" can accumulate arbitrarily large input

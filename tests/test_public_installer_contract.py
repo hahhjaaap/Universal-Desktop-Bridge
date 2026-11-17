@@ -5,7 +5,10 @@ No release download, owner access or Windows installation occurs in these tests.
 
 import pytest
 
-from tools.check_public_installer import is_cloudflare_only_release
+from tools.check_public_installer import (
+    is_cloudflare_only_release,
+    unattended_setup_refusal,
+)
 
 
 @pytest.mark.parametrize(
@@ -40,3 +43,19 @@ def test_acceptance_no_longer_infers_cloud_only_from_help_format():
     assert 'assert mcp["mcpServers"] == {}' in source
     assert '"universal-desktop-bridge"' in source  # Legacy version fallback only.
     assert 'run([exe, "--help"]).stdout' not in source
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("Setup requires an attended Windows console; use --status", True),
+        ("Cloud pairing requires an attended Windows terminal", True),
+        ("", False),
+        ("Unable to load local Python runtime", False),
+        ("Setup silently completed", False),
+    ],
+)
+def test_public_installer_refusal_requires_explicit_attendance_diagnostic(
+    message, expected
+):
+    assert unattended_setup_refusal(message) is expected

@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/public-installer-acceptance.yml
       - tools/check_public_installer.py
+      - tests/test_public_installer_contract.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -22,3 +23,10 @@ jobs:
       - name: Show verified result
         shell: pwsh
         run: Get-Content reports/public-installer.json
+      - name: Save independent published-release acceptance report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: published-installer-verification
+          path: reports/public-installer.json
+          retention-days: 7

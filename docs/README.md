@@ -1,4 +1,4 @@
-# UDB documentation index — source 0.12.0
+# UDB documentation index — source 0.13.0
 
 > **Reviewed 2026-11-14:** This index organizes the current source docs.
 > The published v0.12.0 Windows installer, source commits and live Cloudflare

@@ -3,6 +3,7 @@
 No test in this module touches a live user window or sends input.
 Full per-control equivalence with a consented GUI fixture remains a gate.
 """
+
 from __future__ import annotations
 
 import json
@@ -36,8 +37,12 @@ def test_cache_is_per_request_and_preserves_password_redaction():
     source = HELPER.read_text(encoding="utf-8-sig")
     snapshot = source.split("if($r.mode -eq 'snapshot') {", 1)[1]
     for prop in (
-        "NameProperty", "AutomationIdProperty", "ControlTypeProperty",
-        "IsEnabledProperty", "IsOffscreenProperty", "IsPasswordProperty",
+        "NameProperty",
+        "AutomationIdProperty",
+        "ControlTypeProperty",
+        "IsEnabledProperty",
+        "IsOffscreenProperty",
+        "IsPasswordProperty",
         "BoundingRectangleProperty",
     ):
         assert f"::{prop}" in snapshot
@@ -60,12 +65,23 @@ def test_invalid_hwnd_refused_with_cache_enabled_or_disabled(enabled):
     env = dict(os.environ, UDB_UIA_SNAPSHOT_CACHE=enabled)
     result = subprocess.run(
         [
-            str(exe), "-NoLogo", "-NoProfile", "-NonInteractive", "-Sta",
-            "-ExecutionPolicy", "Bypass", "-File", str(HELPER),
+            str(exe),
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Sta",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(HELPER),
         ],
         input=json.dumps({"hwnd": 0, "pid": -1, "mode": "snapshot"}),
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=18, env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=18,
+        env=env,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     assert result.returncode == 1

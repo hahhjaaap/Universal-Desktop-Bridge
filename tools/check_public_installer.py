@@ -16,6 +16,19 @@ from contextlib import contextmanager
 from pathlib import Path
 
 
+
+def unattended_setup_refusal(output: str) -> bool:
+    """Accept both historical and current wording for the same denial policy."""
+    return any(
+        phrase in output
+        for phrase in (
+            "attended Windows console",
+            "attended Windows terminal",
+        )
+    )
+
+
+
 def is_cloudflare_only_release(version: str) -> bool:
     """Use the release's declared transport contract, not mutable CLI help text.
 
@@ -194,7 +207,7 @@ def main():
         setup_home = root / "Redirected setup must not create this"
         refused = run([exe, "--home", setup_home, "setup"], success=False)
         assert refused.returncode and not setup_home.exists()
-        assert "attended Windows terminal" in refused.stdout + refused.stderr
+        assert unattended_setup_refusal(refused.stdout + refused.stderr)
         saved_local_mode = not cloud_only and tuple(map(int, version.split("."))) >= (
             0,
             9,

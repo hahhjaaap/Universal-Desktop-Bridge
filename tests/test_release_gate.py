@@ -140,6 +140,7 @@ def test_release_workflow_requires_explicit_manual_confirmation():
     assert "tools/check_installer.py" in workflow
     assert "tools/check_public_installer.py" in workflow
 
+
 def test_owner_initiated_manual_dispatch_on_main_is_allowed():
     assert authorized_manual_dispatch(
         "hahhjaaap/Universal-Desktop-Bridge",
@@ -157,9 +158,27 @@ def test_owner_initiated_manual_dispatch_on_main_is_allowed():
         ("push", "refs/heads/main", "hahhjaaap", "hahhjaaap", "hahhjaaap"),
         ("workflow_run", "refs/heads/main", "hahhjaaap", "hahhjaaap", "hahhjaaap"),
         ("workflow_dispatch", "refs/heads/dev", "hahhjaaap", "hahhjaaap", "hahhjaaap"),
-        ("workflow_dispatch", "refs/heads/main", "collaborator", "collaborator", "hahhjaaap"),
-        ("workflow_dispatch", "refs/heads/main", "hahhjaaap", "collaborator", "hahhjaaap"),
-        ("workflow_dispatch", "refs/heads/main", "collaborator", "hahhjaaap", "hahhjaaap"),
+        (
+            "workflow_dispatch",
+            "refs/heads/main",
+            "collaborator",
+            "collaborator",
+            "hahhjaaap",
+        ),
+        (
+            "workflow_dispatch",
+            "refs/heads/main",
+            "hahhjaaap",
+            "collaborator",
+            "hahhjaaap",
+        ),
+        (
+            "workflow_dispatch",
+            "refs/heads/main",
+            "collaborator",
+            "hahhjaaap",
+            "hahhjaaap",
+        ),
         ("workflow_dispatch", "refs/heads/main", "hahhjaaap", "hahhjaaap", "other"),
         ("workflow_dispatch", "refs/heads/main", "hahhjaaap", "hahhjaaap", None),
         ("workflow_dispatch", "refs/heads/main", None, "hahhjaaap", "hahhjaaap"),
@@ -196,4 +215,3 @@ def test_manual_release_owner_must_match_repository_identity():
         "hahhjaaap",
         "hahhjaaap",
     )
-

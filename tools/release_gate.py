@@ -23,10 +23,19 @@ def qualifying_run(run, repository, sha):
     )
 
 
-def decide(repository, sha, main_sha, runs, release_exists, *, main_protected=False):
+def decide(
+    repository,
+    sha,
+    main_sha,
+    runs,
+    release_exists,
+    *,
+    main_protected=False,
+    allow_unprotected_manual=False,
+):
     if sha != main_sha:
         return {"publish": False, "reason": "A newer main revision exists"}
-    if not main_protected:
+    if not main_protected and not allow_unprotected_manual:
         return {
             "publish": False,
             "reason": "Main branch is not protected; release publication blocked",
@@ -45,7 +54,19 @@ def main():
     parser.add_argument("--repository", required=True)
     parser.add_argument("--sha", required=True)
     parser.add_argument("--run-id", type=int)
+    parser.add_argument(
+        "--manual-unprotected",
+        action="store_true",
+        help="Explicit manual release approval on main only; full push CI remains required.",
+    )
     args = parser.parse_args()
+    if args.manual_unprotected and (
+        os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch"
+        or os.environ.get("GITHUB_REF") != "refs/heads/main"
+    ):
+        raise ValueError(
+            "Unprotected release requires attended manual dispatch on main"
+        )
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", args.repository):
         raise ValueError("Invalid repository")
     if not re.fullmatch(r"[a-f0-9]{40}", args.sha):
@@ -100,6 +121,7 @@ def main():
         runs,
         release is not None,
         main_protected=main_protected,
+        allow_unprotected_manual=args.manual_unprotected,
     )
     result.update(version=version, sha=args.sha)
     print(json.dumps(result))

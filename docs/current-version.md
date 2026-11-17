@@ -16,7 +16,7 @@ Do not infer that a source merge enables owner grants, updates Cloudflare or ins
 
 ## Release gate and current blocker
 
-`tools/release_gate.py` only permits public v0.13.0 publication when the **exact `main` SHA** has passed the full CI matrix, the release version is unpublished, and GitHub reports `main.protected=true`. As checked on 2026-11-17, `main.protected=false` and the repository had no rulesets, so the automatic public release workflow is deliberately **fail-closed**. An administrator must configure and verify appropriate main-branch protection and required checks. Do **not** weaken the release gate to publish.
+`tools/release_gate.py` requires the **exact current `main` SHA**, a successful complete **push CI** run for that revision, and a previously unpublished version. The publication workflow is now **manual-only**: the owner must run `one-command-windows-release` on `main` and explicitly confirm publication without Branch Protection. Automatic publication remains disabled. The previous default protection guard is retained unless the manual-only confirmation and trusted GitHub Actions event/ref checks both succeed. This optional route does not add code signing or independent security review.
 
 The PR's Windows EXE build and CI artifact can be used for **candidate acceptance**, but it is not a signed or official GitHub release. Current Windows builds are not Authenticode-signed; SHA-256 alone does not authenticate the publisher.
 

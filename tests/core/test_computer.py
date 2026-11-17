@@ -29,6 +29,7 @@ def fixture(tmp_path):
 
 
 def record(agent):
+    issued = time.time()
     return dict(
         policy=1,
         id="a" * 32,
@@ -36,6 +37,8 @@ def record(agent):
         sid="synthetic-sid",
         capabilities=list(access.CAPABILITIES),
         acknowledged_unsandboxed=True,
+        issued=issued,
+        expires_at=issued + access.DEFAULT_TTL_SECONDS,
     )
 
 

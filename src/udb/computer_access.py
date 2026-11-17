@@ -7,6 +7,7 @@ cannot preserve a promise that arbitrary commands cannot access protected data.
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
 import time
@@ -17,6 +18,9 @@ from .core import PolicyError, reject_links
 NAME = "computer-access.dpapi"
 ENTROPY = b"UDB/current-user-computer-access/v1"
 CAPABILITIES = ("files", "execute", "desktop")
+DEFAULT_TTL_SECONDS = 8 * 60 * 60
+MAX_TTL_SECONDS = 24 * 60 * 60
+MAX_CLOCK_SKEW_SECONDS = 5 * 60
 
 
 def identity():
@@ -51,6 +55,20 @@ def load(agent, unprotect=None, sid=None):
 
             unprotect = default_unprotect
         data = json.loads(unprotect(blob))
+        # Perpetual legacy receipts are invalid until the owner consents again.
+        issued = data.get("issued") if isinstance(data, dict) else None
+        expires_at = data.get("expires_at") if isinstance(data, dict) else None
+        now = time.time()
+        if (
+            type(issued) not in (int, float)
+            or type(expires_at) not in (int, float)
+            or not math.isfinite(issued)
+            or not math.isfinite(expires_at)
+            or issued > now + MAX_CLOCK_SKEW_SECONDS
+            or not 0 < expires_at - issued <= MAX_TTL_SECONDS
+            or now >= expires_at
+        ):
+            return None
         if (
             not isinstance(data, dict)
             or data.get("policy") != 1
@@ -89,7 +107,11 @@ def require(agent):
     return grant["id"]
 
 
-def enable_local(agent, input_stream=None, output_stream=None):
+def enable_local(
+    agent, input_stream=None, output_stream=None, *, ttl_seconds=DEFAULT_TTL_SECONDS
+):
+    if type(ttl_seconds) is not int or not 0 < ttl_seconds <= MAX_TTL_SECONDS:
+        raise PolicyError("Computer access duration must be 1 to 86400 seconds.")
     incoming = sys.stdin if input_stream is None else input_stream
     outgoing = sys.stdout if output_stream is None else output_stream
     # Never turn redirected stdin into a console read. PowerShell may pipe only
@@ -106,7 +128,9 @@ def enable_local(agent, input_stream=None, output_stream=None):
     ):
         try:
             with open("CONOUT$", "w", encoding="utf-8") as console_out:
-                return enable_local(agent, incoming, console_out)
+                return enable_local(
+                    agent, incoming, console_out, ttl_seconds=ttl_seconds
+                )
         except OSError:
             raise PolicyError(
                 "Computer access requires your own attended Windows console; no console was available."
@@ -130,17 +154,20 @@ def enable_local(agent, input_stream=None, output_stream=None):
         "This permits file changes, program/shell execution, screenshots and real mouse/keyboard input.\n"
         "Commands are not sandboxed and can access data your account can access, including protected folders.\n"
         "Windows/UAC restrictions remain. Revoke later with: udb revoke-access\n"
+        f"This access expires after {ttl_seconds / 3600:g} hours (maximum 24).\n"
         "Type ALLOW COMPUTER to enable, or press Enter to cancel: "
     )
     outgoing.flush()
     if incoming.readline().strip() != "ALLOW COMPUTER":
         raise PolicyError("Computer access was not enabled.")
+    issued = time.time()
     record = dict(
         policy=1,
         id=uuid.uuid4().hex,
         home=str(agent.home.resolve()),
         sid=identity(),
-        issued=time.time(),
+        issued=issued,
+        expires_at=issued + ttl_seconds,
         capabilities=list(CAPABILITIES),
         acknowledged_unsandboxed=True,
     )

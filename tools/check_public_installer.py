@@ -16,7 +16,6 @@ from contextlib import contextmanager
 from pathlib import Path
 
 
-
 def unattended_setup_refusal(output: str) -> bool:
     """Accept both historical and current wording for the same denial policy."""
     return any(
@@ -26,7 +25,6 @@ def unattended_setup_refusal(output: str) -> bool:
             "attended Windows terminal",
         )
     )
-
 
 
 def is_cloudflare_only_release(version: str) -> bool:

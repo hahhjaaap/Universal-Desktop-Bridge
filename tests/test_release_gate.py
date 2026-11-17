@@ -2,7 +2,7 @@
 
 import pytest
 
-from tools.release_gate import decide
+from tools.release_gate import authorized_manual_dispatch, decide
 
 REPOSITORY = "owner/bridge"
 SHA = "a" * 40
@@ -133,7 +133,67 @@ def test_release_workflow_requires_explicit_manual_confirmation():
     assert "confirm_unprotected_release:" in workflow
     assert "default: false" in workflow
     assert "inputs.confirm_unprotected_release == true" in workflow
+    assert "github.actor == github.repository_owner" in workflow
+    assert "github.triggering_actor == github.repository_owner" in workflow
     assert workflow.count("--manual-unprotected") == 2
     assert "tools/check_frozen.py" in workflow
     assert "tools/check_installer.py" in workflow
     assert "tools/check_public_installer.py" in workflow
+
+def test_owner_initiated_manual_dispatch_on_main_is_allowed():
+    assert authorized_manual_dispatch(
+        "hahhjaaap/Universal-Desktop-Bridge",
+        "workflow_dispatch",
+        "refs/heads/main",
+        "hahhjaaap",
+        "hahhjaaap",
+        "hahhjaaap",
+    )
+
+
+@pytest.mark.parametrize(
+    ("event", "ref", "actor", "triggering_actor", "repository_owner"),
+    [
+        ("push", "refs/heads/main", "hahhjaaap", "hahhjaaap", "hahhjaaap"),
+        ("workflow_run", "refs/heads/main", "hahhjaaap", "hahhjaaap", "hahhjaaap"),
+        ("workflow_dispatch", "refs/heads/dev", "hahhjaaap", "hahhjaaap", "hahhjaaap"),
+        ("workflow_dispatch", "refs/heads/main", "collaborator", "collaborator", "hahhjaaap"),
+        ("workflow_dispatch", "refs/heads/main", "hahhjaaap", "collaborator", "hahhjaaap"),
+        ("workflow_dispatch", "refs/heads/main", "collaborator", "hahhjaaap", "hahhjaaap"),
+        ("workflow_dispatch", "refs/heads/main", "hahhjaaap", "hahhjaaap", "other"),
+        ("workflow_dispatch", "refs/heads/main", "hahhjaaap", "hahhjaaap", None),
+        ("workflow_dispatch", "refs/heads/main", None, "hahhjaaap", "hahhjaaap"),
+        ("workflow_dispatch", "refs/heads/main", "hahhjaaap", None, "hahhjaaap"),
+    ],
+)
+def test_manual_release_denies_other_actors_reruns_and_invalid_context(
+    event, ref, actor, triggering_actor, repository_owner
+):
+    assert not authorized_manual_dispatch(
+        "hahhjaaap/Universal-Desktop-Bridge",
+        event,
+        ref,
+        actor,
+        triggering_actor,
+        repository_owner,
+    )
+
+
+def test_manual_release_owner_must_match_repository_identity():
+    assert not authorized_manual_dispatch(
+        "attacker/other",
+        "workflow_dispatch",
+        "refs/heads/main",
+        "hahhjaaap",
+        "hahhjaaap",
+        "hahhjaaap",
+    )
+    assert not authorized_manual_dispatch(
+        "hahhjaaap",
+        "workflow_dispatch",
+        "refs/heads/main",
+        "hahhjaaap",
+        "hahhjaaap",
+        "hahhjaaap",
+    )
+

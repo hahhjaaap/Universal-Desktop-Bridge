@@ -119,7 +119,13 @@ and hashes using a trusted publisher identity, read the security advisories,
 and keep a safe rollback path. A successful CI matrix alone does not
 establish a signed or independently audited product.
 
-## Source mitigation: fail-closed publication without protected main (2026-11-13)
+## Manual-only unprotected-main release option (2026-11-17)
+
+For the **v0.13.0 owner-requested release path**, `one-command-windows-release` is `workflow_dispatch` **only**, never a push/workflow-run auto-publish. The workflow requires an explicit `confirm_unprotected_release=true` boolean on `main` and passes `--manual-unprotected` to `tools/release_gate.py`. The gate verifies `GITHUB_EVENT_NAME=workflow_dispatch` and `GITHUB_REF=refs/heads/main` when that flag is supplied. It still requires the *exact current main commit* to have completed successful **push CI** from this repository, an unpublished version, and a second independent gate immediately before publishing. A user cannot authorize a failed CI run, different SHA, pull request or existing tag by checking the box.
+
+This is a consciously lower-assurance alternative to enforcing Branch Protection, not a claim that Branch Protection exists or that the resulting unsigned ZIP is authenticated. Build/installer acceptance, checksum inventory, and public HTTPS installer verification remain required; no publisher certificate has been issued. Repository administrators should still consider branch protection, release environment approvals, immutable tags, independent provenance, and Authenticode signatures.
+
+## Historical: fail-closed automatic publication before the manual option (2026-11-13)
 
 The `one-command-windows-release` workflow evaluates `tools/release_gate.py`
 for the exact main SHA and successful CI. The source now also checks GitHub's

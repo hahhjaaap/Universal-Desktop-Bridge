@@ -1,101 +1,36 @@
-# UDB 0.12.0 — current version and documentation status
+# UDB 0.13.0 — source candidate versus released Windows build
 
-**Baseline verified on 2026-11-13.** `src/udb/_version.py` declares
-**0.12.0**. The Windows **v0.12.0** release was published on
-**2026-11-11**. Later `main` commits keep the same semantic version but do
-not retroactively change that published ZIP or any installed Windows EXE.
-The latest published tag was independently checked again on **2026-11-13**.
+**As of 2026-11-17**, the canonical source version on the v0.13.0 release-candidate branch is `0.13.0`. The latest **published** Windows release verified on GitHub is still **v0.12.0 (2026-11-11)** until a genuine v0.13.0 GitHub Release is published. The installed `udb.exe`, source branch, CI artifacts, and deployed Cloudflare Worker are independent and can be at different revisions.
 
-**Current source status:** GitHub `main` includes Actions Node-24-compatible
-updates (PR #160), Windows PySide6-Essentials **6.12.0** (PR #155),
-Chrome Aura removal (PR #163), Windows release gating on a protected `main`
-(PR #164), and the unreachable OpenAI Tunnel onboarding removal / Windows Qt
-CI teardown fix (PR #165), desktop capture/UIA and parallel read fixes
-(PR #168), and concise CLI help with installer compatibility (PR #167).
-The compact tool-family source is described in [tool families](tool-families.md);
-its installed/deployed status must be verified separately.
-Each source merge was separately validated; none
-is evidence that the published v0.12.0 ZIP or deployed Cloudflare Worker was
-updated.
+## Current source changes
 
-| Surface | Verify with | Meaning |
+The v0.13.0 candidate includes the changes already merged into `main` through PR #216:
+
+- Cloudflare account/device routing and tool-catalog improvements; Windows, Linux and Cloudflare regression tests.
+- Browser guarded FastPath foundation and the opt-in persistent Windows UI Automation worker.
+- Windows protected-path, proxy outcome and uncertain-write hardening.
+- **PR #215:** the DPAPI local computer-access grant expires after **8 hours** (maximum 24 hours). Legacy grants without expiration are rejected and must be reapproved through an **attended local** `udb --access computer`; remote tools cannot reauthorize them.
+- **PR #216:** experimental snapshot property cache is merged but **disabled by default**. Real UIA-tree correctness and speedup testing remain open; no end-to-end 5–6 second guarantee.
+
+Do not infer that a source merge enables owner grants, updates Cloudflare or installs a new Windows executable.
+
+## Release gate and current blocker
+
+`tools/release_gate.py` only permits public v0.13.0 publication when the **exact `main` SHA** has passed the full CI matrix, the release version is unpublished, and GitHub reports `main.protected=true`. As checked on 2026-11-17, `main.protected=false` and the repository had no rulesets, so the automatic public release workflow is deliberately **fail-closed**. An administrator must configure and verify appropriate main-branch protection and required checks. Do **not** weaken the release gate to publish.
+
+The PR's Windows EXE build and CI artifact can be used for **candidate acceptance**, but it is not a signed or official GitHub release. Current Windows builds are not Authenticode-signed; SHA-256 alone does not authenticate the publisher.
+
+## Check the four independent surfaces
+
+| Surface | Verify | Interpreting the result |
 | --- | --- | --- |
-| GitHub source | `git rev-parse HEAD`; `src/udb/_version.py` | Source revision and declared version |
-| Windows installation | `udb --version`; `udb version --json` | Installed executable and build identity |
-| Local Cloud Agent | `udb status --json`; `udb doctor --cloud --json` | Local process/config diagnostics, not remote authorization |
-| Deployed Cloudflare Worker | Independent Worker/Access review | Actual remote revision, credentials and grants |
-| ChatGPT integration | Owner sign-in and explicit granted read-only tool call | Actual end-to-end identity/device/tool path |
+| Source | `git rev-parse HEAD`, `src/udb/_version.py` | Selected code and declared version |
+| Windows executable | `udb version --json`, `udb doctor --json` | Installed binary revision and local health |
+| Cloudflare Worker | Independent Worker/Access deployment audit | Actual deployed relay and grants |
+| ChatGPT connector | Live tool list and a permitted read-only call | End-to-end tool discovery and authorization |
 
-## Connection model
+## Update and rollback
 
-Use attended `udb setup` on Windows. `udb mcp-config` intentionally prints the
-legacy per-device HTTPS URL. When account Fleet is enabled and the device is
-linked, `udb setup` instead shows the shared `/v1/account/mcp` URL; add that URL
-once to the existing ChatGPT connection and use `list_devices` plus explicit
-`device_id` for machine selection. The Fleet implementation is the opt-in
-candidate in PR #183, not a production or current-release feature; the published
-v0.12.0 executable and deployed staging Worker have not been updated by this
-source branch. UDB 0.12 uses Cloudflare; public OpenAI Tunnel and public local
-stdio MCP registration are not supported v0.12 user routes. Worker deployment,
-OAuth, subject/device grants and Windows permissions remain separate controls
-and must not be inferred from green local process status.
+Run `udb update --check` only after an approved v0.13.0 public release exists. The managed installer should retain the previous known-good image and the user state in `%LOCALAPPDATA%\\UniversalDesktopBridge`. Validate `udb --version`, `udb doctor --json`, and the ChatGPT tool catalog before removing older managed releases. Use `udb rollback` on failure. Do not stop or replace the active UDB executable from inside its own remote job, as this can sever the only management connection.
 
-## Source cleanup versus released installations
-
-- PR #161 removed the unused Tkinter Tunnel UI and admin enrollment script,
-  with their obsolete tests and helper license manifest. Compatibility
-  interfaces still referenced by runtime/tests were intentionally retained.
-- Subsequent source cleanup retires the optional **UDB Aura Chrome extension**,
-  its launcher and ZIP resources. The visible-tab action uses an existing
-  owner-controlled Chrome window without a browser extension; the UDB-owned
-  browser and owner-granted virtual pointer are separate features.
-- Git cleanup cannot uninstall a Chrome extension already loaded in the
-  owner's browser. Remove a previously installed Aura manually at
-  `chrome://extensions` if needed; do not change their Chrome profile
-  remotely.
-- The released v0.12.0 ZIP is immutable. A merged source PR is not proof of
-  any new signed/released installer or of a Windows upgrade.
-
-## Remaining safety and migration work
-
-- Issues #147 and #162 were closed on 2026-11-13 at the owner's request as
-  **not planned**. Closing them does not complete the work described below.
-- [Issue #147](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/147):
-  GitHub still reports `main.protected=false` and no enforced ruleset as of
-  2026-11-13. The automated Windows release gate refuses publication while
-  this is true; administrators must enable and negatively test branch
-  protection, required reviews/checks and release controls.
-- [Issue #162](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/162):
-  Removal of the abandoned Tunnel setup wizard is complete, but the older
-  DesktopController/connection/release compatibility paths and existing-owner
-  migration/rollback still require acceptance. Preserve historic user state,
-  legal notices, credentials and recovery options until explicitly reviewed.
-- The Windows CI helper `tools/run_windows_pytest.py` disposes test-only
-  PySide6/Qt resources before process shutdown; it does **not** install UDB,
-  change the owner's Windows session or waive any nonzero test exit.
-
-## Which documentation to use
-
-For operational steps, start with [README](../README.md),
-[owner pairing](pairing-checklist-vi.md), [GUI](gui-user-guide.md),
-[release notes](release-notes.md), [Cloudflare staging operations](../cloudflare/STAGING-OPERATIONS.md)
-and [security](../SECURITY.md). Historical prototypes, proposals, audit logs
-and benchmark results are not current setup or deployment procedures.
-Older exact tool counts or CI results must not be represented as current.
-
-**Security:** UDB v0.12.0 Windows binaries are not Authenticode-signed.
-See [release security](release-security.md). Neither documentation changes
-nor a passing CI gate authorize Cloudflare deployment, secret/OAuth updates,
-Windows grants or installer execution on an owner's PC.
-
-### Additional Tunnel onboarding source cleanup
-
-The unused internal `onboarding.run()` OpenAI Tunnel setup wizard and its
-obsolete interactive-key prompts were removed after checking the call graph:
-the public `udb setup` already calls `onboarding.setup_cloud()`. Tests now
-check attended Cloudflare pairing, malformed-pairing fail-closed behavior,
-existing legacy connection bytes and startup preferences without credential
-reads or changing permissions. Legacy `saved_connection`, `saved_mode` and
-`save_mode` helpers are **retained**, as are the DesktopController
-reconnection and historic archive paths until a safe migration/rollback
-procedure exists. See [issue #162](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/162).
+Use [v0.13.0 release notes](release-notes.md), [Windows release security](release-security.md), [pairing instructions](pairing-checklist-vi.md), and [repository README](../README.md) for operational details. Historical claims about v0.12.0 still refer only to that immutable published artifact.

@@ -1,10 +1,12 @@
 name: one-command-windows-release
 on:
-  workflow_run:
-    workflows: [package-and-regressions]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      confirm_unprotected_release:
+        description: "I approve publishing tested main without branch protection"
+        required: true
+        type: boolean
+        default: false
 permissions:
   contents: write
   actions: read
@@ -14,14 +16,13 @@ concurrency:
 jobs:
   release:
     if: >-
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.head_repository.full_name == github.repository)
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.confirm_unprotected_release == true
     runs-on: windows-latest
     timeout-minutes: 40
     env:
-      UDB_RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      UDB_RELEASE_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -33,11 +34,9 @@ jobs:
         id: gate
         env:
           GH_TOKEN: ${{ github.token }}
-          UDB_CI_RUN_ID: ${{ github.event.workflow_run.id }}
         shell: pwsh
         run: |
-          $arguments = @('tools/release_gate.py', '--repository', $env:GITHUB_REPOSITORY, '--sha', $env:UDB_RELEASE_SHA)
-          if ($env:UDB_CI_RUN_ID) { $arguments += @('--run-id', $env:UDB_CI_RUN_ID) }
+          $arguments = @('tools/release_gate.py', '--repository', $env:GITHUB_REPOSITORY, '--sha', $env:UDB_RELEASE_SHA, '--manual-unprotected')
           python @arguments
           if ($LASTEXITCODE -ne 0) { throw 'Release CI gate failed.' }
       - if: steps.gate.outputs.publish == 'true'
@@ -73,10 +72,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           UDB_RELEASE_VERSION: ${{ steps.gate.outputs.version }}
-          UDB_CI_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
-          $arguments = @('tools/release_gate.py', '--repository', $env:GITHUB_REPOSITORY, '--sha', $env:UDB_RELEASE_SHA)
-          if ($env:UDB_CI_RUN_ID) { $arguments += @('--run-id', $env:UDB_CI_RUN_ID) }
+          $arguments = @('tools/release_gate.py', '--repository', $env:GITHUB_REPOSITORY, '--sha', $env:UDB_RELEASE_SHA, '--manual-unprotected')
           $gateJson = python @arguments
           if ($LASTEXITCODE -ne 0) { throw 'Final release CI gate failed.' }
           $gate = $gateJson | ConvertFrom-Json

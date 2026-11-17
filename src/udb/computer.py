@@ -135,4 +135,8 @@ class Computer:
         raise PolicyError("Unknown computer operation")
 
     def close(self):
-        self.jobs.close()
+        try:
+            if self.desktop is not None:
+                self.desktop.close()
+        finally:
+            self.jobs.close()

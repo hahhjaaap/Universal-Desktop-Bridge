@@ -13,7 +13,7 @@ SCRIPT = Path(__file__).resolve().parents[2] / "src" / "udb" / "computer_uia.ps1
 def reply_candidate_function():
     source = SCRIPT.read_text(encoding="utf-8-sig")
     start = source.index("function Test-ChatGPTReplyCandidate(")
-    end = source.index("\ntry {", start)
+    end = source.index("\nfunction Invoke-UdbUia(", start)
     definition = source[start:end]
     assert "(Test-ChatGPTReplyCandidate $value)" in source
     return definition

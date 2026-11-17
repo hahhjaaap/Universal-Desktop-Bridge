@@ -23,6 +23,26 @@ def qualifying_run(run, repository, sha):
     )
 
 
+def authorized_manual_dispatch(
+    repository, event_name, ref, actor, triggering_actor, repository_owner
+):
+    """Only the repository owner can explicitly authorize unprotected releases.
+
+    A second user re-running an owner's workflow must not inherit the
+    original dispatch's release privilege. Missing runner identity fails closed.
+    """
+    owner, separator, _ = repository.partition("/")
+    return bool(
+        separator
+        and owner
+        and repository_owner == owner
+        and event_name == "workflow_dispatch"
+        and ref == "refs/heads/main"
+        and actor == owner
+        and triggering_actor == owner
+    )
+
+
 def decide(
     repository,
     sha,
@@ -60,17 +80,21 @@ def main():
         help="Explicit manual release approval on main only; full push CI remains required.",
     )
     args = parser.parse_args()
-    if args.manual_unprotected and (
-        os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch"
-        or os.environ.get("GITHUB_REF") != "refs/heads/main"
-    ):
-        raise ValueError(
-            "Unprotected release requires attended manual dispatch on main"
-        )
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", args.repository):
         raise ValueError("Invalid repository")
     if not re.fullmatch(r"[a-f0-9]{40}", args.sha):
         raise ValueError("Invalid source revision")
+    if args.manual_unprotected and not authorized_manual_dispatch(
+        args.repository,
+        os.environ.get("GITHUB_EVENT_NAME"),
+        os.environ.get("GITHUB_REF"),
+        os.environ.get("GITHUB_ACTOR"),
+        os.environ.get("GITHUB_TRIGGERING_ACTOR"),
+        os.environ.get("GITHUB_REPOSITORY_OWNER"),
+    ):
+        raise ValueError(
+            "Unprotected release requires an owner-triggered manual dispatch on main"
+        )
     root = Path(__file__).resolve().parents[1]
     version_file = (root / "src/udb/_version.py").read_text(encoding="utf-8")
     match = re.fullmatch(r'VERSION = "(\d+\.\d+\.\d+)"\s*', version_file)

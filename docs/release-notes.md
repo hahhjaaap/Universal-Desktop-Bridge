@@ -9,10 +9,11 @@
 - **Safety and regression work:** stricter Windows protected-path checks (including 8.3 aliases), backend outcome validation, no automatic replay of uncertain writes, plus Windows/Linux CI and Windows standalone installer/rollback tests.
 - **Maintenance:** simplified current source and packaging paths. Existing local user data, device identity, pairings and approval settings should be preserved through managed update.
 
-## Not included
+## Additional merged changes and compatibility notes
 
-- Draft PR #215 (computer grant expiry) is not merged; upgrading does not intentionally expire existing grants through that proposed change.
-- Draft PR #216 (experimental UIA CacheRequest snapshot) is not merged; this release does not enable the unverified cache feature.
+- **#215 — Time-bound computer grants:** the current-user DPAPI authorization now expires after **8 hours by default (maximum 24 hours)**. Previously saved computer-access receipts without an expiry are intentionally rejected. After upgrading, the Windows owner must run `udb --access computer` **locally in an attended terminal** and approve access again. The new package neither grants nor renews permission remotely.
+- **#216 — Experimental UIA snapshot cache:** the read-only UIA CacheRequest snapshot is present but **off by default** (`UDB_UIA_SNAPSHOT_CACHE=1` is a developer-only local opt-in). Real GUI semantic parity and performance acceptance remain incomplete; do not enable this on user applications until that work is verified.
+
 
 ## Install and rollback
 

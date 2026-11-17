@@ -64,7 +64,9 @@ def main():
         os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch"
         or os.environ.get("GITHUB_REF") != "refs/heads/main"
     ):
-        raise ValueError("Unprotected release requires attended manual dispatch on main")
+        raise ValueError(
+            "Unprotected release requires attended manual dispatch on main"
+        )
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", args.repository):
         raise ValueError("Invalid repository")
     if not re.fullmatch(r"[a-f0-9]{40}", args.sha):

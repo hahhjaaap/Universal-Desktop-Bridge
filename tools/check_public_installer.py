@@ -15,6 +15,7 @@ import urllib.request
 from contextlib import contextmanager
 from pathlib import Path
 
+
 def is_cloudflare_only_release(version: str) -> bool:
     """Use the release's declared transport contract, not mutable CLI help text.
 

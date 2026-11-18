@@ -36,9 +36,7 @@ def fake_batch_desktop(monkeypatch):
     )
     desktop = Desktop.__new__(Desktop)
     desktop.interactive = lambda: None
-    desktop.process = SimpleNamespace(
-        GetWindowThreadProcessId=lambda hwnd: (1, 321)
-    )
+    desktop.process = SimpleNamespace(GetWindowThreadProcessId=lambda hwnd: (1, 321))
     desktop._uia_worker = None
 
     def dispatch(action, window_id="", **_other):
@@ -64,7 +62,9 @@ def test_two_uia_steps_start_one_private_helper_and_close_at_batch_end(
     assert result["completed_steps"] == 2
     assert len(created) == 1
     assert [request["mode"] for request, _ in calls] == ["snapshot", "read_text"]
-    assert all(request["hwnd"] == 1001 and request["pid"] == 321 for request, _ in calls)
+    assert all(
+        request["hwnd"] == 1001 and request["pid"] == 321 for request, _ in calls
+    )
     assert closed == [True]
     assert desktop._uia_worker is None
     assert desktop._batch_uia is False
@@ -143,7 +143,9 @@ def test_invalid_batch_does_not_enable_worker(fake_batch_desktop):
     assert not getattr(desktop, "_batch_uia", False)
 
 
-def test_global_persistent_opt_in_keeps_existing_lifetime(fake_batch_desktop, monkeypatch):
+def test_global_persistent_opt_in_keeps_existing_lifetime(
+    fake_batch_desktop, monkeypatch
+):
     desktop, created, calls, closed = fake_batch_desktop
     monkeypatch.setenv("UDB_UIA_PERSISTENT", "1")
     result = desktop.batch(

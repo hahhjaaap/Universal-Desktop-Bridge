@@ -1,0 +1,45 @@
+name: UDB HyperSpeed UIA snapshot cache parity
+
+on:
+  pull_request:
+    paths:
+      - "src/udb/computer_uia.ps1"
+      - "tests/fixtures/uia_snapshot_form.ps1"
+      - "tests/core/test_uia_cache_parity_harness.py"
+      - "tools/compare_uia_snapshot_cache.py"
+      - ".github/workflows/hyperspeed-uia-parity.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/udb/computer_uia.ps1"
+      - "tests/fixtures/uia_snapshot_form.ps1"
+      - "tests/core/test_uia_cache_parity_harness.py"
+      - "tools/compare_uia_snapshot_cache.py"
+      - ".github/workflows/hyperspeed-uia-parity.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  native-fixture-parity:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Check Python parity harness syntax
+        run: python -m compileall -q tools/compare_uia_snapshot_cache.py
+      - name: Compare snapshot cache on/off in test-owned Windows Forms
+        run: python tools/compare_uia_snapshot_cache.py --samples 1 --sizes 50 500 1000 --output reports/uia-snapshot-parity.json
+      - name: Attach isolated fixture parity report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: hyperspeed-uia-parity
+          path: reports/uia-snapshot-parity.json
+          if-no-files-found: ignore
+          retention-days: 7

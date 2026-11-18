@@ -99,10 +99,14 @@ def validate_url(value):
         raise PolicyError("Invalid URL")
     try:
         u = urlsplit(value)
-        host = (u.hostname or "").lower().rstrip(".")
+        # Chromium's WHATWG parser applies IDNA/Unicode domain normalization
+        # before interpreting IP literals. Python's urlsplit does not: e.g.
+        # 127。0。0。1 and １２７.０.０.１ become 127.0.0.1 in Chromium.
+        # Validate the normalized authority so these cannot bypass IP policy.
+        host = (u.hostname or "").encode("idna").decode("ascii").lower().rstrip(".")
         # Accessing .port validates malformed/out-of-range port values.
         _ = u.port
-    except ValueError as exc:
+    except (UnicodeError, ValueError) as exc:
         raise PolicyError("Invalid URL") from exc
     if u.scheme not in ("https", "http") or not host or u.username or u.password:
         raise PolicyError("Only HTTP(S) pages without embedded credentials")

@@ -126,12 +126,8 @@ class DeviceTaskScheduler:
         deadline = time.monotonic() + RESOURCE_WAIT_SECONDS
         with self.condition:
             self.waiting[kind].append(ticket)
-            while (
-                not self.closed
-                and (
-                    kind in self.active
-                    or self.waiting[kind][0] is not ticket
-                )
+            while not self.closed and (
+                kind in self.active or self.waiting[kind][0] is not ticket
             ):
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:

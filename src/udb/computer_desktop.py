@@ -979,7 +979,7 @@ class Desktop:
             }
             if not isinstance(value, dict) or set(value) != allowed:
                 raise PolicyError("Invalid desktop batch evidence predicate")
-            if value["field"] not in evidence_fields:
+            if not isinstance(value["field"], str) or value["field"] not in evidence_fields:
                 raise PolicyError("Unsupported desktop batch observation field")
             expected = value["equals"]
             if not (
@@ -999,6 +999,7 @@ class Desktop:
             if (
                 not isinstance(row, dict)
                 or set(row) - fields - metadata
+                or not isinstance(row.get("action"), str)
                 or row.get("action") in forbidden
                 or "action" not in row
             ):

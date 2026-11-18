@@ -377,9 +377,14 @@ class HostService:
                 self._sync_handoff(obj)
             return dict(result, session_id=sid)
         if op == "browser":
-            from .browser_actions import validate_post_observation
+            from .browser_actions import (
+                validate_click_navigation_budget,
+                validate_post_observation,
+            )
 
+            # Both checks precede all session creation and browser input.
             validate_post_observation(args)
+            validate_click_navigation_budget(args)
         opening_browser = op == "browser" and args.get("action") == "open"
         if op == "browser" and args.get("action") in {"capture_stop", "capture_status"}:
             self._session(args.get("session_id"), kind="browser")

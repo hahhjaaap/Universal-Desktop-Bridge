@@ -238,3 +238,26 @@ test("initialize failure diagnostics distinguish safe reasons and redact upstrea
   }
   assert.equal((await handleMcp(request([]), e, id, { fetch: () => assert.fail("Bad initialize must not reach device") }, fetch, access)).status, 400);
 });
+
+test("a proven saturation refusal is distinguished from an uncertain tool call", async () => {
+  const e = { UDB_AUTH_MODE: "cloudflare-access", UDB_ACCESS_AUD: "application-audience-test",
+    UDB_DEVICE_GRANTS: JSON.stringify({ [id]: { "owner@example.test": ["read_file"] } }) };
+  const access = { aud: "application-audience-test", getIdentity: async () => ({ email: "owner@example.test" }) };
+  for (const known of [false, true]) {
+    let calls = 0;
+    const request = new Request(resource, { method: "POST", body: JSON.stringify({
+      jsonrpc: "2.0", id: 1, method: "tools/call", params: {
+        name: "read_file", arguments: { project: "fixture", path: "README.md" },
+      },
+    }) });
+    const result = await handleMcp(request, e, id, { fetch: async () => {
+      calls++;
+      return Response.json({ error: "device_busy", ...(known ? { dispatched: false } : {}) }, { status: 429 });
+    } }, fetch, access);
+    const reply = await result.json();
+    assert.equal(result.status, 429);
+    assert.equal(reply.error, known ? "device_busy" : "device_unavailable_outcome_unknown");
+    assert.equal(reply.diagnostics.dispatched_outcome, known ? "not_dispatched" : "unverified");
+    assert.equal(calls, 1);
+  }
+});

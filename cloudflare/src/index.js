@@ -14,15 +14,24 @@ const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
     "x-content-type-options": "nosniff" }
 });
 const failure = (status, code) => json({ error: code }, status);
-// A device may run up to ten independent read RPCs at once. Each request
-// retains a distinct relay ID and a separate local stdio proxy on Windows.
-// Side-effecting RPCs remain exclusive (no read/mutation overlap or replay).
+// Only authenticated agents that advertise the local resource scheduler
+// may receive overlapping desktop, owned-browser and read RPCs.
 const MAX_PENDING_PER_DEVICE = 10;
-const isReadRpc = (rpc) => (
-  ["initialize", "tools/list", "ping"].includes(rpc.method) ||
-  (rpc.method === "tools/call" &&
-    isParallelReadTool(rpc.params?.name))
-);
+const RESOURCE_LANE_TOOLS = new Set([
+  "computer_desktop", "computer_utilities", "open_chatgpt",
+  "host_browser", "host_screenshot", "host_start_session", "host_close_session",
+  "host_workspace", "host_app",
+]);
+
+function canOverlap(rpc, connection) {
+  if (["initialize", "tools/list", "ping"].includes(rpc.method)) return true;
+  if (rpc.method !== "tools/call") return false;
+  const name = rpc.params?.name;
+  return isParallelReadTool(name) ||
+    (connection.deserializeAttachment?.()?.resourceLanes === 1 &&
+      RESOURCE_LANE_TOOLS.has(name));
+}
+
 const MAX_REPLY_BYTES = 1024 * 1024;
 const encoder = new TextEncoder();
 
@@ -325,7 +334,10 @@ export class DeviceRelay {
       const [client, server] = Object.values(pair);
       this.ctx.acceptWebSocket(server, ["device"]);
       await this.ctx.storage.put("fleet_last_seen", Date.now());
-      server.serializeAttachment({ role: "device" });
+      server.serializeAttachment({
+        role: "device",
+        resourceLanes: request.headers.get("X-UDB-Resource-Lanes") === "1" ? 1 : 0,
+      });
       for (const ws of this.ctx.getWebSockets("device")) {
         if (ws !== server) ws.close(4002, "superseded by new device connection");
       }
@@ -336,13 +348,6 @@ export class DeviceRelay {
       if (!connection) return failure(503, "device_offline");
       const rpc = await readJson(request);
       if (!validRpc(rpc)) return failure(400, "invalid_rpc");
-      // Reads may share the device only with reads. Mutation RPCs are
-      // exclusive, so concurrent desktop/file writes cannot race each other.
-      const readOnly = isReadRpc(rpc);
-      if (this.pending.size >= MAX_PENDING_PER_DEVICE ||
-          (this.pending.size && (!readOnly ||
-            [...this.pending.values()].some((entry) => !entry.readOnly))))
-        return failure(429, "device_busy");
       return await this.dispatchRpc(connection, rpc);
     }
     return failure(404, "not_found");
@@ -350,16 +355,17 @@ export class DeviceRelay {
 
   dispatchRpc(connection, rpc) {
     // Reservation and dispatch occur synchronously in this Durable Object.
-    // Up to ten reads can be active; mutations reserve the entire device.
+    // An older client overlaps only reads. An opted-in agent serializes
+    // physical desktop and owned-browser work locally in separate lanes.
     const current = this.deviceSocket();
     if (!current) return Promise.resolve(failure(503, "device_offline"));
     if (current !== connection)
       return Promise.resolve(failure(503, "device_connection_changed"));
-    const readOnly = isReadRpc(rpc);
+    const shared = canOverlap(rpc, connection);
     if (this.pending.size >= MAX_PENDING_PER_DEVICE ||
-        (this.pending.size && (!readOnly ||
-          [...this.pending.values()].some((entry) => !entry.readOnly))))
-      return Promise.resolve(failure(429, "device_busy"));
+        (this.pending.size && (!shared ||
+          [...this.pending.values()].some((entry) => !entry.shared))))
+      return Promise.resolve(json({ error: "device_busy", dispatched: false }, 429));
     const requestId = crypto.randomUUID();
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
@@ -369,7 +375,7 @@ export class DeviceRelay {
         // and discard its queue instead of forwarding a second RPC to it.
         this.webSocketClose(connection, 1011, "rpc_deadline_exceeded");
       }, 25000);
-      this.pending.set(requestId, { ws: connection, resolve, timeout, rpcId: rpc.id, readOnly });
+      this.pending.set(requestId, { ws: connection, resolve, timeout, rpcId: rpc.id, shared });
       try {
         connection.send(JSON.stringify({ kind: "rpc", id: requestId, rpc }));
       } catch {

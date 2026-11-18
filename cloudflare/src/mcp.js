@@ -192,14 +192,21 @@ async function unavailable(response, code) {
     "outcome_unknown_do_not_retry_mutations", "invalid_device_rpc_response",
     "relay_unavailable_outcome_unknown"]);
   let reason = "upstream_unavailable";
+  let refusedBeforeDispatch = false;
   try {
     const body = await readJson(response);
     if (safeReasons.has(body.error)) reason = body.error;
+    refusedBeforeDispatch = response.status === 429 && reason === "device_busy" &&
+      body.dispatched === false;
   } catch { /* Never echo raw device errors, paths, or response bodies. */ }
-  return json({ error: code, diagnostics: { reason,
-    upstream_status: response.status, dispatched_outcome: "unverified",
+  const publicCode = refusedBeforeDispatch && code === "device_unavailable_outcome_unknown" ?
+    "device_busy" : code;
+  return json({ error: publicCode, diagnostics: { reason,
+    upstream_status: response.status,
+    dispatched_outcome: refusedBeforeDispatch ? "not_dispatched" : "unverified",
     next_action: reason === "device_offline" ? "Reconnect the local UDB cloud agent, then initialize again." :
-      reason === "device_busy" ? "Wait for the current request to finish, then request discovery again." :
+      refusedBeforeDispatch ? "Wait for an available slot and observe current state before attempting the action." :
+      reason === "device_busy" ? "Wait for the current request to finish and inspect device state." :
       "Inspect device status and reconnect; do not replay uncertain tool calls.",
   } }, [429, 502, 503, 504].includes(response.status) ? response.status : 503);
 }

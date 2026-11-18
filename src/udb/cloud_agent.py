@@ -486,6 +486,7 @@ def _run_paired(settings) -> int:
                     header=[
                         f"Authorization: Bearer {token}",
                         f"User-Agent: {CLOUD_USER_AGENT}",
+                        "X-UDB-Resource-Lanes: 1",
                     ],
                     timeout=30,
                     max_size=_MAX_FRAME,

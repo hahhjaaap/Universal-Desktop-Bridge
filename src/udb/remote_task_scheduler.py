@@ -59,13 +59,18 @@ def resource_for_rpc(rpc: dict) -> str:
         return "exclusive"
     name = params.get("name")
     args = params.get("arguments")
+    if not isinstance(name, str):
+        return "exclusive"
     if name in READ_TOOLS:
         return "read"
     if not isinstance(args, dict):
         return "exclusive"
-    if name == "computer_files" and args.get("action") in _FILE_READ_ACTIONS:
+    action = args.get("action")
+    if not isinstance(action, str):
+        action = ""
+    if name == "computer_files" and action in _FILE_READ_ACTIONS:
         return "read"
-    if name == "computer_process" and args.get("action") in _PROCESS_READ_ACTIONS:
+    if name == "computer_process" and action in _PROCESS_READ_ACTIONS:
         return "read"
     if name in _DESKTOP_TOOLS:
         return "desktop"

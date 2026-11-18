@@ -6,6 +6,7 @@ modified. Window identities are exact and each use is independently checked.
 
 from __future__ import annotations
 
+import sys
 import time
 from types import SimpleNamespace
 
@@ -260,3 +261,33 @@ def test_fresh_lookup_never_overrides_owner_pause_or_permissions(desktop):
     assert not result["ok"]
     assert not result["outcome_unknown"]
     assert desktop.gui.visits == 0
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires native Win32 UI")
+def test_windows_test_owned_form_can_be_reobserved_by_real_native_identity():
+    """Never accesses a user window or sends real mouse/keyboard input."""
+    import win32gui
+    import win32process
+
+    from tools.compare_uia_snapshot_cache import _fixture
+
+    with _fixture(50) as form:
+        hwnd = form["hwnd"]
+        title = win32gui.GetWindowText(hwnd)
+        class_name = win32gui.GetClassName(hwnd)
+        assert title and class_name
+        d = Desktop.__new__(Desktop)
+        d.gui = win32gui
+        d.process = win32process
+        d.windows = {}
+        # The CI form is test-owned; this test checks identity only. Owner
+        # desktop / secure-screen authorization is exercised separately.
+        d.interactive = lambda: None
+        d.is_cloaked = lambda _hwnd: False
+        found = d.find_window(form["pid"], class_name, title)
+        assert found["found"] is True
+        assert found["pid"] == form["pid"]
+        assert d.resolve(found["window_id"], focus=False) == hwnd
+        assert d.find_window(form["pid"], class_name, title + " changed") == {
+            "found": False
+        }

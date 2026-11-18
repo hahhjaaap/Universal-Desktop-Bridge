@@ -2,7 +2,7 @@
 // Cloudflare Access identity, a read grant, an *additional* device/owner secret
 // and the Windows owner's existing local approvals are all still required.
 // All tools outside this exact list remain unreachable through this gateway.
-const DEVICE_ID = /^[a-f0-9]{32}$/;
+import { exactToolGrant } from "./tool-grants.js";
 export const OWNER_TOOLS = Object.freeze([
   "propose_file_write",
   "propose_sandbox_job",
@@ -37,30 +37,10 @@ export const OWNER_TOOLS = Object.freeze([
   "open_chatgpt",
 ]);
 export const isOwnerTool = (name) => OWNER_TOOLS.includes(name);
-const record = (value) => value && typeof value === "object" && !Array.isArray(value);
 
 export function ownerToolGrant(env, deviceId, subject) {
-  // Require three independent opt-ins. A configured tenant policy stays
-  // authoritative; never bypass its stricter read-only limits.
+  // A configured tenant policy remains authoritative.
   if (env?.UDB_ENABLE_OWNER_TOOLS !== "true" ||
-      env?.UDB_TENANT_POLICY !== undefined ||
-      !DEVICE_ID.test(deviceId) ||
-      typeof subject !== "string" || !subject.includes("@") ||
-      subject.length > 200 || subject.trim() !== subject) return [];
-  const raw = env?.UDB_OWNER_TOOL_GRANTS;
-  if (typeof raw !== "string" || raw.length === 0 || raw.length > 16384) return [];
-  try {
-    const all = JSON.parse(raw);
-    if (!record(all) || !Object.hasOwn(all, deviceId)) return [];
-    const users = all[deviceId];
-    if (!record(users) || !Object.hasOwn(users, subject)) return [];
-    const names = users[subject];
-    // Reject the whole grant instead of silently accepting a corrupted subset.
-    if (!Array.isArray(names) || names.length === 0 ||
-        names.length > OWNER_TOOLS.length ||
-        new Set(names).size !== names.length ||
-        !names.every((name) => typeof name === "string" && isOwnerTool(name)))
-      return [];
-    return [...names];
-  } catch { return []; }
+      env?.UDB_TENANT_POLICY !== undefined) return [];
+  return exactToolGrant(env.UDB_OWNER_TOOL_GRANTS, deviceId, subject, isOwnerTool);
 }

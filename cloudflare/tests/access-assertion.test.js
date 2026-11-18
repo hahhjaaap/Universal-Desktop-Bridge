@@ -262,7 +262,7 @@ test("issuer-sub mode fails closed for missing or malformed signed subjects", as
   assert.equal(f.forwards.length, 0);
 });
 
-test("opt-in signed principal never activates legacy owner/desktop tools", async () => {
+test("opt-in signed principal accepts only its exact owner and Companion grants", async () => {
   const { authorizeAccess } = await import("../src/access.js");
   const f = await fixture();
   const qualified = TEAM + "#" + SUBJECT_ID;
@@ -273,14 +273,17 @@ test("opt-in signed principal never activates legacy owner/desktop tools", async
   });
   f.env.UDB_ENABLE_OWNER_TOOLS = "true";
   f.env.UDB_OWNER_TOOL_GRANTS = JSON.stringify({
-    [DEVICE]: { [qualified]: ["computer_execute"] },
+    [DEVICE]: { [EMAIL]: ["computer_desktop"], [qualified]: ["computer_execute"] },
+  });
+  f.env.UDB_ENABLE_COMPANION_TOOLS = "true";
+  f.env.UDB_COMPANION_TOOL_GRANTS = JSON.stringify({
+    [DEVICE]: { [qualified]: ["file_operation:read"] },
   });
   const result = await authorizeAccess(null, f.env, DEVICE,
     f.request(await f.token()), f.fetchImpl);
-  assert.deepEqual(result, {
-    subject: qualified,
-    allowTools: ["bridge_status", "read_file"],
-  });
+  assert.equal(result.subject, qualified);
+  assert.deepEqual(result.allowTools, ["bridge_status", "read_file", "computer_execute", "file_operation"]);
+  assert.deepEqual([...result.actionGrants.get("file_operation")], ["read"]);
 });
 
 test("issuer-sub mode rejects conflicting runtime identity and signed assertion", async () => {
@@ -319,7 +322,9 @@ test("issuer-sub mode rejects conflicting runtime identity and signed assertion"
   assert.equal(result.subject, qualified);
 });
 
-test("Cloudflare Access key rotation refreshes a stale JWKS once without trusting an unknown kid", async () => {
+test("Cloudflare Access key rotation refreshes a stale JWKS once without trusting an unknown kid", async (t) => {
+  let clock = Date.now();
+  t.mock.method(Date, "now", () => clock);
   // Use an isolated team URL so this test cannot reuse the fixture's JWKS cache.
   const team = "https://udb-rotation-check.cloudflareaccess.com";
   const env = { UDB_ACCESS_TEAM_DOMAIN: team, UDB_ACCESS_AUD: AUD };
@@ -365,6 +370,7 @@ test("Cloudflare Access key rotation refreshes a stale JWKS once without trustin
   assert.equal(fetches, 2);
   // Two unrelated, attacker-controlled kids cannot force repeated JWKS
   // refreshes immediately after a legitimate rollover.
+  clock += 2000; // The cache stays warm and the forced-refresh cooldown still applies.
   for (const fakeKid of ["unrecognized-1", "unrecognized-2"]) {
     await assert.rejects(verifyAccessAssertion(
       request(await signed(first, fakeKid)), env, fetchImpl), AuthError);

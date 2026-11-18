@@ -7,16 +7,18 @@ import { ownerToolGrant } from "./owner-tools.js";
 import { companionToolGrant } from "./companion-tools.js";
 import { READ_TOOLS } from "./read-tools.js";
 import { ENROLLED_CATALOG } from "./local-permissions.js";
+import { toolGrantScope } from "./tool-grants.js";
 
 const MAX_ASSERTION = 8192;
 const MAX_JWKS = 16384;
+const JWKS_CACHE_MS = 30000;
 const TEAM = /^https:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com$/;
 // Access app-token sub is an account-scoped user UUID, not an email.
 const ACCESS_SUB = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 let cachedJwks = { url: "", until: 0, keys: [] };
 // Unknown untrusted kids must not turn one JWT request into an unbounded
-// JWKS fetch stream. Legitimate signing-key rollover retries within 1 second.
-let unknownKidRefresh = { url: "", nextAt: 0 };
+// JWKS fetch stream. Reserve the cooldown before awaiting the forced fetch.
+let nextUnknownKidRefreshAt = 0;
 
 export function accessConfig(env) {
   const aud = env?.UDB_ACCESS_AUD;
@@ -83,7 +85,7 @@ async function getKeys(url, fetchImpl, refresh = false) {
     stage = "json";
     const parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     if (!Array.isArray(parsed?.keys) || parsed.keys.length > 16) throw new Error();
-    cachedJwks = { url, until: Date.now() + 30000, keys: parsed.keys };
+    cachedJwks = { url, until: Date.now() + JWKS_CACHE_MS, keys: parsed.keys };
     return parsed.keys;
   } catch (error) {
     console.warn(JSON.stringify({ event: "udb_access_keys_unavailable", stage,
@@ -139,8 +141,8 @@ export async function verifiedAccessIdentity(request, env, fetchImpl = fetch) {
   // Refresh metadata once for an unknown kid; never bypass JWT verification.
   // A duplicate/invalid JWK fails closed without an extra network request.
   if (match.length === 0 && fromCache &&
-      (unknownKidRefresh.url !== url || Date.now() >= unknownKidRefresh.nextAt)) {
-    unknownKidRefresh = { url, nextAt: Date.now() + 1000 };
+      Date.now() >= nextUnknownKidRefreshAt) {
+    nextUnknownKidRefreshAt = Date.now() + JWKS_CACHE_MS;
     keys = await getKeys(url, fetchImpl, true);
     match = matchingKeys(keys);
   }
@@ -251,6 +253,7 @@ export async function authorizeAccess(access, env, deviceId, request = null,
   let stagingFixtureProject;
   const fixtureGrant = env?.UDB_STAGING_FIXTURE_READ_GRANT;
   if (readTools.length === 0 && mode === "email" &&
+      env?.UDB_DEPLOYMENT_ENV === "staging" &&
       env?.UDB_TENANT_POLICY === undefined &&
       typeof fixtureGrant === "string" && fixtureGrant.length <= 1024) {
     let grant;
@@ -282,10 +285,10 @@ export async function authorizeAccess(access, env, deviceId, request = null,
     } catch { readTools = []; }
   }
   if (readTools.length === 0) throw new AuthError("device_grant_missing");
-  const ownerTools = enrolledStatusOnly ? [] : [
+  const { names: ownerTools, actions } = toolGrantScope(enrolledStatusOnly ? [] : [
     ...ownerToolGrant(env, deviceId, subject),
     ...companionToolGrant(env, deviceId, subject),
-  ];
+  ]);
   // Preserve the legacy read-only authorization response exactly when the
   // opt-in profile is absent; existing Access integrations remain unchanged.
   const readScope = stagingFixtureProject ? { stagingFixtureProject } : {};
@@ -295,6 +298,7 @@ export async function authorizeAccess(access, env, deviceId, request = null,
     return { subject, allowTools: readTools, catalogTools: ENROLLED_CATALOG,
       enrolledOwner: true };
   return ownerTools.length
-    ? { subject, allowTools: [...readTools, ...ownerTools], ownerTools, ...readScope }
+    ? { subject, allowTools: [...readTools, ...ownerTools], ownerTools, ...readScope,
+      ...(actions.size ? { actionGrants: actions } : {}) }
     : { subject, allowTools: readTools, ...readScope };
 }

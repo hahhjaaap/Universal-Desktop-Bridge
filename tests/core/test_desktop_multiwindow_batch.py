@@ -109,7 +109,9 @@ def test_locate_two_app_windows_then_switch_and_observe_in_one_batch(desktop):
 
 def test_no_match_skips_window_ref_and_never_sends_input(desktop):
     calls = []
-    desktop._dispatch = lambda **kw: calls.append(kw)
+    desktop._dispatch = lambda action, window_id="", x=0, y=0: calls.append(
+        (action, window_id, x, y)
+    )
     result = desktop.batch(
         "",
         [
@@ -125,7 +127,9 @@ def test_no_match_skips_window_ref_and_never_sends_input(desktop):
 
 
 def test_missing_window_verification_fails_before_mutation_and_is_safe(desktop):
-    desktop._dispatch = lambda **kw: pytest.fail("must not dispatch")
+    desktop._dispatch = lambda action, window_id="", x=0, y=0: pytest.fail(
+        "must not dispatch"
+    )
     result = desktop.batch(
         "",
         [
@@ -143,7 +147,9 @@ def test_missing_window_verification_fails_before_mutation_and_is_safe(desktop):
 
 def test_ambiguous_window_identity_fails_closed(desktop):
     desktop.gui.rows[333] = dict(desktop.gui.rows[111])
-    desktop._dispatch = lambda **kw: pytest.fail("ambiguous must not dispatch")
+    desktop._dispatch = lambda action, window_id="": pytest.fail(
+        "ambiguous must not dispatch"
+    )
     result = desktop.batch(
         "",
         [

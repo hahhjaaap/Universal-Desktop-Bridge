@@ -131,3 +131,89 @@ def test_activity_structured_error_cannot_be_masked_by_stale_pass_metadata():
         }
     )
     assert status == "ERROR"
+
+
+def test_core_and_companion_serialize_file_text_as_data(tmp_path):
+    from types import SimpleNamespace
+
+    from udb.companion.dispatch import dispatch_tool
+    from udb.companion.files import ScopedFiles
+    from udb.core import Agent
+    from udb.protocol import result
+
+    project = tmp_path / "project"
+    project.mkdir()
+    original = '{"status":"failed","state":"pending","error":"fixture","result":"ERROR","ok":false,"exit_code":7}'
+    (project / "sample.txt").write_text(original, encoding="utf-8")
+    core = Agent(tmp_path / "core")
+    core.register_local("fixture", str(project))
+    companion = SimpleNamespace(files=ScopedFiles(str(project)))
+
+    for tool, response, field in (
+        ("read_file", result(core.read("fixture", "sample.txt")), "text"),
+        (
+            "file_read",
+            dispatch_tool(companion, "file_read", {"path": "sample.txt"}),
+            "content",
+        ),
+    ):
+        data = response["structuredContent"]
+        assert data[field] == original
+        assert not {
+            "status",
+            "state",
+            "error",
+            "result",
+            "success",
+            "ok",
+            "failed",
+            "exit_code",
+        }.intersection(data)
+        assert normalized_output(tool, response) == response
+
+
+def test_document_results_keep_status_like_document_content_nested():
+    from udb.companion.jobs import Task
+    from udb.protocol import result
+
+    document = {"status": "failed", "error": "literal document text", "result": "ERROR"}
+    task = Task("pdf_document")
+    task.state = "completed"
+    task.result = document
+    response = result(task.read())
+    content = response["structuredContent"]
+    assert content["result"] == document
+    assert content["state"] == "completed"
+    assert content.get("error") != document["error"]
+    assert normalized_output("file_operation", response) == response
+
+
+def test_terminal_output_remains_a_string_with_real_process_metadata():
+    import threading
+    from collections import deque
+    from types import SimpleNamespace
+
+    from udb.companion.dispatch import dispatch_tool
+    from udb.companion.terminal import TerminalSession
+
+    payload = b'{"state":"failed","status":"pending","error":"text","exit_code":7}'
+    terminal = TerminalSession.__new__(TerminalSession)
+    terminal.chunks = deque([(0, payload)])
+    terminal.position = len(payload)
+    terminal.lock = threading.Lock()
+    terminal.done = True
+    terminal.process = SimpleNamespace(poll=lambda: 0)
+    terminal.id = "fixture"
+    terminal.reason = ""
+    terminal.mode = "pipe"
+    runtime = SimpleNamespace(
+        start=lambda *_args: terminal.read(0, 0) | {"persistence_available": True}
+    )
+    response = dispatch_tool(runtime, "terminal_start", {"program": "fixture"})
+    report = response["structuredContent"]
+    assert report["output"] == payload.decode()
+    assert report["state"] == "PASS" and report["exit_code"] == 0
+    assert not {"status", "error", "result", "success", "ok", "failed"}.intersection(
+        report
+    )
+    assert normalized_output("terminal_start", response) == response

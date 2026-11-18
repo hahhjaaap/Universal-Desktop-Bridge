@@ -18,6 +18,7 @@ DESKTOP_ACTIONS = (
     "control_status",
     "focus",
     "screenshot",
+    "frame_state",
     "type",
     "key",
     "click",
@@ -39,6 +40,7 @@ DESKTOP_ACTIONS = (
 )
 UTILITY_ACTIONS = ("clipboard_get", "clipboard_set", "notify", "apps", "launch_app")
 READ_ACTIONS = (
+    "frame_state",
     "list",
     "snapshot",
     "displays",

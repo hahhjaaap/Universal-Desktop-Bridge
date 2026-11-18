@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import base64
 import ctypes
+import hashlib
 import json
 import os
+import re
 import subprocess
 import time
 import uuid
@@ -24,6 +26,14 @@ from .desktop_guest import BitmapHeader, InputEvent, KeyInput, MouseInput
 from .windows_actions import DESKTOP_ACTIONS, UIA_ACTIONS
 
 _UIA_HELPER = Path(__file__).with_name("computer_uia.ps1")
+_POINTER_ACTIONS = frozenset({"click", "scroll", "mouse_move", "drag"})
+# Leave headroom for base64, JSON, and the 1 MiB relay reply ceiling.
+_MAX_SCREENSHOT_PNG = 640 * 1024
+_FRAME_ID = re.compile(r"[0-9a-f]{32}\.[0-9a-f]{64}")
+
+
+class DesktopFrameRejected(PolicyError):
+    """Visual verification refused the action before physical input."""
 
 
 class WindowObservation(NamedTuple):
@@ -736,9 +746,17 @@ class Desktop:
         limit=5000,
         submit_name="",
         fast_reply=False,
+        expected_frame="",
     ):
         self.validate_options(
-            action, button, clicks, duration_ms, horizontal, wait_ms, condition
+            action,
+            button,
+            clicks,
+            duration_ms,
+            horizontal,
+            wait_ms,
+            condition,
+            expected_frame,
         )
         if action == "set_checked" and type(checked) is not bool:
             raise PolicyError("set_checked requires checked=true or false")
@@ -758,6 +776,7 @@ class Desktop:
             "displays",
             "snapshot",
             "screenshot",
+            "frame_state",
             "wait_for",
             "batch",
             "read_text",
@@ -797,9 +816,11 @@ class Desktop:
             window_id = candidates[0]["window_id"]
         hwnd = self.resolve(
             window_id,
-            focus=action
+            focus=not expected_frame
+            and action
             not in (
                 "screenshot",
+                "frame_state",
                 "snapshot",
                 "set_value",
                 "invoke",
@@ -855,7 +876,22 @@ class Desktop:
         if action == "focus":
             return dict(foreground=True)
         if action == "screenshot":
-            return self.screenshot(hwnd)
+            return self.screenshot(hwnd, window_id)
+        if action == "frame_state":
+            return self.frame_state(hwnd, window_id, expected_frame)
+        if expected_frame:
+            points = ((x, y),)
+            if action == "drag":
+                points = ((from_x, from_y), (x, y))
+            perf.timed_call(
+                "desktop.frame_verify",
+                "observation",
+                self.verify_frame,
+                hwnd,
+                window_id,
+                expected_frame,
+                points,
+            )
         self.u.GetAsyncKeyState.argtypes = [ctypes.c_int]
         self.u.GetAsyncKeyState.restype = ctypes.c_short
         if any(
@@ -991,9 +1027,17 @@ class Desktop:
         horizontal=False,
         wait_ms=1000,
         condition="exists",
+        expected_frame="",
     ):
         if action not in DESKTOP_ACTIONS:
             raise PolicyError("Unsupported desktop action")
+        if expected_frame != "" and (
+            action not in _POINTER_ACTIONS
+            and action != "frame_state"
+            or not isinstance(expected_frame, str)
+            or not _FRAME_ID.fullmatch(expected_frame)
+        ):
+            raise PolicyError("expected_frame must be a window screenshot frame_id")
         if (
             button not in ("left", "right", "middle")
             or type(clicks) is not int
@@ -1049,6 +1093,7 @@ class Desktop:
                 "exists",
                 "found",
                 "foreground",
+                "frame_id",
                 "matched",
                 "paused",
                 "checked",
@@ -1140,6 +1185,7 @@ class Desktop:
                             "horizontal",
                             "wait_ms",
                             "condition",
+                            "expected_frame",
                         )
                         if k in row
                     },
@@ -1214,7 +1260,12 @@ class Desktop:
         results = []
         observations = {}
         completed = 0
+        mutations_attempted = False
         for index, row in enumerate(steps):
+            mutating = (
+                row["action"] not in READ_ACTIONS and row["action"] != "find_window"
+            )
+            attempted = False
             try:
                 if time.monotonic() > deadline:
                     raise PolicyError("Batch time budget exceeded")
@@ -1249,7 +1300,9 @@ class Desktop:
                         args["window_id"] = located["window_id"]
                     else:
                         args.setdefault("window_id", window_id)
+                    attempted = mutating
                     value = self._dispatch(**args)
+                    mutations_attempted |= attempted
                 if "verify" in row:
                     try:
                         verified = matches(value, row["verify"])
@@ -1265,10 +1318,8 @@ class Desktop:
                             "completed_steps": completed,
                             "failed_index": index,
                             "error": "Desktop batch verification failed",
-                            "outcome_unknown": (
-                                row["action"] not in READ_ACTIONS
-                                and row["action"] != "find_window"
-                            ),
+                            "outcome_unknown": attempted,
+                            **({"replay_safe": False} if mutations_attempted else {}),
                             "results": results,
                             "rollback": False,
                         }
@@ -1281,14 +1332,19 @@ class Desktop:
                 results.append(item)
                 completed += 1
             except (PolicyError, OSError, ValueError, TypeError) as exc:
+                outcome_unknown = attempted and not isinstance(
+                    exc, DesktopFrameRejected
+                )
                 return {
                     "ok": False,
                     "completed_steps": completed,
                     "failed_index": index,
                     "error": str(exc),
-                    "outcome_unknown": (
-                        row["action"] not in READ_ACTIONS
-                        and row["action"] != "find_window"
+                    "outcome_unknown": outcome_unknown,
+                    **(
+                        {"replay_safe": False}
+                        if mutations_attempted or outcome_unknown
+                        else {}
                     ),
                     "results": results,
                     "rollback": False,
@@ -1298,6 +1354,7 @@ class Desktop:
             "completed_steps": completed,
             "results": results,
             "rollback": False,
+            **({"replay_safe": False} if mutations_attempted else {}),
         }
 
     def window_action(self, hwnd, action, x, y, width, height, state):
@@ -1463,26 +1520,57 @@ class Desktop:
             raise PolicyError("Unknown display index; call displays first")
         return self.capture(displays[index]["bounds"])
 
-    def screenshot(self, hwnd):
-        # This backend captures screen pixels, not an isolated compositor frame.
-        # Never silently return an occluding application's pixels as this window.
-        identity = (
-            self.process.GetWindowThreadProcessId(hwnd)[1],
-            self.gui.GetClassName(hwnd),
-        )
+    def screenshot(self, hwnd, window_id=""):
+        # Capture only visible pixels and bind them to this observed window.
+        def identity():
+            return (
+                self.process.GetWindowThreadProcessId(hwnd)[1],
+                self.gui.GetClassName(hwnd),
+                self.gui.GetWindowText(hwnd),
+            )
+
+        before = identity()
         box = self.visible_window_box(hwnd)
-        result = self.capture(box)
-        if self.visible_window_box(hwnd) != box or identity != (
-            self.process.GetWindowThreadProcessId(hwnd)[1],
-            self.gui.GetClassName(hwnd),
-        ):
+        result = perf.timed_call("desktop.capture", "observation", self.capture, box)
+        if self.visible_window_box(hwnd) != box or before != identity():
             raise PolicyError("Window changed during capture; screenshot discarded")
+        if window_id:
+            digest = hashlib.sha256()
+            digest.update(json.dumps([box, before], ensure_ascii=True).encode("ascii"))
+            digest.update(result["png_base64"].encode("ascii"))
+            result["frame_id"] = f"{window_id}.{digest.hexdigest()}"
         return dict(
             result,
             source="visible_window_region",
             window_content_isolated=False,
             occlusion_checked=True,
         )
+
+    def frame_state(self, hwnd, window_id, expected_frame):
+        if expected_frame and not expected_frame.startswith(f"{window_id}."):
+            raise DesktopFrameRejected("Observe this window with screenshot first")
+        frame = self.screenshot(hwnd, window_id)
+        del frame["png_base64"]
+        if expected_frame:
+            frame["changed"] = frame["frame_id"] != expected_frame
+        return frame
+
+    def verify_frame(self, hwnd, window_id, expected_frame, points):
+        try:
+            frame = self.frame_state(hwnd, window_id, expected_frame)
+        except PolicyError as exc:
+            raise DesktopFrameRejected(str(exc)) from exc
+        if frame["changed"]:
+            raise DesktopFrameRejected("Window frame changed; take a fresh screenshot")
+        left, top, right, bottom = frame["bounds"]
+        for x, y in points:
+            if (
+                type(x) is not int
+                or type(y) is not int
+                or not left <= x < right
+                or not top <= y < bottom
+            ):
+                raise DesktopFrameRejected("Point is outside the observed window frame")
 
     def visible_window_box(self, hwnd):
         self.interactive()
@@ -1540,15 +1628,33 @@ class Desktop:
         return box
 
     def capture(self, box):
+        left, top, right, bottom = box
+        capture_width, capture_height = right - left, bottom - top
+        if not 1 <= capture_width <= 16384 or not 1 <= capture_height <= 16384:
+            raise PolicyError("Target window bounds exceed the capture limit")
+        png, width, height = self._capture_png(box, 1920, 1440)
+        if len(png) > _MAX_SCREENSHOT_PNG:
+            # Even incompressible 512 × 384 RGB fits the relay budget.
+            png, width, height = self._capture_png(box, 512, 384)
+        return dict(
+            png_base64=base64.b64encode(png).decode(),
+            bounds=[left, top, right, bottom],
+            image_width=width,
+            image_height=height,
+            scale_x=capture_width / width,
+            scale_y=capture_height / height,
+            source="visible_screen_region",
+        )
+
+    @staticmethod
+    def _capture_png(box, max_width, max_height):
         import win32con
         import win32gui
         import win32ui
 
         left, top, right, bottom = box
         capture_width, capture_height = right - left, bottom - top
-        if not 1 <= capture_width <= 16384 or not 1 <= capture_height <= 16384:
-            raise PolicyError("Target window bounds exceed the capture limit")
-        scale = min(1, 1920 / capture_width, 1440 / capture_height)
+        scale = min(1, max_width / capture_width, max_height / capture_height)
         width = max(1, round(capture_width * scale))
         height = max(1, round(capture_height * scale))
         hdc = win32gui.GetDC(None)
@@ -1627,16 +1733,7 @@ class Desktop:
                 raise PolicyError("Windows refused bitmap readback")
             # Encode directly from the owned DIB buffer into bounded PNG
             # scanlines; no full-size buffer.raw or separate RGB image copy.
-            png = encode_bgrx_png(buffer, width, height)
-            return dict(
-                png_base64=base64.b64encode(png).decode(),
-                bounds=[left, top, right, bottom],
-                image_width=width,
-                image_height=height,
-                scale_x=capture_width / width,
-                scale_y=capture_height / height,
-                source="visible_screen_region",
-            )
+            return encode_bgrx_png(buffer, width, height), width, height
         finally:
             if previous is not None:
                 dest.SelectObject(previous)

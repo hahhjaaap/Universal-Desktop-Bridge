@@ -34,6 +34,8 @@ _OPERATIONS = frozenset(
         "browser.batch",
         "desktop.uia",
         "desktop.batch",
+        "desktop.capture",
+        "desktop.frame_verify",
     }
 )
 _CURRENT = contextvars.ContextVar("udb_hyperspeed_rpc", default=None)

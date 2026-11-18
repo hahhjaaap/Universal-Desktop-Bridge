@@ -18,6 +18,10 @@ from contextlib import contextmanager
 MAX_TASKS = 10
 RESOURCE_WAIT_SECONDS = 6.0
 
+class ResourceBusyError(RuntimeError):
+    """Resource lane timed out before any tool action was dispatched."""
+
+
 READ_TOOLS = frozenset(
     {
         "bridge_status",
@@ -140,7 +144,7 @@ class DeviceTaskScheduler:
             ):
                 self.waiting[kind].remove(ticket)
                 self.condition.notify_all()
-                raise RuntimeError("ResourceBusy")
+                raise ResourceBusyError("ResourceBusy")
             self.waiting[kind].pop(0)
             self.active.add(kind)
         try:

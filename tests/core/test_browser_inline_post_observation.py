@@ -37,7 +37,9 @@ def test_invalid_observation_modes_fail_before_browser_action(mode):
         validate_post_observation({"action": "click", "observe_after": mode})
 
 
-@pytest.mark.parametrize("action", ["batch", "fastpath", "upload", "download", "list", "close_tab"])
+@pytest.mark.parametrize(
+    "action", ["batch", "fastpath", "upload", "download", "list", "close_tab"]
+)
 def test_no_observation_on_unrelated_or_special_actions(action):
     with pytest.raises(PolicyError, match="unsupported"):
         validate_post_observation({"action": action, "observe_after": "read"})
@@ -157,7 +159,5 @@ def test_invalid_open_option_fails_before_creating_tab():
     service.sessions = {sid: {"kind": "browser", "object": browser}}
     service._session = lambda session_id, kind=None: service.sessions[session_id]
     with pytest.raises(PolicyError):
-        validate_post_observation(
-            {"action": "open", "observe_after": "screenshot"}
-        )
+        validate_post_observation({"action": "open", "observe_after": "screenshot"})
     assert browser.calls == []

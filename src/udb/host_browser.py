@@ -86,18 +86,27 @@ def _browser_endpoint(endpoint, process, timeout):
 def validate_url(value):
     if value == "about:blank":
         return value
+    # Chromium's WHATWG parser treats backslashes as separators in HTTP(S)
+    # URLs, whereas urlsplit includes them in the hostname. Reject before
+    # parsing so a URL like http://127.0.0.1\\page cannot appear public here
+    # yet navigate to the loopback service in the owned browser.
     if (
         not isinstance(value, str)
         or len(value) > 4096
         or any(ord(c) < 32 for c in value)
+        or "\\" in value
     ):
         raise PolicyError("Invalid URL")
     try:
         u = urlsplit(value)
-        host = (u.hostname or "").lower().rstrip(".")
+        # Chromium's WHATWG parser applies IDNA/Unicode domain normalization
+        # before interpreting IP literals. Python's urlsplit does not: e.g.
+        # 127。0。0。1 and １２７.０.０.１ become 127.0.0.1 in Chromium.
+        # Validate the normalized authority so these cannot bypass IP policy.
+        host = (u.hostname or "").encode("idna").decode("ascii").lower().rstrip(".")
         # Accessing .port validates malformed/out-of-range port values.
         _ = u.port
-    except ValueError as exc:
+    except (UnicodeError, ValueError) as exc:
         raise PolicyError("Invalid URL") from exc
     if u.scheme not in ("https", "http") or not host or u.username or u.password:
         raise PolicyError("Only HTTP(S) pages without embedded credentials")

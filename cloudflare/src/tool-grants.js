@@ -52,14 +52,16 @@ export function toolGrantScope(entries) {
 }
 
 export function allowsScopedCall(scopes, resolved, original) {
+  const args = resolved.arguments;
+  const known = SCOPABLE.get(resolved.name);
+  if (known && Object.hasOwn(args, "action") &&
+      (resolved.name === "terminal_interact" || !known.includes(args.action))) return false;
   const choices = scopes?.get(resolved.name);
   if (!choices) return true;
   // terminal_interact has no backend action field. Only the validated public
   // terminal family supplies this explicit action; the legacy alias stays denied.
   if (resolved.name === "terminal_interact")
     return original.name === "terminal" && original.arguments.action === "interact" &&
-      !Object.hasOwn(resolved.arguments, "action") && choices.has("interact");
-  const args = resolved.arguments;
-  return Object.hasOwn(args, "action") && typeof args.action === "string" &&
-    choices.has(args.action);
+      choices.has("interact");
+  return Object.hasOwn(args, "action") && choices.has(args.action);
 }

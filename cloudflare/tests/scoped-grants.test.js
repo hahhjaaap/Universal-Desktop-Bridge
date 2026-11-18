@@ -94,6 +94,8 @@ test("invalid scopes reject the matching subject grant, while bare grants keep e
   assert.equal(v.forwarded.length, 0);
   const h = gateway(["file_operation", "file_operation:read"]);
   assert.equal((await h.call("file_operation", { action: "copy" })).status, 200);
+  assert.equal((await h.call("file_operation", { action: "not_a_file_action" })).status, 403);
+  assert.equal(h.forwarded.length, 1);
 });
 
 test("multiplexed tool annotations stay conservative, including create-only recovery", async () => {

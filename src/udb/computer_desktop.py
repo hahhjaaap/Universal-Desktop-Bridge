@@ -1080,7 +1080,13 @@ class Desktop:
         if scoped:
             self._batch_uia = True
         try:
-            return self._run_validated_batch(window_id, steps)
+            return perf.timed_call(
+                "desktop.batch",
+                "execution",
+                self._run_validated_batch,
+                window_id,
+                steps,
+            )
         finally:
             if scoped:
                 self._batch_uia = False

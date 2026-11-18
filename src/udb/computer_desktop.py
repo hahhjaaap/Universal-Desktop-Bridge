@@ -943,27 +943,63 @@ class Desktop:
             raise PolicyError("wait_ms 0..10000; condition exists/absent/enabled")
 
     def batch(self, window_id, steps):
+        """Execute one bounded desktop workflow without extra remote round trips.
+
+        Optional when and depends_on guards use only exact equality against
+        earlier observed result fields. verify examines the current result.
+        All guards are validated before any Windows operation. A failed
+        verification of a mutating step is outcome-unknown, never retried.
+        """
         if not isinstance(steps, list) or not 1 <= len(steps) <= 12:
             raise PolicyError("Batch needs 1..12 steps")
         import inspect
 
+        from .fastpath import matches
+        from .windows_actions import READ_ACTIONS
+
+        metadata = frozenset({"when", "verify", "depends_on", "return_result"})
+        evidence_fields = frozenset(
+            {
+                "ok", "state", "visible", "enabled", "exists", "found",
+                "foreground", "matched", "paused", "checked", "selected",
+                "changed", "clicked", "injected", "requested",
+                "closed_observed", "timed_out", "truncated", "text",
+            }
+        )
         fields = set(inspect.signature(self._dispatch).parameters) - {"steps"}
-        for row in steps:
+        forbidden = {
+            "list", "batch", "screenshot", "displays", "open_chrome_tab",
+            "open_chatgpt", "verified_submit", "chatgpt_roundtrip",
+            "chatgpt_read_reply",
+        }
+
+        def validate_predicate(value, *, current, previous):
+            allowed = {"field", "equals", "step_index"} if previous else {
+                "field", "equals",
+            }
+            if not isinstance(value, dict) or set(value) != allowed:
+                raise PolicyError("Invalid desktop batch evidence predicate")
+            if value["field"] not in evidence_fields:
+                raise PolicyError("Unsupported desktop batch observation field")
+            expected = value["equals"]
+            if not (
+                type(expected) is bool
+                or type(expected) is int and -1000000000 <= expected <= 1000000000
+                or type(expected) is str and len(expected) <= 160
+            ):
+                raise PolicyError("Desktop batch expected value must be bounded")
+            if previous and (
+                type(value["step_index"]) is not int
+                or not 0 <= value["step_index"] < current
+            ):
+                raise PolicyError("Desktop batch guards require an earlier step")
+
+        # Validate the entire plan before sending any Windows input.
+        for index, row in enumerate(steps):
             if (
                 not isinstance(row, dict)
-                or set(row) - fields
-                or row.get("action")
-                in (
-                    "list",
-                    "batch",
-                    "screenshot",
-                    "displays",
-                    "open_chrome_tab",
-                    "open_chatgpt",
-                    "verified_submit",
-                    "chatgpt_roundtrip",
-                    "chatgpt_read_reply",
-                )
+                or set(row) - fields - metadata
+                or row.get("action") in forbidden
                 or "action" not in row
             ):
                 raise PolicyError("Invalid/nested batch step; capture/list separately")
@@ -972,38 +1008,80 @@ class Desktop:
                 **{
                     k: row[k]
                     for k in (
-                        "button",
-                        "clicks",
-                        "duration_ms",
-                        "horizontal",
-                        "wait_ms",
-                        "condition",
+                        "button", "clicks", "duration_ms",
+                        "horizontal", "wait_ms", "condition",
                     )
                     if k in row
                 },
             )
+            if "when" in row:
+                validate_predicate(row["when"], current=index, previous=True)
+            if "verify" in row:
+                validate_predicate(row["verify"], current=index, previous=False)
+            if "return_result" in row and type(row["return_result"]) is not bool:
+                raise PolicyError("Desktop batch return_result must be boolean")
+            parents = row.get("depends_on", [])
+            if (
+                not isinstance(parents, list)
+                or any(type(p) is not int or not 0 <= p < index for p in parents)
+                or len(set(parents)) != len(parents)
+            ):
+                raise PolicyError("Desktop batch dependencies must be earlier steps")
+
         deadline = time.monotonic() + 20
         results = []
+        observations = {}
+        completed = 0
         for index, row in enumerate(steps):
             try:
                 if time.monotonic() > deadline:
                     raise PolicyError("Batch time budget exceeded")
-                args = dict(row)
+                if any(observations[parent] is None for parent in row.get("depends_on", [])):
+                    observations[index] = None
+                    results.append({"index": index, "skipped": True})
+                    continue
+                if "when" in row:
+                    previous = row["when"]["step_index"]
+                    if observations[previous] is None:
+                        observations[index] = None
+                        results.append({"index": index, "skipped": True})
+                        continue
+                    if not matches(observations[previous], row["when"]):
+                        observations[index] = None
+                        results.append({"index": index, "skipped": True})
+                        continue
+                args = {key: val for key, val in row.items() if key not in metadata}
                 args.setdefault("window_id", window_id)
                 value = self._dispatch(**args)
-                results.append(dict(index=index, result=value))
+                if "verify" in row and not matches(value, row["verify"]):
+                    result = {"index": index, "verified": False}
+                    if row.get("return_result", True):
+                        result["result"] = value
+                    results.append(result)
+                    return {
+                        "ok": False, "completed_steps": completed,
+                        "failed_index": index, "error": "Desktop batch verification failed",
+                        "outcome_unknown": row["action"] not in READ_ACTIONS,
+                        "results": results, "rollback": False,
+                    }
+                observations[index] = value
+                item = {"index": index}
+                if row.get("return_result", True):
+                    item["result"] = value
+                if "verify" in row:
+                    item["verified"] = True
+                results.append(item)
+                completed += 1
             except (PolicyError, OSError, ValueError, TypeError) as exc:
-                return dict(
-                    ok=False,
-                    completed_steps=len(results),
-                    failed_index=index,
-                    error=str(exc),
-                    results=results,
-                    rollback=False,
-                )
-        return dict(
-            ok=True, completed_steps=len(results), results=results, rollback=False
-        )
+                return {
+                    "ok": False, "completed_steps": completed,
+                    "failed_index": index, "error": str(exc),
+                    "results": results, "rollback": False,
+                }
+        return {
+            "ok": True, "completed_steps": completed,
+            "results": results, "rollback": False,
+        }
 
     def window_action(self, hwnd, action, x, y, width, height, state):
         if action == "window_state":

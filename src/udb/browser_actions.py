@@ -62,6 +62,25 @@ def validate_post_observation(args):
     return mode
 
 
+def validate_click_navigation_budget(args):
+    """Shortened click observation requires an explicit post-action inspection.
+
+    This is an opt-in latency tradeoff, not proof that navigation did not
+    happen. Default 1000ms is unchanged for every legacy browser operation.
+    """
+    ms = args.get("click_navigation_observe_ms", 1000)
+    if type(ms) is not int or not 100 <= ms <= 1000:
+        raise PolicyError("click_navigation_observe_ms must be 100..1000")
+    if ms < 1000 and (
+        args.get("action") != "click"
+        or args.get("observe_after", "none") not in {"snapshot", "read"}
+    ):
+        raise PolicyError(
+            "Short click navigation observation requires click with observe_after"
+        )
+    return ms
+
+
 def attach_post_observation(obj, args, result):
     """Attach a bounded, redacting observation without re-dispatching input.
 
@@ -122,6 +141,11 @@ def dispatch_browser(obj, args):
             args.get("timeout_ms", 5000),
         )
     if action in ("fill", "click", "select_option", "check", "uncheck"):
+        options = {}
+        if action == "click":
+            budget = validate_click_navigation_budget(args)
+            if budget != 1000:
+                options["observe_navigation_ms"] = budget
         return obj.element(
             tab,
             action,
@@ -130,6 +154,7 @@ def dispatch_browser(obj, args):
             args.get("role", ""),
             args.get("name", ""),
             args.get("exact", True),
+            **options,
         )
     if action == "press":
         return obj.press(

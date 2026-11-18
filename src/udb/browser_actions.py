@@ -33,6 +33,66 @@ BROWSER_ACTIONS = (
 )
 
 
+POST_OBSERVABLE_ACTIONS = frozenset(
+    {
+        "open",
+        "new",
+        "navigate",
+        "click",
+        "fill",
+        "press",
+        "select_option",
+        "check",
+        "uncheck",
+        "scroll",
+        "back",
+        "forward",
+        "reload",
+    }
+)
+
+
+def validate_post_observation(args):
+    """Validate the post-action read before any possibly mutating operation."""
+    mode = args.get("observe_after", "none")
+    if type(mode) is not str or mode not in {"none", "snapshot", "read"}:
+        raise PolicyError("observe_after must be none, snapshot or read")
+    if mode != "none" and args.get("action") not in POST_OBSERVABLE_ACTIONS:
+        raise PolicyError("observe_after is unsupported for this browser action")
+    return mode
+
+
+def attach_post_observation(obj, args, result):
+    """Attach a bounded, redacting observation without re-dispatching input.
+
+    An observation failing after input must NOT turn the entire mutation into
+    a retriable exception. Only the original action is executed, exactly once.
+    """
+    mode = validate_post_observation(args)
+    if mode == "none":
+        return result
+    if not isinstance(result, dict):
+        raise PolicyError("Browser action result unavailable; inspect before retrying")
+    if (
+        result.get("ok") is False
+        or result.get("timed_out") is True
+        or result.get("navigation_timed_out") is True
+    ):
+        return dict(result, observation_skipped="action_failed_or_uncertain")
+    tab = result.get("tab_id") or args.get("tab_id", "")
+    if not isinstance(tab, str) or not tab:
+        return dict(result, observation_unavailable=True)
+    try:
+        observation = obj.snapshot(tab) if mode == "snapshot" else obj.read(tab)
+    except (PolicyError, OSError, ValueError, KeyError):
+        # A click/submit may have succeeded. Fail closed on observation while
+        # still returning the original action evidence; never replay that step.
+        return dict(result, observation_unavailable=True)
+    if not isinstance(observation, dict) or observation.get("error"):
+        return dict(result, observation_unavailable=True)
+    return dict(result, observe_after=mode, observation=observation)
+
+
 def dispatch_browser(obj, args):
     action = args.get("action")
     if action == "scroll":

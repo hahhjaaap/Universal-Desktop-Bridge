@@ -1160,6 +1160,7 @@ class Desktop:
                     "completed_steps": completed,
                     "failed_index": index,
                     "error": str(exc),
+                    "outcome_unknown": row["action"] not in READ_ACTIONS,
                     "results": results,
                     "rollback": False,
                 }

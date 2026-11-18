@@ -72,7 +72,10 @@ def test_guard_match_executes_locally_and_verifies_once():
     result = fake_desktop(dispatch).batch(
         "window",
         [
-            {"action": "control_status", "verify": {"field": "paused", "equals": False}},
+            {
+                "action": "control_status",
+                "verify": {"field": "paused", "equals": False},
+            },
             {
                 "action": "focus",
                 "when": {"step_index": 0, "field": "paused", "equals": False},

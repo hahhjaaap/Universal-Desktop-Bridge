@@ -1078,7 +1078,7 @@ class Desktop:
 
         scoped = (
             not persistent_uia_enabled()
-            and any(row["action"] in UIA_ACTIONS for row in steps)
+            and sum(row["action"] in UIA_ACTIONS for row in steps) >= 2
         )
         if scoped:
             self._batch_uia = True

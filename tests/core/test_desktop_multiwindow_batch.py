@@ -63,7 +63,12 @@ def desktop(monkeypatch):
 
 
 def locator(pid, class_name, title):
-    return {"action": "find_window", "pid": pid, "class_name": class_name, "title": title}
+    return {
+        "action": "find_window",
+        "pid": pid,
+        "class_name": class_name,
+        "title": title,
+    }
 
 
 def test_locate_two_app_windows_then_switch_and_observe_in_one_batch(desktop):

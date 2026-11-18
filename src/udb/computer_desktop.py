@@ -15,6 +15,7 @@ import time
 import uuid
 from ctypes import wintypes as w
 from pathlib import Path
+from typing import NamedTuple
 
 from . import hyperspeed_perf as perf
 from .computer_capture import encode_bgrx_png
@@ -23,6 +24,14 @@ from .desktop_guest import BitmapHeader, InputEvent, KeyInput, MouseInput
 from .windows_actions import DESKTOP_ACTIONS, UIA_ACTIONS
 
 _UIA_HELPER = Path(__file__).with_name("computer_uia.ps1")
+
+
+class WindowObservation(NamedTuple):
+    hwnd: int
+    pid: int
+    class_name: str
+    expires_at: float
+    expected_title: str = ""
 
 
 class Desktop:
@@ -117,7 +126,7 @@ class Desktop:
             pid = self.process.GetWindowThreadProcessId(hwnd)[1]
             kind = self.gui.GetClassName(hwnd)
             wid = uuid.uuid4().hex
-            observed[wid] = (hwnd, pid, kind, time.monotonic() + 60)
+            observed[wid] = WindowObservation(hwnd, pid, kind, time.monotonic() + 60)
             rows.append(
                 dict(
                     window_id=wid,
@@ -138,6 +147,67 @@ class Desktop:
             coordinates="physical screen pixels",
             cloaked_windows_hidden=True,
         )
+
+    def find_window(self, pid, class_name, title):
+        """Locate one previously observed native window by exact identity.
+
+        This is a read-only in-batch refresh of an expiring window_id.
+        Refuse title-only lookups, ambiguous matches, cloaked/shell windows,
+        and any window whose current process or class differs from the plan.
+        Each later action revalidates HWND, PID, class and exact title.
+        """
+        self._validate_window_locator(
+            {"pid": pid, "class_name": class_name, "title": title}
+        )
+        self.interactive()
+        matches = []
+
+        def visit(hwnd, _):
+            if not self.gui.IsWindowVisible(hwnd):
+                return
+            if self.process.GetWindowThreadProcessId(hwnd)[1] != pid:
+                return
+            if self.gui.GetClassName(hwnd) != class_name:
+                return
+            if self.gui.GetWindowText(hwnd) != title:
+                return
+            try:
+                if self.is_cloaked(hwnd):
+                    return
+            except PolicyError:
+                return
+            matches.append(hwnd)
+
+        self.gui.EnumWindows(visit, None)
+        if len(matches) > 1:
+            raise PolicyError("Ambiguous window identity; observe windows again")
+        if not matches:
+            return {"found": False}
+        hwnd = matches[0]
+        # Never keep indefinitely accumulating expired identities when a
+        # long-running agent refreshes windows without calling list().
+        current = time.monotonic()
+        self.windows = {
+            key: value
+            for key, value in self.windows.items()
+            if value.expires_at > current
+        }
+        if len(self.windows) >= 64:
+            # Refuse to evict potentially live window IDs mid-workflow.
+            raise PolicyError("Window observation capacity; list windows again")
+        wid = uuid.uuid4().hex
+        self.windows[wid] = WindowObservation(
+            hwnd, pid, class_name, current + 60, title
+        )
+        return {
+            "found": True,
+            "window_id": wid,
+            "pid": pid,
+            "class_name": class_name,
+            "title": title,
+            "foreground": hwnd == self.gui.GetForegroundWindow(),
+            "minimized": bool(self.gui.IsIconic(hwnd)),
+        }
 
     @staticmethod
     def _chrome_image_path(pid):
@@ -458,13 +528,14 @@ class Desktop:
         row = self.windows.get(window_id)
         if not row:
             raise PolicyError("Observe windows with computer_desktop list first")
-        hwnd, pid, kind, until = row
+        hwnd, pid, kind, until, expected_title = row
         if (
             time.monotonic() > until
             or not self.gui.IsWindow(hwnd)
             or not self.gui.IsWindowVisible(hwnd)
             or self.process.GetWindowThreadProcessId(hwnd)[1] != pid
             or self.gui.GetClassName(hwnd) != kind
+            or (expected_title and self.gui.GetWindowText(hwnd) != expected_title)
             or self.is_cloaked(hwnd)
         ):
             raise PolicyError("Window observation expired or changed; list again")
@@ -942,6 +1013,18 @@ class Desktop:
         ):
             raise PolicyError("wait_ms 0..10000; condition exists/absent/enabled")
 
+    @staticmethod
+    def _validate_window_locator(row):
+        if (
+            type(row.get("pid")) is not int
+            or not 1 <= row["pid"] <= 0xFFFFFFFF
+            or type(row.get("class_name")) is not str
+            or not 1 <= len(row["class_name"]) <= 128
+            or type(row.get("title")) is not str
+            or not 1 <= len(row["title"]) <= 300
+        ):
+            raise PolicyError("find_window needs exact pid/class_name/title")
+
     def batch(self, window_id, steps):
         """Execute one bounded desktop workflow without extra remote round trips.
 
@@ -954,7 +1037,9 @@ class Desktop:
             raise PolicyError("Batch needs 1..12 steps")
         import inspect
 
-        metadata = frozenset({"when", "verify", "depends_on", "return_result"})
+        metadata = frozenset(
+            {"when", "verify", "depends_on", "return_result", "window_ref"}
+        )
         evidence_fields = frozenset(
             {
                 "ok",
@@ -1024,29 +1109,52 @@ class Desktop:
 
         # Validate the entire plan before sending any Windows input.
         for index, row in enumerate(steps):
-            if (
-                not isinstance(row, dict)
-                or set(row) - fields - metadata
-                or not isinstance(row.get("action"), str)
-                or row.get("action") in forbidden
-                or "action" not in row
-            ):
-                raise PolicyError("Invalid/nested batch step; capture/list separately")
-            self.validate_options(
-                row["action"],
-                **{
-                    k: row[k]
-                    for k in (
-                        "button",
-                        "clicks",
-                        "duration_ms",
-                        "horizontal",
-                        "wait_ms",
-                        "condition",
+            if not isinstance(row, dict) or not isinstance(row.get("action"), str):
+                raise PolicyError("Invalid desktop batch step")
+            if row["action"] == "find_window":
+                # The locator is deliberately batch-only. Its exact identity
+                # must come from a previously observed desktop list result.
+                if (
+                    set(row) - metadata - {"action", "pid", "class_name", "title"}
+                    or "window_ref" in row
+                ):
+                    raise PolicyError("Invalid window locator step")
+                self._validate_window_locator(row)
+            else:
+                if (
+                    set(row) - fields - metadata
+                    or row["action"] in forbidden
+                    or "action" not in row
+                ):
+                    raise PolicyError(
+                        "Invalid/nested batch step; capture/list separately"
                     )
-                    if k in row
-                },
-            )
+                self.validate_options(
+                    row["action"],
+                    **{
+                        k: row[k]
+                        for k in (
+                            "button",
+                            "clicks",
+                            "duration_ms",
+                            "horizontal",
+                            "wait_ms",
+                            "condition",
+                        )
+                        if k in row
+                    },
+                )
+            if "window_ref" in row:
+                ref = row["window_ref"]
+                if (
+                    type(ref) is not int
+                    or not 0 <= ref < index
+                    or steps[ref]["action"] != "find_window"
+                    or "window_id" in row
+                ):
+                    raise PolicyError(
+                        "window_ref requires one earlier find_window step"
+                    )
             if "when" in row:
                 validate_predicate(row["when"], current=index, previous=True)
             if "verify" in row:
@@ -1099,7 +1207,9 @@ class Desktop:
         from .fastpath import matches
         from .windows_actions import READ_ACTIONS
 
-        metadata = frozenset({"when", "verify", "depends_on", "return_result"})
+        metadata = frozenset(
+            {"when", "verify", "depends_on", "return_result", "window_ref"}
+        )
         deadline = time.monotonic() + 20
         results = []
         observations = {}
@@ -1125,8 +1235,21 @@ class Desktop:
                         results.append({"index": index, "skipped": True})
                         continue
                 args = {key: val for key, val in row.items() if key not in metadata}
-                args.setdefault("window_id", window_id)
-                value = self._dispatch(**args)
+                if row["action"] == "find_window":
+                    value = self.find_window(
+                        args["pid"], args["class_name"], args["title"]
+                    )
+                else:
+                    if "window_ref" in row:
+                        located = observations[row["window_ref"]]
+                        if located is None or not located.get("found"):
+                            observations[index] = None
+                            results.append({"index": index, "skipped": True})
+                            continue
+                        args["window_id"] = located["window_id"]
+                    else:
+                        args.setdefault("window_id", window_id)
+                    value = self._dispatch(**args)
                 if "verify" in row:
                     try:
                         verified = matches(value, row["verify"])
@@ -1142,7 +1265,10 @@ class Desktop:
                             "completed_steps": completed,
                             "failed_index": index,
                             "error": "Desktop batch verification failed",
-                            "outcome_unknown": row["action"] not in READ_ACTIONS,
+                            "outcome_unknown": (
+                                row["action"] not in READ_ACTIONS
+                                and row["action"] != "find_window"
+                            ),
                             "results": results,
                             "rollback": False,
                         }
@@ -1160,7 +1286,10 @@ class Desktop:
                     "completed_steps": completed,
                     "failed_index": index,
                     "error": str(exc),
-                    "outcome_unknown": row["action"] not in READ_ACTIONS,
+                    "outcome_unknown": (
+                        row["action"] not in READ_ACTIONS
+                        and row["action"] != "find_window"
+                    ),
                     "results": results,
                     "rollback": False,
                 }

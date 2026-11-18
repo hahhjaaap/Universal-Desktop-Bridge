@@ -35,7 +35,7 @@ def test_native_control_patterns_on_one_owned_window(tmp_path, monkeypatch):
     import win32gui
     import win32process
 
-    from udb.computer_desktop import Desktop
+    from udb.computer_desktop import Desktop, WindowObservation
     from udb.core import PolicyError
     from udb.owned_process import OwnedProcess
     from udb.windows_paths import system_executable
@@ -86,7 +86,7 @@ def test_native_control_patterns_on_one_owned_window(tmp_path, monkeypatch):
 
         def action(mode, **args):
             assert process.owns_pid(win32process.GetWindowThreadProcessId(hwnd)[1])
-            desktop.windows[wid] = (
+            desktop.windows[wid] = WindowObservation(
                 hwnd,
                 pid,
                 win32gui.GetClassName(hwnd),

@@ -1,0 +1,45 @@
+name: HyperSpeed UIA batch-local reuse parity
+
+on:
+  pull_request:
+    paths:
+      - "src/udb/computer_desktop.py"
+      - "src/udb/uia_worker.py"
+      - "tests/core/test_batch_local_uia_worker.py"
+      - "tools/compare_uia_batch_worker.py"
+      - ".github/workflows/hyperspeed-uia-batch.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/udb/computer_desktop.py"
+      - "src/udb/uia_worker.py"
+      - "tools/compare_uia_batch_worker.py"
+      - ".github/workflows/hyperspeed-uia-batch.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  batch-local-ui-worker:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - run: python -m pip install ".[dev]"
+      - name: Validate no-replay scoped reuse unit contracts
+        run: python -m pytest -q tests/core/test_batch_local_uia_worker.py
+      - name: Compare private helper with one-shot UIA on owned WinForms fixture
+        run: python -m tools.compare_uia_batch_worker --samples 3 --controls 50 --output reports/uia-batch-local-parity.json
+      - name: Publish diagnostic timing and parity artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: uia-batch-local-parity
+          path: reports/uia-batch-local-parity.json
+          if-no-files-found: ignore
+          retention-days: 7

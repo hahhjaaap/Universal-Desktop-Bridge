@@ -545,7 +545,7 @@ class Desktop:
         )
         from .uia_worker import PersistentUIA, enabled
 
-        if enabled():
+        if enabled() or getattr(self, "_batch_uia", False):
             if getattr(self, "_uia_worker", None) is None:
                 self._uia_worker = PersistentUIA(exe, helper)
             # A rejected, missing or late response never falls back to legacy
@@ -954,9 +954,6 @@ class Desktop:
             raise PolicyError("Batch needs 1..12 steps")
         import inspect
 
-        from .fastpath import matches
-        from .windows_actions import READ_ACTIONS
-
         metadata = frozenset({"when", "verify", "depends_on", "return_result"})
         evidence_fields = frozenset(
             {
@@ -1064,6 +1061,45 @@ class Desktop:
             ):
                 raise PolicyError("Desktop batch dependencies must be earlier steps")
 
+        return self._execute_batch_local_uia(window_id, steps)
+
+    def _execute_batch_local_uia(self, window_id, steps):
+        """Amortize one PowerShell UIA startup within one prevalidated batch.
+
+        The default one-shot UIA behavior outside batches remains unchanged.
+        This scoped helper is never shared between separate batch requests.
+        Each action still checks interactive access, HWND/PID and UIA policies.
+        No fallback or automatic replay after any uncertain mutation.
+        """
+        from .uia_worker import enabled as persistent_uia_enabled
+
+        scoped = (
+            not persistent_uia_enabled()
+            and sum(row["action"] in UIA_ACTIONS for row in steps) >= 2
+        )
+        if scoped:
+            self._batch_uia = True
+        try:
+            return perf.timed_call(
+                "desktop.batch",
+                "execution",
+                self._run_validated_batch,
+                window_id,
+                steps,
+            )
+        finally:
+            if scoped:
+                self._batch_uia = False
+                worker = getattr(self, "_uia_worker", None)
+                self._uia_worker = None
+                if worker is not None:
+                    worker.close()
+
+    def _run_validated_batch(self, window_id, steps):
+        from .fastpath import matches
+        from .windows_actions import READ_ACTIONS
+
+        metadata = frozenset({"when", "verify", "depends_on", "return_result"})
         deadline = time.monotonic() + 20
         results = []
         observations = {}
@@ -1124,6 +1160,7 @@ class Desktop:
                     "completed_steps": completed,
                     "failed_index": index,
                     "error": str(exc),
+                    "outcome_unknown": row["action"] not in READ_ACTIONS,
                     "results": results,
                     "rollback": False,
                 }

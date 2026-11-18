@@ -15,8 +15,6 @@ def test_percentiles_are_deterministic_and_interpolated():
     ("size", "samples"),
     [(0, 1), (49, 1), (501, 1), (1001, 1), (50, 0), (50, 31)],
 )
-def test_invalid_canary_sizes_or_sample_count_fail_before_windows_access(
-    size, samples
-):
+def test_invalid_canary_sizes_or_sample_count_fail_before_windows_access(size, samples):
     with pytest.raises(ValueError, match="Allowed fixture sizes"):
         compare(size, samples)

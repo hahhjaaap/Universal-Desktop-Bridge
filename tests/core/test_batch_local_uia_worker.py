@@ -102,6 +102,7 @@ def test_failed_mutating_step_cleans_helper_without_retry(fake_batch_desktop):
     assert result["ok"] is False
     assert result["completed_steps"] == 0
     assert result["failed_index"] == 0
+    assert result["outcome_unknown"] is True
     assert len(calls) == 1
     assert len(created) == 1 and closed == [True]
     assert desktop._uia_worker is None

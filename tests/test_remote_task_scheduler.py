@@ -31,6 +31,9 @@ def test_known_resource_lanes_and_fail_closed_unknowns():
     assert resource_for_rpc(call("computer_process", action="list")) == "read"
     assert resource_for_rpc(call("computer_desktop", action="batch")) == "desktop"
     assert resource_for_rpc(call("open_chatgpt")) == "desktop"
+    assert (
+        resource_for_rpc(call("computer_utilities", action="launch_app")) == "desktop"
+    )
     assert resource_for_rpc(call("host_browser", action="fastpath")) == "owned_browser"
     assert resource_for_rpc(call("computer_execute")) == "exclusive"
     assert resource_for_rpc(call("computer_files", action="write")) == "exclusive"

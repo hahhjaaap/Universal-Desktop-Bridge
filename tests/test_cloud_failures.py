@@ -48,6 +48,7 @@ def test_agent_disallows_bearer_redirects_on_handshake(monkeypatch, tmp_path):
     assert attempted[0]["header"] == [
         "Authorization: Bearer " + "x" * 48,
         f"User-Agent: {cloud_agent.CLOUD_USER_AGENT}",
+        "X-UDB-Resource-Lanes: 1",
     ]
 
 

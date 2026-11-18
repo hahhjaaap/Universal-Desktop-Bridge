@@ -35,7 +35,7 @@ READ_TOOLS = frozenset(
         "computer_status",
     }
 )
-_DESKTOP_TOOLS = frozenset({"computer_desktop", "open_chatgpt"})
+_DESKTOP_TOOLS = frozenset({"computer_desktop", "computer_utilities", "open_chatgpt"})
 _HOST_TOOLS = frozenset(
     {
         "host_browser",

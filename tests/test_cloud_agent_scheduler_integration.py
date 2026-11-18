@@ -34,6 +34,7 @@ def test_pool_serializes_two_gui_batches_without_blocking_owned_browser(monkeypa
 
         def __init__(self, settings):
             self.settings = settings
+            self.observed_window = None
 
         def call(self, request):
             nonlocal running
@@ -43,9 +44,11 @@ def test_pool_serializes_two_gui_batches_without_blocking_owned_browser(monkeypa
                     running += 1
                     assert running == 1, "Two desktop GUI batches overlapped"
                 if request["id"] == 1:
+                    self.observed_window = "same-desktop-proxy"
                     first_entered.set()
                     assert unlock_first.wait(5)
                 else:
+                    assert self.observed_window == "same-desktop-proxy"
                     second_entered.set()
                 with running_guard:
                     running -= 1
@@ -60,7 +63,7 @@ def test_pool_serializes_two_gui_batches_without_blocking_owned_browser(monkeypa
     pool = cloud_agent.ParallelLocalProxies(SimpleNamespace())
     try:
         requests = [
-            rpc("computer_desktop", "batch", 1),
+            rpc("computer_desktop", "list", 1),
             rpc("computer_desktop", "batch", 2),
             rpc("host_browser", "fastpath", 3),
         ]

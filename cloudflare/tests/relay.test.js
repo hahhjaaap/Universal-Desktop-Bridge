@@ -3,11 +3,12 @@ import { setImmediate } from "node:timers/promises";
 import test from "node:test";
 import { DeviceRelay } from "../src/index.js";
 
-function harness() {
+function harness(resourceLanes = 0) {
   const frames = [];
   const closed = [];
   const ws = {
     readyState: WebSocket.OPEN,
+    deserializeAttachment: () => ({ resourceLanes }),
     send: (data) => frames.push(JSON.parse(data)),
     close: (code, reason) => closed.push({ code, reason }),
   };
@@ -110,6 +111,52 @@ test("mutation holds an exclusive device slot", async () => {
   await untilFrames(h, 2);
   h.answer(h.frames[1]);
   assert.equal((await read).status, 200);
+});
+
+test("legacy Windows keeps an exclusive desktop slot", async () => {
+  const h = harness();
+  const first = h.send(1);
+  await untilFrames(h, 1);
+  const blocked = await h.send(2, "tools/call", {
+    name: "computer_desktop", arguments: { action: "click" },
+  });
+  assert.equal(blocked.status, 429);
+  assert.deepEqual(await blocked.json(), { error: "device_busy", dispatched: false });
+  h.answer(h.frames[0]);
+  assert.equal((await first).status, 200);
+});
+
+test("scheduler-capable Windows admits desktop, app launch, owned browser and reads", async () => {
+  const h = harness(1);
+  const tools = [
+    "computer_desktop", "computer_utilities", "host_browser", "computer_status",
+    ...Array(6).fill("read_file"),
+  ];
+  const calls = tools.map((name, index) => h.send(index + 1, "tools/call", {
+    name, arguments: {},
+  }));
+  await untilFrames(h, 10);
+  assert.equal((await h.send(11, "tools/call", {
+    name: "host_browser", arguments: {},
+  })).status, 429);
+  const unknown = await h.send(12, "tools/call", {
+    name: "computer_execute", arguments: {},
+  });
+  assert.deepEqual(await unknown.json(), { error: "device_busy", dispatched: false });
+  for (const frame of h.frames) h.answer(frame);
+  assert.ok((await Promise.all(calls)).every(reply => reply.status === 200));
+  assert.equal(h.relay.pending.size, 0);
+});
+
+test("opaque calls still reserve the whole scheduler-capable device", async () => {
+  const h = harness(1);
+  const mutation = h.send(1, "tools/call", { name: "computer_execute", arguments: {} });
+  await untilFrames(h, 1);
+  const desktop = await h.send(2, "tools/call", { name: "computer_desktop", arguments: {} });
+  assert.equal(desktop.status, 429);
+  assert.equal(h.frames.length, 1);
+  h.answer(h.frames[0]);
+  assert.equal((await mutation).status, 200);
 });
 
 test("socket replacement fails every in-flight read without transferring it", async () => {

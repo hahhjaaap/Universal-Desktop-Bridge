@@ -86,10 +86,15 @@ def _browser_endpoint(endpoint, process, timeout):
 def validate_url(value):
     if value == "about:blank":
         return value
+    # Chromium's WHATWG parser treats backslashes as separators in HTTP(S)
+    # URLs, whereas urlsplit includes them in the hostname. Reject before
+    # parsing so a URL like http://127.0.0.1\\page cannot appear public here
+    # yet navigate to the loopback service in the owned browser.
     if (
         not isinstance(value, str)
         or len(value) > 4096
         or any(ord(c) < 32 for c in value)
+        or "\\" in value
     ):
         raise PolicyError("Invalid URL")
     try:

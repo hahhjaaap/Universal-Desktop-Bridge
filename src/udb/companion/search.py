@@ -121,6 +121,10 @@ def search_worker():
     rx = None
     scanned = matches = 0
     truncated = False
+    skipped = {"too_large": 0, "unreadable": 0, "lines_too_large": 0}
+
+    def onerror(_error):
+        skipped["unreadable"] += 1
 
     def send(kind, value):
         print(json.dumps(dict(type=kind, value=value), ensure_ascii=True), flush=True)
@@ -135,7 +139,7 @@ def search_worker():
             except (OSError, ValueError):
                 return False
 
-        for folder, dirs, names in os.walk(root, followlinks=False):
+        for folder, dirs, names in os.walk(root, followlinks=False, onerror=onerror):
             parent = Path(folder)
             dirs[:] = [n for n in dirs if allowed(parent / n)]
             for name in names:
@@ -148,7 +152,14 @@ def search_worker():
                 if not fnmatch.fnmatch(name, config["pattern"]):
                     continue
                 p = parent / name
-                if not allowed(p) or not p.is_file():
+                if not allowed(p):
+                    continue
+                try:
+                    if not p.is_file():
+                        continue
+                    size = p.stat().st_size if config["search_type"] == "content" else 0
+                except OSError:
+                    skipped["unreadable"] += 1
                     continue
                 if config["search_type"] == "files":
                     found = not query or (
@@ -164,7 +175,8 @@ def search_worker():
                         [dict(path=str(p.relative_to(files.root)))] if found else []
                     )
                 else:
-                    if p.stat().st_size > 64 * 1024 * 1024:
+                    if size > 64 * 1024 * 1024:
+                        skipped["too_large"] += 1
                         continue
                     values = []
                     try:
@@ -176,6 +188,7 @@ def search_worker():
                                     break
                                 lineno += 1
                                 if len(line) > 8192 and not line.endswith("\n"):
+                                    skipped["lines_too_large"] += 1
                                     while line and not line.endswith("\n"):
                                         line = f.readline(8193)
                                     continue
@@ -201,6 +214,7 @@ def search_worker():
                                     if matches >= 2000:
                                         break
                     except (OSError, UnicodeError):
+                        skipped["unreadable"] += 1
                         continue
                 for value in values:
                     send("match", value)
@@ -210,7 +224,16 @@ def search_worker():
                     break
             if truncated:
                 break
-        send("done", dict(files_scanned=scanned, matches=matches, truncated=truncated))
+        partial = any(skipped.values())
+        send(
+            "done",
+            dict(
+                files_scanned=scanned,
+                matches=matches,
+                truncated=truncated or partial,
+                **({"skipped": skipped} if partial else {}),
+            ),
+        )
     except Exception as exc:
         send("error", type(exc).__name__ + ": " + str(exc))
         raise SystemExit(1) from exc

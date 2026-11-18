@@ -103,14 +103,14 @@ def test_listing_filters_unsupported_files_without_policy_checks(tmp_path, monke
     for index in range(120):
         (root / f"raw_{index:03d}.bin").write_bytes(b"do not expose")
     (root / "report.py").write_text("print(1)\n", encoding="utf-8")
-    original = agent.path
+    original = agent._path_in_scope
     checked = []
 
-    def guarded_path(project, relative=".", write=False):
+    def guarded_path(root, relative, roots):
         checked.append(relative)
-        return original(project, relative, write)
+        return original(root, relative, roots)
 
-    monkeypatch.setattr(agent, "path", guarded_path)
+    monkeypatch.setattr(agent, "_path_in_scope", guarded_path)
     listed = agent.listing("demo")
     assert listed["items"] == [{"path": "report.py", "directory": False}]
     assert checked == [".", "report.py"]

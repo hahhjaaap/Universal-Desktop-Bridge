@@ -37,6 +37,27 @@ The allowed field vocabulary is fixed and all predicates, dependencies and actio
 
 A failed action still stops at the first failure, with no rollback. This feature does not add crash-durable replay receipts to current-user desktop actions; unlike owned browser FastPath, a transport failure after GUI input remains uncertain. When in doubt, observe state rather than retry.
 
+## Visual fallback for canvas and viewport controls
+
+Use a window-targeted `screenshot` when the model needs to locate a control
+from pixels. The image and its `frame_id` are associated with that observed
+window. Convert image coordinates to physical screen coordinates using the
+returned `bounds`, `scale_x` and `scale_y`. Detailed images may be reduced to fit the
+relay reply limit. Full-screen and display screenshots
+do not supply a window frame ID.
+
+Pass the same `window_id` and `expected_frame` to `click`, `drag`, `scroll` or
+`mouse_move`. The worker confirms the window is still foreground and visible,
+recaptures the frame and checks pixels, title and bounds before sending input.
+If a frame changed, observe again and replan. Animated content can require a
+stable observation or an application-specific API.
+
+In a batch, follow the action with `frame_state` and pass its `expected_frame`
+to check for change without sending a second image. A pixel change alone is
+weak evidence: use an application-state read, log or new screenshot to verify
+the intended result. A batch with `replay_safe: false` may already have changed
+state even if a later observation or verification step failed.
+
 ## Evidence and release status
 
 The implementation includes offline deterministic unit tests for legacy compatibility, guarded skips, successful verification, missing evidence, preflight refusal, no automatic replay, and boolean/int separation. These fixtures do **not** exercise an actual Windows application.

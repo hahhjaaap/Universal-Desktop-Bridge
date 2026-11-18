@@ -960,32 +960,63 @@ class Desktop:
         metadata = frozenset({"when", "verify", "depends_on", "return_result"})
         evidence_fields = frozenset(
             {
-                "ok", "state", "visible", "enabled", "exists", "found",
-                "foreground", "matched", "paused", "checked", "selected",
-                "changed", "clicked", "injected", "requested",
-                "closed_observed", "timed_out", "truncated", "text",
+                "ok",
+                "state",
+                "visible",
+                "enabled",
+                "exists",
+                "found",
+                "foreground",
+                "matched",
+                "paused",
+                "checked",
+                "selected",
+                "changed",
+                "clicked",
+                "injected",
+                "requested",
+                "closed_observed",
+                "timed_out",
+                "truncated",
+                "text",
             }
         )
         fields = set(inspect.signature(self._dispatch).parameters) - {"steps"}
         forbidden = {
-            "list", "batch", "screenshot", "displays", "open_chrome_tab",
-            "open_chatgpt", "verified_submit", "chatgpt_roundtrip",
+            "list",
+            "batch",
+            "screenshot",
+            "displays",
+            "open_chrome_tab",
+            "open_chatgpt",
+            "verified_submit",
+            "chatgpt_roundtrip",
             "chatgpt_read_reply",
         }
 
         def validate_predicate(value, *, current, previous):
-            allowed = {"field", "equals", "step_index"} if previous else {
-                "field", "equals",
-            }
+            allowed = (
+                {"field", "equals", "step_index"}
+                if previous
+                else {
+                    "field",
+                    "equals",
+                }
+            )
             if not isinstance(value, dict) or set(value) != allowed:
                 raise PolicyError("Invalid desktop batch evidence predicate")
-            if not isinstance(value["field"], str) or value["field"] not in evidence_fields:
+            if (
+                not isinstance(value["field"], str)
+                or value["field"] not in evidence_fields
+            ):
                 raise PolicyError("Unsupported desktop batch observation field")
             expected = value["equals"]
             if not (
                 type(expected) is bool
-                or type(expected) is int and -1000000000 <= expected <= 1000000000
-                or type(expected) is str and len(expected) <= 160
+                or type(expected) is int
+                and -1000000000 <= expected <= 1000000000
+                or type(expected) is str
+                and len(expected) <= 160
             ):
                 raise PolicyError("Desktop batch expected value must be bounded")
             if previous and (
@@ -1009,8 +1040,12 @@ class Desktop:
                 **{
                     k: row[k]
                     for k in (
-                        "button", "clicks", "duration_ms",
-                        "horizontal", "wait_ms", "condition",
+                        "button",
+                        "clicks",
+                        "duration_ms",
+                        "horizontal",
+                        "wait_ms",
+                        "condition",
                     )
                     if k in row
                 },
@@ -1085,13 +1120,18 @@ class Desktop:
                 completed += 1
             except (PolicyError, OSError, ValueError, TypeError) as exc:
                 return {
-                    "ok": False, "completed_steps": completed,
-                    "failed_index": index, "error": str(exc),
-                    "results": results, "rollback": False,
+                    "ok": False,
+                    "completed_steps": completed,
+                    "failed_index": index,
+                    "error": str(exc),
+                    "results": results,
+                    "rollback": False,
                 }
         return {
-            "ok": True, "completed_steps": completed,
-            "results": results, "rollback": False,
+            "ok": True,
+            "completed_steps": completed,
+            "results": results,
+            "rollback": False,
         }
 
     def window_action(self, hwnd, action, x, y, width, height, state):

@@ -18,6 +18,7 @@ from contextlib import contextmanager
 MAX_TASKS = 10
 RESOURCE_WAIT_SECONDS = 6.0
 
+
 class ResourceBusyError(RuntimeError):
     """Resource lane timed out before any tool action was dispatched."""
 

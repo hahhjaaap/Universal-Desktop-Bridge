@@ -156,7 +156,9 @@ class Desktop:
             or type(title) is not str
             or not 1 <= len(title) <= 300
         ):
-            raise PolicyError("find_window requires exact observed pid/class_name/title")
+            raise PolicyError(
+                "find_window requires exact observed pid/class_name/title"
+            )
         self.interactive()
         matches = []
 
@@ -186,9 +188,7 @@ class Desktop:
         # long-running agent refreshes windows without calling list().
         current = time.monotonic()
         self.windows = {
-            key: value
-            for key, value in self.windows.items()
-            if value[3] > current
+            key: value for key, value in self.windows.items() if value[3] > current
         }
         if len(self.windows) >= 64:
             # Refuse to evict potentially live window IDs mid-workflow.
@@ -1032,7 +1032,9 @@ class Desktop:
             raise PolicyError("Batch needs 1..12 steps")
         import inspect
 
-        metadata = frozenset({"when", "verify", "depends_on", "return_result", "window_ref"})
+        metadata = frozenset(
+            {"when", "verify", "depends_on", "return_result", "window_ref"}
+        )
         evidence_fields = frozenset(
             {
                 "ok",
@@ -1119,7 +1121,9 @@ class Desktop:
                     or row["action"] in forbidden
                     or "action" not in row
                 ):
-                    raise PolicyError("Invalid/nested batch step; capture/list separately")
+                    raise PolicyError(
+                        "Invalid/nested batch step; capture/list separately"
+                    )
                 self.validate_options(
                     row["action"],
                     **{
@@ -1143,7 +1147,9 @@ class Desktop:
                     or steps[ref]["action"] != "find_window"
                     or "window_id" in row
                 ):
-                    raise PolicyError("window_ref requires one earlier find_window step")
+                    raise PolicyError(
+                        "window_ref requires one earlier find_window step"
+                    )
             if "when" in row:
                 validate_predicate(row["when"], current=index, previous=True)
             if "verify" in row:
@@ -1196,7 +1202,9 @@ class Desktop:
         from .fastpath import matches
         from .windows_actions import READ_ACTIONS
 
-        metadata = frozenset({"when", "verify", "depends_on", "return_result", "window_ref"})
+        metadata = frozenset(
+            {"when", "verify", "depends_on", "return_result", "window_ref"}
+        )
         deadline = time.monotonic() + 20
         results = []
         observations = {}

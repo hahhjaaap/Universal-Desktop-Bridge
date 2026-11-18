@@ -24,7 +24,11 @@ from ._version import VERSION
 from .cloud_secrets import load_device_token, read_token_file
 from .config import serve_options
 from .launcher import child_environment, command
-from .remote_task_scheduler import DeviceTaskScheduler, ResourceBusyError, resource_for_rpc
+from .remote_task_scheduler import (
+    DeviceTaskScheduler,
+    ResourceBusyError,
+    resource_for_rpc,
+)
 
 CLOUD_USER_AGENT = f"UniversalDesktopBridge/{VERSION}"
 

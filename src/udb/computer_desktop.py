@@ -545,7 +545,7 @@ class Desktop:
         )
         from .uia_worker import PersistentUIA, enabled
 
-        if enabled():
+        if enabled() or getattr(self, "_batch_uia", False):
             if getattr(self, "_uia_worker", None) is None:
                 self._uia_worker = PersistentUIA(exe, helper)
             # A rejected, missing or late response never falls back to legacy
@@ -1064,6 +1064,35 @@ class Desktop:
             ):
                 raise PolicyError("Desktop batch dependencies must be earlier steps")
 
+        return self._execute_batch_local_uia(window_id, steps)
+
+    def _execute_batch_local_uia(self, window_id, steps):
+        """Amortize one PowerShell UIA startup within one prevalidated batch.
+
+        The default one-shot UIA behavior outside batches remains unchanged.
+        This scoped helper is never shared between separate batch requests.
+        Each action still checks interactive access, HWND/PID and UIA policies.
+        No fallback or automatic replay after any uncertain mutation.
+        """
+        from .uia_worker import enabled as persistent_uia_enabled
+
+        scoped = (
+            not persistent_uia_enabled()
+            and any(row["action"] in UIA_ACTIONS for row in steps)
+        )
+        if scoped:
+            self._batch_uia = True
+        try:
+            return self._run_validated_batch(window_id, steps)
+        finally:
+            if scoped:
+                self._batch_uia = False
+                worker = getattr(self, "_uia_worker", None)
+                self._uia_worker = None
+                if worker is not None:
+                    worker.close()
+
+    def _run_validated_batch(self, window_id, steps):
         deadline = time.monotonic() + 20
         results = []
         observations = {}

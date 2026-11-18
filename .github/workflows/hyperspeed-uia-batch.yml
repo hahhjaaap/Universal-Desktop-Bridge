@@ -34,7 +34,7 @@ jobs:
       - name: Validate no-replay scoped reuse unit contracts
         run: python -m pytest -q tests/core/test_batch_local_uia_worker.py
       - name: Compare private helper with one-shot UIA on owned WinForms fixture
-        run: python tools/compare_uia_batch_worker.py --samples 3 --controls 50 --output reports/uia-batch-local-parity.json
+        run: python -m tools.compare_uia_batch_worker --samples 3 --controls 50 --output reports/uia-batch-local-parity.json
       - name: Publish diagnostic timing and parity artifact
         if: always()
         uses: actions/upload-artifact@v7

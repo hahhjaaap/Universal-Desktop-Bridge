@@ -84,7 +84,7 @@ def attach_post_observation(obj, args, result):
         return dict(result, observation_unavailable=True)
     try:
         observation = obj.snapshot(tab) if mode == "snapshot" else obj.read(tab)
-    except (PolicyError, OSError, ValueError, KeyError):
+    except Exception:
         # A click/submit may have succeeded. Fail closed on observation while
         # still returning the original action evidence; never replay that step.
         return dict(result, observation_unavailable=True)

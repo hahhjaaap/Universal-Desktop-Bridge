@@ -16,8 +16,8 @@ jobs:
   cloudflare-and-observer:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '22'
       # No credentials, deployment, external npm dependencies or private device.
@@ -30,8 +30,8 @@ jobs:
         python: ['3.11', '3.12']
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: ${{ matrix.python }}
       - run: python -m pip install ".[office,dev]"
@@ -69,7 +69,7 @@ jobs:
       - name: Upload regression scenario report
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: scenarios-${{ matrix.os }}-${{ matrix.python }}
           path: |
@@ -82,7 +82,7 @@ jobs:
       - name: Upload native pointer preview
         if: runner.os == 'Windows'
         continue-on-error: true
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: native-pointer-${{ matrix.os }}-${{ matrix.python }}
           path: ${{ runner.temp }}/udb-ui/native-pointer.png
@@ -106,7 +106,7 @@ jobs:
           assert required <= relative, f"Source archive misses templates: {required - relative}"
           print("Source archive includes configuration templates and no regression suite")
           PY
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         id: artifact_upload
         continue-on-error: true
         with:
@@ -118,8 +118,8 @@ jobs:
   windows-exe:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.11'
       - run: python -m pip install ".[office,freeze]"
@@ -128,7 +128,7 @@ jobs:
       - name: Restore pinned helper binaries
         id: helper_cache
         continue-on-error: true
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: build-assets/bin
           key: udb-public-helpers-${{ runner.os }}-${{ hashFiles('build-assets/components.json') }}
@@ -136,7 +136,7 @@ jobs:
       - name: Save verified helper binaries
         if: steps.helper_cache.outputs.cache-hit != 'true'
         continue-on-error: true
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: build-assets/bin
           key: udb-public-helpers-${{ runner.os }}-${{ hashFiles('build-assets/components.json') }}
@@ -148,14 +148,14 @@ jobs:
         run: .\dist\udb.exe _worker core --gui-check --gui-qa-dir "${{ runner.temp }}/udb-quick-ui"
       - name: Upload compact GUI previews
         continue-on-error: true
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: compact-gui-previews
           path: ${{ runner.temp }}/udb-quick-ui/*.png
           retention-days: 3
       - name: Exercise managed update and rollback on Windows
         run: python tools/check_installer.py install.ps1 (Get-ChildItem dist/udb-*-windows-standalone.zip | Select-Object -First 1).FullName
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         id: artifact_upload
         continue-on-error: true
         with:

@@ -1,0 +1,37 @@
+name: Pinned runtime dependency audit
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      UDB_DEP_AUDIT_ENFORCE: ${{ vars.UDB_DEP_AUDIT_ENFORCE }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.11"
+      - run: python -m pip install pip-audit==2.10.1
+      - name: Report advisories for pinned runtime packages
+        shell: bash
+        run: |
+          python tools/audit_runtime_dependencies.py --requirements runtime-audit.txt
+          status=0
+          python -m pip_audit --no-deps --disable-pip --format json -r runtime-audit.txt -o runtime-audit.json || status=$?
+          if [[ "$status" -gt 1 ]]; then exit "$status"; fi
+          args=()
+          if [[ "$UDB_DEP_AUDIT_ENFORCE" == true ]]; then args+=(--enforce); fi
+          python tools/audit_runtime_dependencies.py --report runtime-audit.json "${args[@]}"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: pinned-runtime-advisories
+          path: runtime-audit.json
+          if-no-files-found: error
+          retention-days: 7

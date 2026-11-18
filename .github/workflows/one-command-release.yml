@@ -7,14 +7,17 @@ on:
         required: true
         type: boolean
         default: false
-permissions:
-  contents: write
-  actions: read
+permissions: {}
 concurrency:
   group: one-command-windows-release
   cancel-in-progress: false
 jobs:
   release:
+    permissions:
+      contents: write
+      actions: read
+      id-token: write
+      attestations: write
     if: >-
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main' &&
@@ -26,13 +29,13 @@ jobs:
     env:
       UDB_RELEASE_SHA: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ env.UDB_RELEASE_SHA }}
           # No long-lived write-scoped GITHUB_TOKEN in .git/config while pip
           # resolves/builds third-party Python dependencies.
           persist-credentials: false
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.11'
       - name: Gate publication on complete CI for the exact main revision
@@ -92,8 +95,13 @@ jobs:
       - name: Retain public installer acceptance report
         if: always() && steps.gate.outputs.publish == 'true'
         continue-on-error: true
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-installer-acceptance
           path: reports/public-installer.json
           retention-days: 7
+      - name: Attest the exact Windows release ZIP
+        if: steps.gate.outputs.publish == 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-path: dist/udb-windows-x64.zip

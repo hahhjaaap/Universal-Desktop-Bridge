@@ -157,3 +157,62 @@ def test_attended_console_accepts_exact_24_hour_maximum(agent, monkeypatch):
     payload = json.loads((agent.state / access.NAME).read_bytes())
     assert result["enabled"] is True
     assert payload["expires_at"] - payload["issued"] == access.MAX_TTL_SECONDS
+
+
+def test_status_exposes_only_usable_expiry_and_remaining_time(agent, monkeypatch):
+    from udb.computer import status_report
+
+    fake_dpapi(monkeypatch)
+    clock = [int(time.time())]
+    monkeypatch.setattr(access.time, "time", lambda: clock[0])
+    grant = access.enable_local(
+        agent, AttendedTTY("ALLOW COMPUTER\n"), AttendedTTY(), ttl_seconds=120
+    )
+    assert grant["expires_at"] == clock[0] + 120
+    clock[0] += 75
+    row = status_report(agent)
+    assert row["expires_at"] == grant["expires_at"]
+    assert row["remaining_seconds"] == 45
+    for forbidden in ("id", "sid", "issued", "home", "policy", "blob"):
+        assert forbidden not in row
+    assert "synthetic-sid" not in json.dumps(row)
+    clock[0] = grant["expires_at"]
+    expired = status_report(agent)
+    assert expired["enabled"] is False
+    assert "expires_at" not in expired and "remaining_seconds" not in expired
+    assert "expired" in expired["activation"].lower()
+
+
+def test_runtime_message_distinguishes_expiry_from_no_grant(agent, monkeypatch):
+    fake_dpapi(monkeypatch)
+    clock = [int(time.time())]
+    monkeypatch.setattr(access.time, "time", lambda: clock[0])
+    with pytest.raises(PolicyError, match="disabled"):
+        access.require(agent)
+    access.enable_local(
+        agent, AttendedTTY("ALLOW COMPUTER\n"), AttendedTTY(), ttl_seconds=1
+    )
+    clock[0] += 1
+    with pytest.raises(PolicyError, match="expired"):
+        access.require(agent)
+
+
+def test_unexpired_grant_renewal_requires_fresh_attended_consent(agent, monkeypatch):
+    fake_dpapi(monkeypatch)
+    clock = [int(time.time())]
+    monkeypatch.setattr(access.time, "time", lambda: clock[0])
+    access.enable_local(
+        agent, AttendedTTY("ALLOW COMPUTER\n"), AttendedTTY(), ttl_seconds=120
+    )
+    before = (agent.state / access.NAME).read_bytes()
+    clock[0] += 60
+    with pytest.raises(PolicyError, match="attended"):
+        access.enable_local(agent, io.StringIO("ALLOW COMPUTER\n"), AttendedTTY())
+    with pytest.raises(PolicyError, match="renewed"):
+        access.enable_local(agent, AttendedTTY("\n"), AttendedTTY())
+    assert (agent.state / access.NAME).read_bytes() == before
+    result = access.enable_local(
+        agent, AttendedTTY("ALLOW COMPUTER\n"), AttendedTTY(), ttl_seconds=120
+    )
+    assert result["expires_at"] == clock[0] + 120
+    assert access.require(agent) != json.loads(before)["id"]

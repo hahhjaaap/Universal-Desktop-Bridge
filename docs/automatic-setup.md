@@ -243,3 +243,11 @@ Before rollout record, with no secrets:
 Live owner-PC, browser SSO, ChatGPT OAuth, reboot and real two-account acceptance
 remain rollout gates until recorded; simulated checks must not be relabeled as
 those live results.
+
+
+Running `udb --access computer` again in an attended Windows terminal lets the
+owner renew an active grant. A new expiry is issued only after the owner types
+`ALLOW COMPUTER` again. `computer_status` shows the expiry as Unix epoch seconds
+and the number of seconds remaining while the grant is enabled. Expiry uses
+the Windows wall clock. A local administrator who moves the clock backward can
+extend the time before expiry, subject to the existing clock-skew check.

@@ -21,6 +21,11 @@ CAPABILITIES = ("files", "execute", "desktop")
 DEFAULT_TTL_SECONDS = 8 * 60 * 60
 MAX_TTL_SECONDS = 24 * 60 * 60
 MAX_CLOCK_SKEW_SECONDS = 5 * 60
+_EXPIRED = (
+    "Computer access expired. The owner must run udb --access computer locally. "
+    "AI cannot grant permission."
+)
+_ACTIVATE = "Run udb --access computer in your own local terminal; no MCP tool can grant this access."
 
 
 def identity():
@@ -39,14 +44,14 @@ def identity():
         token.Close()
 
 
-def load(agent, unprotect=None, sid=None):
+def _grant_state(agent, unprotect=None, sid=None):
     try:
         path = agent.state / NAME
         reject_links(path)
         with path.open("rb") as stream:
             blob = stream.read(16385)
         if len(blob) > 16384:
-            return None
+            return None, 0
         if unprotect is None:
             import win32crypt
 
@@ -66,9 +71,8 @@ def load(agent, unprotect=None, sid=None):
             or not math.isfinite(expires_at)
             or issued > now + MAX_CLOCK_SKEW_SECONDS
             or not 0 < expires_at - issued <= MAX_TTL_SECONDS
-            or now >= expires_at
         ):
-            return None
+            return None, 0
         if (
             not isinstance(data, dict)
             or data.get("policy") != 1
@@ -79,32 +83,45 @@ def load(agent, unprotect=None, sid=None):
             or len(data["id"]) != 32
             or data.get("acknowledged_unsandboxed") is not True
         ):
-            return None
-        return data
+            return None, 0
+        return data, max(0, math.ceil(expires_at - now))
     except Exception:
         # Never echo DPAPI payloads, OS credential exceptions or identity details.
-        return None
+        return None, 0
+
+
+def load(agent, unprotect=None, sid=None):
+    record, remaining = _grant_state(agent, unprotect, sid)
+    return record if remaining else None
 
 
 def summary(agent):
-    grant = load(agent)
+    record, remaining = _grant_state(agent)
+    enabled = remaining > 0
     return dict(
-        enabled=bool(grant),
-        capabilities=list(CAPABILITIES) if grant else [],
-        scope="current_windows_user" if grant else "disabled",
+        enabled=enabled,
+        capabilities=list(CAPABILITIES) if enabled else [],
+        scope="current_windows_user" if enabled else "disabled",
         elevated_by_udb=False,
         sandboxed=False,
-        activation="Run udb --access computer in your own local terminal; no MCP tool can grant this access.",
+        activation=_EXPIRED if record and not enabled else _ACTIVATE,
+        **(
+            {"expires_at": record["expires_at"], "remaining_seconds": remaining}
+            if enabled
+            else {}
+        ),
     )
 
 
 def require(agent):
-    grant = load(agent)
-    if not grant:
-        raise PolicyError(
-            "Computer access is disabled. The owner must run udb --access computer locally. AI cannot grant permission."
-        )
-    return grant["id"]
+    record, remaining = _grant_state(agent)
+    if remaining:
+        return record["id"]
+    if record:
+        raise PolicyError(_EXPIRED)
+    raise PolicyError(
+        "Computer access is disabled. The owner must run udb --access computer locally. AI cannot grant permission."
+    )
 
 
 def enable_local(
@@ -145,21 +162,25 @@ def enable_local(
         raise PolicyError(
             "Computer access requires an attended Windows terminal, never redirected input or an MCP request."
         )
-    if load(agent):
-        return summary(agent)
+    renewing = load(agent) is not None
     import win32crypt
 
     outgoing.write(
-        "Enable UDB computer access for this Windows account?\n"
+        ("Renew" if renewing else "Enable")
+        + " UDB computer access for this Windows account?\n"
         "This permits file changes, program/shell execution, screenshots and real mouse/keyboard input.\n"
         "Commands are not sandboxed and can access data your account can access, including protected folders.\n"
         "Windows/UAC restrictions remain. Revoke later with: udb revoke-access\n"
         f"This access expires after {ttl_seconds / 3600:g} hours (maximum 24).\n"
-        "Type ALLOW COMPUTER to enable, or press Enter to cancel: "
+        "Type ALLOW COMPUTER to confirm, or press Enter to cancel: "
     )
     outgoing.flush()
     if incoming.readline().strip() != "ALLOW COMPUTER":
-        raise PolicyError("Computer access was not enabled.")
+        raise PolicyError(
+            "Computer access was not renewed."
+            if renewing
+            else "Computer access was not enabled."
+        )
     issued = time.time()
     record = dict(
         policy=1,

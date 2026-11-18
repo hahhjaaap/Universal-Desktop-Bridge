@@ -287,10 +287,11 @@ class LocalProxy:
 
 
 class ParallelLocalProxies:
-    """Ten lazy, independent stdio workers, one outstanding RPC per worker.
+    """Up to ten active RPCs over serial, lazily started stdio proxies.
 
-    A separate proxy per thread is intentional: the legacy stdio proxy is
-    serial, and sharing its response queue would misroute concurrent IDs.
+    Desktop calls share one connection-scoped proxy under the physical desktop
+    lane lock. That process owns window IDs and the warm UIA worker. Other
+    calls use thread-local proxies so concurrent responses cannot cross.
     """
 
     def __init__(self, settings):
@@ -299,6 +300,7 @@ class ParallelLocalProxies:
             max_workers=_MAX_PARALLEL_CALLS, thread_name_prefix="udb-cloud-rpc"
         )
         self.local = threading.local()
+        self.desktop_proxy = None
         self.lock = threading.Lock()
         self.proxies = []
         self.scheduler = DeviceTaskScheduler()
@@ -306,24 +308,29 @@ class ParallelLocalProxies:
         self.closed = False
 
     def _invoke(self, rpc: dict, queued_at_ns=None, resource_kind=None) -> dict:
-        with self.scheduler.execution(resource_kind or resource_for_rpc(rpc)):
-            return self._invoke_unlocked(rpc, queued_at_ns)
+        kind = resource_kind or resource_for_rpc(rpc)
+        with self.scheduler.execution(kind):
+            return self._invoke_unlocked(rpc, queued_at_ns, kind)
 
-    def _invoke_unlocked(self, rpc: dict, queued_at_ns=None) -> dict:
+    def _invoke_unlocked(self, rpc: dict, queued_at_ns, kind) -> dict:
         if queued_at_ns is not None:
             perf.interval("cloud.queue", "queue", queued_at_ns, rpc_id=rpc.get("id"))
         # A queued task must not start a new process after another worker has
         # poisoned the connection, even if it passed submit() earlier.
         if self.failed.is_set():
             raise RuntimeError("Cloud RPC pool is unavailable")
-        proxy = getattr(self.local, "proxy", None)
+        desktop = kind == "desktop"
+        proxy = self.desktop_proxy if desktop else getattr(self.local, "proxy", None)
         if proxy is None:
             try:
                 proxy = LocalProxy(self.settings)
             except OSError:
                 self.failed.set()
                 raise
-            self.local.proxy = proxy
+            if desktop:
+                self.desktop_proxy = proxy
+            else:
+                self.local.proxy = proxy
             with self.lock:
                 self.proxies.append(proxy)
         if self.failed.is_set():

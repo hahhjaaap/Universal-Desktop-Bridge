@@ -1036,7 +1036,9 @@ class Desktop:
             try:
                 if time.monotonic() > deadline:
                     raise PolicyError("Batch time budget exceeded")
-                if any(observations[parent] is None for parent in row.get("depends_on", [])):
+                if any(
+                    observations[parent] is None for parent in row.get("depends_on", [])
+                ):
                     observations[index] = None
                     results.append({"index": index, "skipped": True})
                     continue
@@ -1053,17 +1055,25 @@ class Desktop:
                 args = {key: val for key, val in row.items() if key not in metadata}
                 args.setdefault("window_id", window_id)
                 value = self._dispatch(**args)
-                if "verify" in row and not matches(value, row["verify"]):
-                    result = {"index": index, "verified": False}
-                    if row.get("return_result", True):
-                        result["result"] = value
-                    results.append(result)
-                    return {
-                        "ok": False, "completed_steps": completed,
-                        "failed_index": index, "error": "Desktop batch verification failed",
-                        "outcome_unknown": row["action"] not in READ_ACTIONS,
-                        "results": results, "rollback": False,
-                    }
+                if "verify" in row:
+                    try:
+                        verified = matches(value, row["verify"])
+                    except PolicyError:
+                        verified = False
+                    if not verified:
+                        result = {"index": index, "verified": False}
+                        if row.get("return_result", True):
+                            result["result"] = value
+                        results.append(result)
+                        return {
+                            "ok": False,
+                            "completed_steps": completed,
+                            "failed_index": index,
+                            "error": "Desktop batch verification failed",
+                            "outcome_unknown": row["action"] not in READ_ACTIONS,
+                            "results": results,
+                            "rollback": False,
+                        }
                 observations[index] = value
                 item = {"index": index}
                 if row.get("return_result", True):

@@ -31,8 +31,26 @@ def test_reject_ambiguous_backslash_navigation(url):
 @pytest.mark.parametrize(
     "url",
     [
+        "http://127。0。0。1/",
+        "http://127．0．0．1/",
+        "http://127｡0｡0｡1/",
+        "http://１２７.０.０.１/",
+        "http://127。0。0。1。/",
+        "http://ｌｏｃａｌｈｏｓｔ/",
+        "https://metadata。google。internal/",
+    ],
+)
+def test_reject_unicode_hostname_normalized_to_private_address(url):
+    with pytest.raises(PolicyError):
+        validate_url(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
         "about:blank",
         "https://example.com/path?x=1",
+        "https://bücher.example/angebote",
         "http://8.8.8.8/",
         "https://[2606:4700:4700::1111]/",
     ],

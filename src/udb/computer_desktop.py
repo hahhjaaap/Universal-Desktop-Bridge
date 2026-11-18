@@ -954,9 +954,6 @@ class Desktop:
             raise PolicyError("Batch needs 1..12 steps")
         import inspect
 
-        from .fastpath import matches
-        from .windows_actions import READ_ACTIONS
-
         metadata = frozenset({"when", "verify", "depends_on", "return_result"})
         evidence_fields = frozenset(
             {
@@ -1093,6 +1090,10 @@ class Desktop:
                     worker.close()
 
     def _run_validated_batch(self, window_id, steps):
+        from .fastpath import matches
+        from .windows_actions import READ_ACTIONS
+
+        metadata = frozenset({"when", "verify", "depends_on", "return_result"})
         deadline = time.monotonic() + 20
         results = []
         observations = {}

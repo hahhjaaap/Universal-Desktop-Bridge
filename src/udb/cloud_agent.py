@@ -24,6 +24,7 @@ from ._version import VERSION
 from .cloud_secrets import load_device_token, read_token_file
 from .config import serve_options
 from .launcher import child_environment, command
+from .remote_task_scheduler import DeviceTaskScheduler, resource_for_rpc
 
 CLOUD_USER_AGENT = f"UniversalDesktopBridge/{VERSION}"
 
@@ -296,10 +297,15 @@ class ParallelLocalProxies:
         self.local = threading.local()
         self.lock = threading.Lock()
         self.proxies = []
+        self.scheduler = DeviceTaskScheduler()
         self.failed = threading.Event()
         self.closed = False
 
-    def _invoke(self, rpc: dict, queued_at_ns=None) -> dict:
+    def _invoke(self, rpc: dict, queued_at_ns=None, resource_kind=None) -> dict:
+        with self.scheduler.execution(resource_kind or resource_for_rpc(rpc)):
+            return self._invoke_unlocked(rpc, queued_at_ns)
+
+    def _invoke_unlocked(self, rpc: dict, queued_at_ns=None) -> dict:
         if queued_at_ns is not None:
             perf.interval("cloud.queue", "queue", queued_at_ns, rpc_id=rpc.get("id"))
         # A queued task must not start a new process after another worker has
@@ -329,7 +335,7 @@ class ParallelLocalProxies:
                 self.failed.set()
             raise
 
-    def submit(self, rpc: dict):
+    def submit(self, rpc: dict, resource_kind=None):
         with self.lock:
             # A poisoned local stdio worker may have completed a mutation with
             # an unknown outcome. Fail closed until a fresh device connection.
@@ -337,7 +343,9 @@ class ParallelLocalProxies:
                 raise RuntimeError("Cloud RPC pool is closed")
             if self.failed.is_set():
                 raise RuntimeError("Cloud RPC pool is unavailable")
-            return self.executor.submit(self._invoke, rpc, time.perf_counter_ns())
+            return self.executor.submit(
+                self._invoke, rpc, time.perf_counter_ns(), resource_kind
+            )
 
     def prewarm_one(self, timeout=16):
         """Initialize exactly one local stdio proxy with a read-only ping.
@@ -369,6 +377,7 @@ class ParallelLocalProxies:
             self.closed = True
         # Wait for in-flight calls to finish or reach their own bounded
         # deadlines; never cancel an already dispatched mutation and replay it.
+        self.scheduler.close()
         self.executor.shutdown(wait=True, cancel_futures=True)
         for proxy in self.proxies:
             try:
@@ -484,8 +493,6 @@ def _run_paired(settings) -> int:
                 print("UDB cloud agent: connected.")
                 pool = ParallelLocalProxies(settings)
                 send_lock = threading.Lock()
-                admission_lock = threading.Lock()
-                state = {"inflight": 0, "mutation_active": False}
 
                 def send_reply(relay_id, reply, *, socket=ws, lock=send_lock):
                     # websocket-client serializes sends, but keep the result
@@ -504,12 +511,10 @@ def _run_paired(settings) -> int:
                     future,
                     relay_id,
                     rpc,
-                    read_only,
+                    resource_kind,
                     *,
-                    session=state,
                     local_pool=pool,
                     socket=ws,
-                    lock=admission_lock,
                     reply_sender=send_reply,
                 ):
                     try:
@@ -535,10 +540,7 @@ def _run_paired(settings) -> int:
                         # uncertain. Never reuse this device connection.
                         local_pool.failed.set()
                     finally:
-                        with lock:
-                            session["inflight"] -= 1
-                            if not read_only:
-                                session["mutation_active"] = False
+                        local_pool.scheduler.release(resource_kind)
                     if local_pool.failed.is_set():
                         # At least one stdio outcome may be unknown. Close the
                         # connection so the DO fails other requests closed.
@@ -587,31 +589,20 @@ def _run_paired(settings) -> int:
                         if not valid_remote_rpc(rpc):
                             send_reply(relay_id, rejected(rpc, "ValueError"))
                             continue
-                        read_only = is_parallel_read_rpc(rpc)
-                        with admission_lock:
-                            busy = state["inflight"] >= _MAX_PARALLEL_CALLS or (
-                                state["inflight"] > 0
-                                and (not read_only or state["mutation_active"])
-                            )
-                            if not busy:
-                                state["inflight"] += 1
-                                if not read_only:
-                                    state["mutation_active"] = True
+                        resource_kind = resource_for_rpc(rpc)
+                        busy = not pool.scheduler.admit(resource_kind)
                         if busy:
                             send_reply(relay_id, rejected(rpc, "DeviceBusy"))
                             continue
                         try:
-                            future = pool.submit(rpc)
+                            future = pool.submit(rpc, resource_kind)
                         except RuntimeError:
-                            with admission_lock:
-                                state["inflight"] -= 1
-                                if not read_only:
-                                    state["mutation_active"] = False
+                            pool.scheduler.release(resource_kind)
                             send_reply(relay_id, rejected(rpc, "RuntimeError"))
                             break
                         future.add_done_callback(
-                            lambda f, rid=relay_id, request_rpc=rpc, ro=read_only, finish_call=finished: (
-                                finish_call(f, rid, request_rpc, ro)
+                            lambda f, rid=relay_id, request_rpc=rpc, lane=resource_kind, finish_call=finished: (
+                                finish_call(f, rid, request_rpc, lane)
                             )
                         )
                 finally:

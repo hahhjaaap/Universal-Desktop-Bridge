@@ -35,7 +35,7 @@ def test_legacy_batch_is_backward_compatible():
 def test_one_call_condition_and_dependencies_skip_mutation():
     calls = []
 
-    def dispatch(action, window_id=""):
+    def dispatch(action, window_id="", name=""):
         calls.append(action)
         return {"state": "user_active"}
 

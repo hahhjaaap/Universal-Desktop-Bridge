@@ -409,7 +409,15 @@ def serve(rt: Runtime) -> None:
 
 
 def selftest(root: str) -> int:
-    rt = Runtime(root, enable_terminal=True)
+    from tempfile import TemporaryDirectory
+
+    parent = ScopedFiles(root).root
+    with TemporaryDirectory(prefix="udb-selftest-", dir=parent) as workspace:
+        return _selftest_workspace(workspace)
+
+
+def _selftest_workspace(workspace: str) -> int:
+    rt = Runtime(workspace, enable_terminal=True)
     filename = f".udb-companion-test-{uuid.uuid4().hex[:8]}.txt"
     try:
         create = rt.files.write(filename, "line one\n", "NEW")
@@ -461,8 +469,7 @@ def selftest(root: str) -> int:
         print(f"ERROR | Self-test: {type(e).__name__}: {e}", flush=True)
         return 1
     finally:
-        p = rt.files.path(filename, allow_missing=True)
-        p.unlink(missing_ok=True)
+        rt.close()
 
 
 def main(argv=None) -> int:

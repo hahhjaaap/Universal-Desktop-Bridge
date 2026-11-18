@@ -1,6 +1,6 @@
 # UDB architecture and module ownership
 
-> **Version baseline (2026-11-13):** Source targets **UDB 0.12.0**; the published Windows v0.12.0 release is immutable and may use an earlier commit. The installed EXE, Cloudflare deployment and GitHub source are separate. See [version matrix](docs/current-version.md).
+> **Source baseline:** UDB 0.13.0. Verify the installed Windows build and deployed Worker independently. See [version matrix](docs/current-version.md).
 
 UDB has **one canonical Python implementation** under `src/udb/`.
 The source checkout, installed wheel and frozen Windows executable use the
@@ -8,7 +8,7 @@ same code. The root-level `bridge.py` and `udb_*.py` files are
 **compatibility launchers**, not independent backends. Do not duplicate logic
 inside them.
 
-## Request path — UDB 0.12.0
+## Request path
 
 ```text
 ChatGPT / MCP client
@@ -34,7 +34,7 @@ Cloudflare Worker -> authenticated device WebSocket -> Windows Cloud Agent
 ```
 
 The local stdio proxy/workers are internal to the Cloud Agent; public local
-stdio MCP registration is not the supported v0.12.0 client transport.
+stdio MCP registration is not the supported remote client transport.
 `companion.extensions` is a Python **tool registry**, not a browser extension.
 Deployed Cloudflare Worker, OAuth, grants and ChatGPT discovery require
 separate verification.
@@ -42,24 +42,25 @@ separate verification.
 `udb.catalog` translates/consolidates public tool schemas and `udb.registry`
 publishes them. `tool_families.json` is shared with the Cloudflare gateway for
 action-to-original-operation mapping. Family routing precedes the existing
-permission/resource checks, and discovery is narrowed to each grant's allowed
-actions; see [tool families](docs/tool-families.md). The companion's `dispatch.validate_catalog()` rejects schema
+permission/resource checks. The Cloudflare Fleet catalog has 41 public tools.
+Legacy backend aliases remain available where explicitly permitted. See [tool families](docs/tool-families.md). The companion's `dispatch.validate_catalog()` rejects schema
 names that lack a handler, unexpected handlers and duplicate schemas.
 `udb.proxy` owns backend routing, concurrency and response normalization.
 Keep this separate from file permissions and owner approvals.
 
 ## Connection identity and Multi-PC status
 
-Attended `udb setup` pairs each Windows device with a distinct Cloudflare
-MCP endpoint; the Cloud Agent opens an outbound WebSocket to the relay.
-The verified OAuth subject and device grants still gate every remote tool.
-The local proxy dispatches only to that device's Core and Companion workers.
-Multiple computers require separate pairing and grants; a shared account
-cannot silently redirect one machine's commands to another.
+Attended `udb setup` pairs each Windows device with Cloudflare. A Cloud Agent
+opens an authenticated outbound WebSocket per device. The account MCP route
+requires an explicit `device_id` for each machine operation and validates the
+actor and live device permission. Separately, the optional local Fleet router
+accepts `fleet_call(computer_id, tool, arguments)` and checks that route's
+configured peer identity and tool policy. Neither route silently changes
+the target machine after a failure.
 
-The Tailscale fleet prototype and old OpenAI Tunnel experiments are historical
-research paths, not supported UDB 0.12.0 remote setup or a fallback for a
-failed authorization.
+The public setup uses Cloudflare. PR #145 removed the Tunnel/public HTTP
+listener workflow. The former Tailscale and OpenAI Tunnel setups are historical.
+
 
 ## Core policy and approval queues
 
@@ -76,7 +77,7 @@ failed authorization.
   preview. Large/truncated diffs explicitly instruct local full-file review.
   Do not silently truncate approval context or bypass owner authorization.
 - File listing filters unsupported binary extensions before expensive per-file
-  policy checks; every visible entry still passes `Agent.path`.
+  policy checks. Visible entries pass the same protected-path validation.
 
 ## Desktop and isolation
 

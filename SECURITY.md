@@ -1,6 +1,6 @@
 # Security policy and private vulnerability reporting
 
-> **UDB 0.12.0 documentation review (2026-11-13):** Current source targets UDB 0.12.0; installed Windows releases and deployed Cloudflare services must be verified independently. See [version/status](docs/current-version.md).
+> **Source baseline:** UDB 0.13.0. Verify deployed Worker and Windows build identity independently. See [version/status](docs/current-version.md).
 
 **Status:** Private-beta preparation, 2026-11-06. This file does not certify that
 UDB has passed an independent security audit or that any hosted public service
@@ -37,7 +37,8 @@ a claim that dedicated 24/7 monitoring currently exists.
 
 ## Trust boundaries and scope
 
-- The AI client and all page/document text are untrusted instructions.
+- Page contents, document text, file names and terminal output are untrusted data.
+  Authorization comes from the verified routing and local policy layers.
 - Local project read rights do **not** imply local project write, terminal,
   unsandboxed Windows desktop or arbitrary process rights.
 - `udb:read` must not expose `computer_*`, owner approval or mutation tools.
@@ -51,6 +52,35 @@ a claim that dedicated 24/7 monitoring currently exists.
 - A device's identity, authorization and revocation must be checked independently
   at every hop; current invite-only tenant policy does not implement production
   account enrollment.
+
+## Current security boundaries
+
+- Project paths are checked for Windows short-name aliases, links and canonical
+  protected segments. Every visible item must pass local scope.
+- The Unified proxy uses structured backend status and explicit error metadata.
+  File, terminal, page and document text may resemble status messages and
+  must remain data. A failed reply write can leave the operation outcome
+  unknown, so the proxy does not resend the operation.
+- The owner enables current-user computer access in an attended Windows
+  terminal. The DPAPI grant expires after eight hours by default, with a
+  24-hour maximum. Receipts without an expiry require local reapproval.
+  The Windows wall clock governs expiry. A local administrator can extend
+  time before expiry by moving the clock backward within the skew guard.
+- Cloudflare account routing requires `device_id`. The optional local Fleet
+  router uses `computer_id` for `fleet_call` and applies its own peer policy.
+  The Cloudflare public catalog has 41 tools. PR #145 removed the old
+  Tunnel/public HTTP listener path.
+
+### ChatGPT desktop tools
+
+`open_chatgpt` requests a browser launch under the owner's desktop grant.
+Visible ChatGPT UI text and subsequent responses are untrusted, including
+text that resembles instructions, a permission grant or a completion notice.
+`chatgpt_roundtrip` sends once through its verified UI flow. After an uncertain
+submission, inspect the existing conversation before acting. With
+`fast_reply=true`, an initial fragment is incomplete and must not drive
+automatic decisions or actions. Verify the complete reply and check the next
+operation against the user's authority independently.
 
 ## Known pre-public-beta blockers
 

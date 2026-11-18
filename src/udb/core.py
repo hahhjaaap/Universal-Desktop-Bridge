@@ -459,7 +459,7 @@ class Agent(AutonomyMixin):
             "scan_truncated": scan_truncated,
         }
 
-    def propose(self, kind, payload):
+    def propose(self, kind, payload, *, owner_initiated=False):
         data = canonical(payload)
         rid = uuid.uuid4().hex
         h = digest(data.encode())
@@ -472,14 +472,15 @@ class Agent(AutonomyMixin):
             if automatic
             else "pending"
         )
+        created = time.time()
         with self.connect() as c:
-            if (
-                c.execute(
-                    "SELECT count(*) FROM requests WHERE status IN ('pending','queued_sandbox','queued_media') AND created>?",
-                    (time.time() - 600,),
-                ).fetchone()[0]
-                >= 30
-            ):
+            # Reserve five slots for the attended manager. Serialize counting
+            # and insertion so concurrent remote proposals cannot consume them.
+            c.execute("BEGIN IMMEDIATE")
+            if c.execute(
+                "SELECT count(*) FROM requests WHERE status IN ('pending','queued_sandbox','queued_media') AND created>?",
+                (created - 600,),
+            ).fetchone()[0] >= (30 if owner_initiated else 25):
                 raise PolicyError("Too many pending approvals")
             c.execute(
                 "INSERT INTO requests VALUES (?,?,?,?,?,?,?)",
@@ -488,7 +489,7 @@ class Agent(AutonomyMixin):
                     kind,
                     data,
                     h,
-                    time.time(),
+                    created,
                     initial,
                     canonical({"authorization": automatic}) if automatic else "{}",
                 ),
@@ -608,10 +609,14 @@ class Agent(AutonomyMixin):
             },
         )
 
-    def propose_desktop(self, project, task, duration_seconds=600):
+    def propose_desktop(
+        self, project, task, duration_seconds=600, *, owner_initiated=False
+    ):
         from .desktop_vm import propose
 
-        return propose(self, project, task, duration_seconds)
+        return propose(
+            self, project, task, duration_seconds, owner_initiated=owner_initiated
+        )
 
     def pending_local(self):
         with self.connect() as c:

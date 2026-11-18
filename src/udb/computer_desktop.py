@@ -15,6 +15,7 @@ import time
 import uuid
 from ctypes import wintypes as w
 from pathlib import Path
+from typing import NamedTuple
 
 from . import hyperspeed_perf as perf
 from .computer_capture import encode_bgrx_png
@@ -23,6 +24,14 @@ from .desktop_guest import BitmapHeader, InputEvent, KeyInput, MouseInput
 from .windows_actions import DESKTOP_ACTIONS, UIA_ACTIONS
 
 _UIA_HELPER = Path(__file__).with_name("computer_uia.ps1")
+
+
+class WindowObservation(NamedTuple):
+    hwnd: int
+    pid: int
+    class_name: str
+    expires_at: float
+    expected_title: str = ""
 
 
 class Desktop:
@@ -117,7 +126,7 @@ class Desktop:
             pid = self.process.GetWindowThreadProcessId(hwnd)[1]
             kind = self.gui.GetClassName(hwnd)
             wid = uuid.uuid4().hex
-            observed[wid] = (hwnd, pid, kind, time.monotonic() + 60)
+            observed[wid] = WindowObservation(hwnd, pid, kind, time.monotonic() + 60)
             rows.append(
                 dict(
                     window_id=wid,
@@ -145,20 +154,11 @@ class Desktop:
         This is a read-only in-batch refresh of an expiring window_id.
         Refuse title-only lookups, ambiguous matches, cloaked/shell windows,
         and any window whose current process or class differs from the plan.
-        Each later action still independently revalidates its HWND and PID.
+        Each later action revalidates HWND, PID, class and exact title.
         """
-        if (
-            type(pid) is not int
-            or pid <= 0
-            or pid > 0xFFFFFFFF
-            or type(class_name) is not str
-            or not 1 <= len(class_name) <= 128
-            or type(title) is not str
-            or not 1 <= len(title) <= 300
-        ):
-            raise PolicyError(
-                "find_window requires exact observed pid/class_name/title"
-            )
+        self._validate_window_locator(
+            {"pid": pid, "class_name": class_name, "title": title}
+        )
         self.interactive()
         matches = []
 
@@ -188,13 +188,17 @@ class Desktop:
         # long-running agent refreshes windows without calling list().
         current = time.monotonic()
         self.windows = {
-            key: value for key, value in self.windows.items() if value[3] > current
+            key: value
+            for key, value in self.windows.items()
+            if value.expires_at > current
         }
         if len(self.windows) >= 64:
             # Refuse to evict potentially live window IDs mid-workflow.
             raise PolicyError("Window observation capacity; list windows again")
         wid = uuid.uuid4().hex
-        self.windows[wid] = (hwnd, pid, class_name, current + 60)
+        self.windows[wid] = WindowObservation(
+            hwnd, pid, class_name, current + 60, title
+        )
         return {
             "found": True,
             "window_id": wid,
@@ -524,13 +528,14 @@ class Desktop:
         row = self.windows.get(window_id)
         if not row:
             raise PolicyError("Observe windows with computer_desktop list first")
-        hwnd, pid, kind, until = row
+        hwnd, pid, kind, until, expected_title = row
         if (
             time.monotonic() > until
             or not self.gui.IsWindow(hwnd)
             or not self.gui.IsWindowVisible(hwnd)
             or self.process.GetWindowThreadProcessId(hwnd)[1] != pid
             or self.gui.GetClassName(hwnd) != kind
+            or (expected_title and self.gui.GetWindowText(hwnd) != expected_title)
             or self.is_cloaked(hwnd)
         ):
             raise PolicyError("Window observation expired or changed; list again")

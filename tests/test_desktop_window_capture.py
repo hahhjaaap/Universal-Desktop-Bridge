@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from udb.computer_desktop import Desktop
+from udb.computer_desktop import Desktop, WindowObservation
 from udb.core import PolicyError
 
 
@@ -85,6 +85,8 @@ def test_cloaked_shell_is_not_listed_but_real_minimized_frame_is_identified():
 
 def test_window_becoming_cloaked_invalidates_an_existing_observation():
     desktop = fixture_desktop(cloaked=(10,))
-    desktop.windows["observed"] = (10, 123, "fixture", time.monotonic() + 60)
+    desktop.windows["observed"] = WindowObservation(
+        10, 123, "fixture", time.monotonic() + 60
+    )
     with pytest.raises(PolicyError, match="expired or changed"):
         desktop.resolve("observed", focus=False)

@@ -173,10 +173,33 @@ def test_identity_change_after_observation_is_rejected_before_action(desktop):
         desktop.resolve(result["window_id"], focus=False)
 
 
+def test_locator_refuses_title_change_before_its_window_is_used(desktop):
+    def dispatch(action, window_id=""):
+        if action == "control_status":
+            desktop.gui.rows[111]["title"] = "Different document"
+            return {"state": "available"}
+        desktop.resolve(window_id)
+        pytest.fail("renamed window must not reach input")
+
+    desktop._dispatch = dispatch
+    result = desktop.batch(
+        "",
+        [
+            locator(101, "App1Class", "App One"),
+            {"action": "control_status"},
+            {"action": "focus", "window_ref": 0},
+        ],
+    )
+    assert result["failed_index"] == 2
+    assert "expired or changed" in result["error"]
+
+
 def test_expired_identity_is_rejected_and_safe_refresh_works(desktop):
     first = desktop.find_window(101, "App1Class", "App One")
-    hwnd, pid, cls, _ = desktop.windows[first["window_id"]]
-    desktop.windows[first["window_id"]] = (hwnd, pid, cls, time.monotonic() - 1)
+    observed = desktop.windows[first["window_id"]]
+    desktop.windows[first["window_id"]] = observed._replace(
+        expires_at=time.monotonic() - 1
+    )
     with pytest.raises(PolicyError, match="expired or changed"):
         desktop.resolve(first["window_id"], focus=False)
     second = desktop.find_window(101, "App1Class", "App One")

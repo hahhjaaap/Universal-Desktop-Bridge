@@ -53,7 +53,9 @@ def compare(samples: int = 3, controls: int = 50) -> dict:
                     if reuse != one_shot:
                         raise AssertionError("Batch-local UIA worker snapshot mismatch")
                     if len(reuse.get("elements", [])) < 2:
-                        raise AssertionError("Synthetic fixture controls were not observed")
+                        raise AssertionError(
+                            "Synthetic fixture controls were not observed"
+                        )
                     if "UDB_PRIVATE_CANARY_MUST_NOT_APPEAR" in json.dumps(reuse):
                         raise AssertionError("UIA snapshot leaked password sentinel")
             finally:

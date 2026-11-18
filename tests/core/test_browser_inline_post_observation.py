@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 
 from udb.browser_actions import attach_post_observation, validate_post_observation
@@ -128,7 +126,7 @@ def test_legacy_default_does_not_issue_any_browser_reads():
     assert browser.calls == []
 
 
-def test_open_fuses_initial_snapshot_without_second_session(monkeypatch):
+def test_open_fuses_initial_snapshot_without_second_session():
     browser = FakeBrowser()
     sid = "c" * 32
     service = HostService.__new__(HostService)

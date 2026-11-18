@@ -44,3 +44,35 @@ The implementation includes offline deterministic unit tests for legacy compatib
 Observed current UDB 0.13.0 communication RTT from ChatGPT on 2026-11-18: four read-only calls were approximately 4.94, 5.94, 4.84 and 5.31 seconds; one read-only batch of eight `control_status` steps took 5.44 seconds. Those are wall-clock client-to-tool measurements, not native Windows execution time or a controlled p95 benchmark. The installed client remains unchanged until a separately authorized update/release.
 
 Before merging/releasing, run the existing Windows/Linux CI matrix and a consented UIA desktop test, including revoked/paused access, active user interference, invalid/stale window IDs, success verification and uncertain mutations.
+
+## Cloud Agent resource-aware task scheduler (experimental)
+
+The device-local Cloud Agent already has a 10-worker RPC pool and an existing
+shared 10-slot limit for supervised background jobs. The new
+`remote_task_scheduler.py` replaces *per-WebSocket blanket mutation exclusion*
+with conservative resource admission:
+
+| Request | Admission lane | Concurrent with |
+| --- | --- | --- |
+| Exact known read-only tools | `read` | Other reads, desktop or owned browser |
+| `computer_desktop` (including batch) and `open_chatgpt` | `desktop` | Reads and owned headless browser; **one desktop operation at a time** |
+| `host_browser` (including batch/fastpath) and owned-host operations | `owned_browser` | Reads and physical desktop; **one owned-browser operation at a time** |
+| `computer_execute`, writes and unknown mutations | `exclusive` | Nothing else until the RPC returns; supervised processes can remain running afterwards |
+
+At most 10 RPCs are admitted per device WebSocket, including up to nine
+waiters. Within each GUI lane, admitted requests queue FIFO **in memory** for
+at most six seconds before returning a bounded `ResourceBusy` failure
+without starting that RPC. The local bridge still enforces its original owner
+grants, current-user-only operation, UIA selectors, desktop pause/yield checks,
+and no-replay-on-unknown rules. This scheduler does not authorize arbitrary
+programs, bypass local read/write policy, or install a background service.
+
+The 10-slot RPC pool is distinct from the existing shared 10-slot process/task
+quota: one process may continue to run after its launch RPC finishes. No
+claim is made that 10 physical desktop batches can run simultaneously or that
+each end-to-end workflow completes within 5–6 seconds.
+
+New offline tests verify bounded admission, separate desktop/browser lanes,
+FIFO ordering, shutdown, timeout before dispatch and exclusive unknown calls.
+This change affects **only the source branch** until release and owner-approved
+upgrade, not the user's current Windows executable or Cloudflare deployment.

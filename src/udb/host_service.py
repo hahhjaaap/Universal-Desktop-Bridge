@@ -314,7 +314,9 @@ class HostService:
             raise PolicyError(
                 "The owner has browser control; return it to background in the local UDB manager"
             )
-        result = obj.new(url)
+        from .browser_actions import attach_post_observation
+
+        result = attach_post_observation(obj, args, obj.new(url))
         return dict(
             result,
             session_id=sid,
@@ -374,6 +376,10 @@ class HostService:
             finally:
                 self._sync_handoff(obj)
             return dict(result, session_id=sid)
+        if op == "browser":
+            from .browser_actions import validate_post_observation
+
+            validate_post_observation(args)
         opening_browser = op == "browser" and args.get("action") == "open"
         if op == "browser" and args.get("action") in {"capture_stop", "capture_status"}:
             self._session(args.get("session_id"), kind="browser")
@@ -425,7 +431,9 @@ class HostService:
             result = dispatch_browser(obj, args)
             if action == "close_tab" and getattr(self, "captures", None):
                 self.captures.stop(args.get("session_id"), args.get("tab_id", ""))
-            return result
+            from .browser_actions import attach_post_observation
+
+            return attach_post_observation(obj, args, result)
         if op == "workspace" and row["kind"] == "workspace":
             if action == "read":
                 return obj.read()

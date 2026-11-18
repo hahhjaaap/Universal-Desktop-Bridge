@@ -68,9 +68,21 @@ def test_service_rejects_invalid_budget_before_capacity_or_browser(monkeypatch):
         lambda *args: calls.append("capacity"),
     )
     for bad in (
-        {"action": "click", "observe_after": "none", "click_navigation_observe_ms": 100},
-        {"action": "navigate", "observe_after": "read", "click_navigation_observe_ms": 100},
-        {"action": "click", "observe_after": "snapshot", "click_navigation_observe_ms": True},
+        {
+            "action": "click",
+            "observe_after": "none",
+            "click_navigation_observe_ms": 100,
+        },
+        {
+            "action": "navigate",
+            "observe_after": "read",
+            "click_navigation_observe_ms": 100,
+        },
+        {
+            "action": "click",
+            "observe_after": "snapshot",
+            "click_navigation_observe_ms": True,
+        },
     ):
         with pytest.raises(PolicyError):
             service.dispatch("browser", bad)
@@ -143,9 +155,7 @@ def test_no_previous_url_marks_short_click_unverified(monkeypatch):
             "time",
             SimpleNamespace(monotonic=clock.monotonic, sleep=clock.sleep),
         )
-        result = browser._wait_for_click_navigation(
-            "owned-tab", None, observe_ms=100
-        )
+        result = browser._wait_for_click_navigation("owned-tab", None, observe_ms=100)
     assert result == {
         "navigation_completed": False,
         "navigation_observation_limited": True,
@@ -171,9 +181,7 @@ def test_click_budget_passed_to_browser_only_when_explicitly_shortened():
     }
     browser_actions.dispatch_browser(obj, a)
     assert arguments[-1][1] == {}
-    browser_actions.dispatch_browser(
-        obj, dict(a, click_navigation_observe_ms=100)
-    )
+    browser_actions.dispatch_browser(obj, dict(a, click_navigation_observe_ms=100))
     assert arguments[-1][1] == {"observe_navigation_ms": 100}
 
 

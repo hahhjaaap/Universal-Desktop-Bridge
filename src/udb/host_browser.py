@@ -522,9 +522,14 @@ class Browser(BrowserInputMixin):
         previous_loader_id=None,
         previous_frame_id=None,
     ):
-        if not isinstance(previous_url, str) or not previous_url:
-            return dict(navigation_completed=False)
         observation_ms = max(100, min(1000, int(observe_ms)))
+        if not isinstance(previous_url, str) or not previous_url:
+            result = dict(navigation_completed=False)
+            if observation_ms < 1000:
+                # Without a valid pre-click URL, no comparison was possible.
+                result["navigation_observation_limited"] = True
+                result["navigation_observed_ms"] = 0
+            return result
         deadline = time.monotonic() + observation_ms / 1000
         transitioned = False
         next_loader_id = None

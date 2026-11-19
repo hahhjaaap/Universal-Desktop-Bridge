@@ -7,7 +7,7 @@ import { ownerToolGrant } from "./owner-tools.js";
 import { companionToolGrant } from "./companion-tools.js";
 import { READ_TOOLS } from "./read-tools.js";
 import { ENROLLED_CATALOG } from "./local-permissions.js";
-import { toolGrantScope } from "./tool-grants.js";
+import { emailSubject, toolGrantScope } from "./tool-grants.js";
 
 const MAX_ASSERTION = 8192;
 const MAX_JWKS = 16384;
@@ -96,11 +96,6 @@ async function getKeys(url, fetchImpl, refresh = false) {
   }
 }
 
-function emailSubject(subject) {
-  return typeof subject === "string" && subject.length >= 3 &&
-    subject.length <= 200 && subject.includes("@");
-}
-
 // This function does not trust a client-supplied header. The header must be a
 // valid RS256 JWT signed by the pinned Cloudflare Access team signing key.
 export async function verifiedAccessIdentity(request, env, fetchImpl = fetch) {
@@ -127,6 +122,8 @@ export async function verifiedAccessIdentity(request, env, fetchImpl = fetch) {
       (payload.iat !== undefined &&
         (!Number.isSafeInteger(payload.iat) || payload.iat > now + 60)))
     throw new AuthError("access_assertion_time");
+  // Retain the existing email claim requirement for both principal modes.
+  // Issuer-sub uses the UUID as its principal and email for consistency checks.
   if (!emailSubject(payload.email)) throw new AuthError("access_assertion_identity");
   const url = config.team + "/cdn-cgi/access/certs";
   const fromCache = cachedJwks.url === url && Date.now() < cachedJwks.until;
@@ -164,17 +161,13 @@ export async function verifyAccessAssertion(request, env, fetchImpl = fetch) {
   return identity.email;
 }
 
-export async function authorizeAccess(access, env, deviceId, request = null,
-    fetchImpl = fetch, enrolledGrant = null, trustedFleetOwner = null) {
-  const cfg = accessConfig(env);
-  if (!cfg) throw new AuthError();
-  const mode = env?.UDB_ACCESS_PRINCIPAL_MODE === undefined
-    ? "email" : env.UDB_ACCESS_PRINCIPAL_MODE;
-  // An unknown identity mode must never silently fall back to email grants.
-  if (mode !== "email" && mode !== "issuer-sub") throw new AuthError();
-  // A conflicting runtime app audience cannot be bypassed by a signed JWT.
-  if (access && access.aud !== cfg.aud) throw new AuthError("access_audience_mismatch");
+function emailConflicts(observed, signed) {
+  // A supplied, nonempty email constrains the signed identity even when the
+  // runtime value is malformed. Access may omit runtime email in issuer-sub.
+  return typeof observed === "string" && observed !== "" && observed !== signed;
+}
 
+async function resolveIdentity(access, env, request, fetchImpl, cfg, mode, trustedFleetOwner) {
   let subject = null;
   let runtimeIdentity = null;
   if (mode === "issuer-sub") {
@@ -195,7 +188,7 @@ export async function authorizeAccess(access, env, deviceId, request = null,
         if (request?.headers?.get("Cf-Access-Jwt-Assertion")) {
           const signed = await verifiedAccessIdentity(request, env, fetchImpl);
           if (signed.sub?.toLowerCase() !== verified.sub ||
-              (emailSubject(verified.email) && signed.email !== verified.email))
+              emailConflicts(verified.email, signed.email))
             throw new AuthError();
         }
       } else {
@@ -220,7 +213,7 @@ export async function authorizeAccess(access, env, deviceId, request = null,
         try { observed = await access.getIdentity(); }
         catch { /* Optional runtime identity unavailable; signed JWT required. */ }
         if (observed) {
-          if ((emailSubject(observed.email) && observed.email !== identity.email) ||
+          if (emailConflicts(observed.email, identity.email) ||
               (typeof observed.user_uuid === "string" &&
                 observed.user_uuid.toLowerCase() !== identity.sub.toLowerCase()))
             throw new AuthError();
@@ -248,6 +241,11 @@ export async function authorizeAccess(access, env, deviceId, request = null,
       subject = await verifyAccessAssertion(request, env, fetchImpl);
     }
   }
+  return { subject, runtimeIdentity };
+}
+
+async function resolveReadGrants(env, deviceId, request, fetchImpl, enrolledGrant,
+    cfg, mode, subject, runtimeIdentity, trustedFleetOwner) {
   let readTools = deviceGrant(env, deviceId, subject);
   let enrolledStatusOnly = false;
   let stagingFixtureProject;
@@ -285,6 +283,11 @@ export async function authorizeAccess(access, env, deviceId, request = null,
     } catch { readTools = []; }
   }
   if (readTools.length === 0) throw new AuthError("device_grant_missing");
+  return { readTools, enrolledStatusOnly, stagingFixtureProject };
+}
+
+function resolveOwnerGrants(env, deviceId, subject, mode, trustedFleetOwner, reads) {
+  const { readTools, enrolledStatusOnly, stagingFixtureProject } = reads;
   const { names: ownerTools, actions } = toolGrantScope(enrolledStatusOnly ? [] : [
     ...ownerToolGrant(env, deviceId, subject),
     ...companionToolGrant(env, deviceId, subject),
@@ -301,4 +304,22 @@ export async function authorizeAccess(access, env, deviceId, request = null,
     ? { subject, allowTools: [...readTools, ...ownerTools], ownerTools, ...readScope,
       ...(actions.size ? { actionGrants: actions } : {}) }
     : { subject, allowTools: readTools, ...readScope };
+}
+
+export async function authorizeAccess(access, env, deviceId, request = null,
+    fetchImpl = fetch, enrolledGrant = null, trustedFleetOwner = null) {
+  const cfg = accessConfig(env);
+  if (!cfg) throw new AuthError();
+  const mode = env?.UDB_ACCESS_PRINCIPAL_MODE === undefined
+    ? "email" : env.UDB_ACCESS_PRINCIPAL_MODE;
+  // An unknown identity mode must never silently fall back to email grants.
+  if (mode !== "email" && mode !== "issuer-sub") throw new AuthError();
+  // A conflicting runtime app audience cannot be bypassed by a signed JWT.
+  if (access && access.aud !== cfg.aud) throw new AuthError("access_audience_mismatch");
+
+  const { subject, runtimeIdentity } = await resolveIdentity(
+    access, env, request, fetchImpl, cfg, mode, trustedFleetOwner);
+  const reads = await resolveReadGrants(env, deviceId, request, fetchImpl, enrolledGrant,
+    cfg, mode, subject, runtimeIdentity, trustedFleetOwner);
+  return resolveOwnerGrants(env, deviceId, subject, mode, trustedFleetOwner, reads);
 }

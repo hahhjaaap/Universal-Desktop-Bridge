@@ -1,12 +1,13 @@
 """Preflight, partial workflows and takeover cleanup without real user input."""
 
 import sys
+import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
-from udb.computer_desktop import Desktop
+from udb.computer_desktop import Desktop, WindowObservation
 from udb.core import PolicyError
 
 
@@ -89,7 +90,19 @@ def test_drag_releases_injected_button_when_user_moves_pointer():
     desktop = Desktop.__new__(Desktop)
     desktop.checked_point = lambda *a: None
     desktop.interactive = lambda: None
-    desktop.gui = SimpleNamespace(GetForegroundWindow=lambda: 10)
+    desktop.guard = lambda: True
+    desktop.control = None
+    desktop.windows = {
+        "owned": WindowObservation(10, 100, "fixture", time.monotonic() + 30)
+    }
+    desktop.process = SimpleNamespace(GetWindowThreadProcessId=lambda _: (1, 100))
+    desktop.is_cloaked = lambda _: False
+    desktop.gui = SimpleNamespace(
+        GetForegroundWindow=lambda: 10,
+        IsWindow=lambda _: True,
+        IsWindowVisible=lambda _: True,
+        GetClassName=lambda _: "fixture",
+    )
     flags = []
     points = []
     reads = iter([(0, 0), (100, 100)])

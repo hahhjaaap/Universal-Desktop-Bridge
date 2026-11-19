@@ -36,6 +36,14 @@ class DesktopFrameRejected(PolicyError):
     """Visual verification refused the action before physical input."""
 
 
+class PartialInputAccepted(PolicyError):
+    """The OS accepted a nonzero prefix of an input batch."""
+
+    def __init__(self, message, accepted):
+        super().__init__(message)
+        self.accepted = accepted
+
+
 class WindowObservation(NamedTuple):
     hwnd: int
     pid: int
@@ -561,24 +569,58 @@ class Desktop:
             raise PolicyError("Target is not foreground; no input was sent")
         return hwnd
 
-    def send(self, hwnd, events):
+    def _check_physical_target(self, hwnd):
+        """Verify owner access, observed PID, and foreground before physical input."""
         control = getattr(self, "control", None)
         if control:
             control.check()
         if self.guard is not None and not self.guard():
             raise PolicyError("Computer access was revoked; input stopped")
+        # HWNDs can be reused after resolve(); check immediately before cursor
+        # movement as well as each SendInput call.
+        observations = [
+            row for row in getattr(self, "windows", {}).values() if row.hwnd == hwnd
+        ]
+        if not observations:
+            raise PolicyError("Window observation missing; list before input")
+        expected = observations[0]
+        if (
+            not self.gui.IsWindow(hwnd)
+            or not self.gui.IsWindowVisible(hwnd)
+            or self.process.GetWindowThreadProcessId(hwnd)[1] != expected.pid
+            or self.gui.GetClassName(hwnd) != expected.class_name
+            or self.is_cloaked(hwnd)
+            or any(
+                time.monotonic() > row.expires_at
+                or row.pid != expected.pid
+                or row.class_name != expected.class_name
+                or (
+                    row.expected_title
+                    and self.gui.GetWindowText(hwnd) != row.expected_title
+                )
+                for row in observations
+            )
+        ):
+            raise PolicyError("Window identity changed before input; list again")
         if self.gui.GetForegroundWindow() != hwnd:
             raise PolicyError(
                 "Foreground changed; input stopped. Inspect before retrying"
             )
-        values = (InputEvent * len(events))(*events)
-        if self.u.SendInput(len(events), values, ctypes.sizeof(InputEvent)) != len(
-            events
-        ):
-            raise PolicyError(
-                "Windows blocked or partially accepted input; inspect before retrying. No elevation/UAC bypass"
-            )
 
+    def send(self, hwnd, events):
+        self._check_physical_target(hwnd)
+        inserted = self.u.SendInput(
+            len(events), (InputEvent * len(events))(*events), ctypes.sizeof(InputEvent)
+        )
+        if inserted != len(events):
+            message = (
+                "Windows blocked or partially accepted input; inspect before retrying. "
+                "No elevation/UAC bypass"
+            )
+            if type(inserted) is int and 0 < inserted < len(events):
+                raise PartialInputAccepted(message, inserted)
+            raise PolicyError(message)
+        control = getattr(self, "control", None)
         if control:
             control.note_injected()
 
@@ -989,6 +1031,7 @@ class Desktop:
                     )
 
             check_point()
+            self._check_physical_target(hwnd)
             import win32api
 
             win32api.SetCursorPos((x, y))
@@ -1008,8 +1051,9 @@ class Desktop:
             try:
                 check_point()
                 self.send(hwnd, events)
-            except PolicyError:
-                if action == "click":
+            except PartialInputAccepted as exc:
+                # Only release a button whose down event was actually accepted.
+                if action == "click" and exc.accepted % 2 == 1:
                     e = InputEvent()
                     e.type = 0
                     e.data.mi = MouseInput(0, 0, 0, up, 0, 0)
@@ -1414,6 +1458,7 @@ class Desktop:
         pressed = False
         if action == "drag":
             self.checked_point(hwnd, from_x, from_y)
+            self._check_physical_target(hwnd)
             win32api.SetCursorPos((from_x, from_y))
             if getattr(self, "control", None):
                 self.control.note_injected()
@@ -1443,8 +1488,7 @@ class Desktop:
                 )
                 if action == "drag":
                     self.checked_point(hwnd, *point)
-                if getattr(self, "control", None):
-                    self.control.check()
+                self._check_physical_target(hwnd)
                 win32api.SetCursorPos(point)
                 if getattr(self, "control", None):
                     self.control.note_injected()

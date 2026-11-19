@@ -308,6 +308,13 @@ test("issuer-sub mode rejects conflicting runtime identity and signed assertion"
   }) };
   await assert.rejects(authorizeAccess(
     wrongEmail, f.env, DEVICE, request, f.fetchImpl), AuthError);
+  // A malformed email must not make an explicit identity conflict disappear.
+  const malformedEmail = { aud: AUD, getIdentity: async () => ({
+    email: "owner@@example.test", user_uuid: SUBJECT_ID,
+  }) };
+  for (const fleetOwner of [null, qualified])
+    await assert.rejects(authorizeAccess(
+      malformedEmail, f.env, DEVICE, request, f.fetchImpl, null, fleetOwner), AuthError);
   const wrongSub = { aud: AUD, getIdentity: async () => ({
     email: EMAIL, user_uuid: OTHER_SUBJECT_ID,
   }) };
@@ -320,6 +327,19 @@ test("issuer-sub mode rejects conflicting runtime identity and signed assertion"
   const result = await authorizeAccess(
     unavailable, f.env, DEVICE, request, f.fetchImpl);
   assert.equal(result.subject, qualified);
+});
+
+test("Access rejects malformed runtime and signed email identities", async () => {
+  const { authorizeAccess } = await import("../src/access.js");
+  const f = await fixture();
+  const malformed = "owner@@example.test";
+  f.env.UDB_DEVICE_GRANTS = JSON.stringify({ [DEVICE]: { [malformed]: ["bridge_status"] } });
+  const runtime = { aud: AUD, getIdentity: async () => ({ email: malformed }) };
+  await assert.rejects(authorizeAccess(runtime, f.env, DEVICE, f.request(), f.fetchImpl),
+    { message: "verified_identity_missing" });
+  const signed = f.request(await f.token({ email: malformed }));
+  await assert.rejects(authorizeAccess(null, f.env, DEVICE, signed, f.fetchImpl),
+    { message: "access_assertion_identity" });
 });
 
 test("Cloudflare Access key rotation refreshes a stale JWKS once without trusting an unknown kid", async (t) => {

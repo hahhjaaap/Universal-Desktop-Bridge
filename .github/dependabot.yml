@@ -8,6 +8,10 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    groups:
+      pip-weekly:
+        patterns:
+          - "*"
 
   - package-ecosystem: "npm"
     directory: "/cloudflare"
@@ -16,6 +20,10 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    groups:
+      npm-weekly:
+        patterns:
+          - "*"
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -24,3 +32,7 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    groups:
+      github-actions-weekly:
+        patterns:
+          - "*"

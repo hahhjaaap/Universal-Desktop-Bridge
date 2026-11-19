@@ -1,5 +1,6 @@
 """Release builds must not leave a write-scoped token in checkout config."""
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,9 +11,9 @@ def test_release_checkout_disables_persisted_write_token():
         encoding="utf-8"
     )
     assert "contents: write" in workflow
-    assert workflow.count("uses: actions/checkout@v7") == 1
-    checkout = workflow.split("- uses: actions/checkout@v7", 1)[1].split(
-        "- uses: actions/setup-python@v7", 1
+    assert len(re.findall(r"uses: actions/checkout@[a-f0-9]{40} # v7", workflow)) == 1
+    checkout = workflow.split("- uses: actions/checkout@", 1)[1].split(
+        "- uses: actions/setup-python@", 1
     )[0]
     assert "persist-credentials: false" in checkout
     assert "persist-credentials: true" not in workflow

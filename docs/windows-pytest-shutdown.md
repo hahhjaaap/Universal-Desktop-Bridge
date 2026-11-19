@@ -157,3 +157,60 @@ and common-room GUI fixtures. Audit any isolated failure for surviving
 callback lifetime if the Win32-only group reproduces it or the fault trace
 points there. A localized teardown fix should wait for a repeatable module or
 fixture and evidence that the native exit stops.
+
+## WS15 current baseline
+
+On `6b46d8322b93b56c8ab26a0b49af24d1f51f6880`, the hosted [Windows Python
+3.12 job](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44498559785/job/135479628686)
+printed `2295 passed, 18 skipped`, `UDB_PYTEST_RETURN=0`, and
+`UDB_QT_TEST_CLEANUP=completed`. GitHub recorded the regression step as
+successful. The separate `Check native Windows browser and utility APIs`
+step failed with `Owned host operation failed; inspect status before retrying`
+and process exit 1. The job failed, but this failure is distinct from the
+interpreter exit failure in #238.
+
+The shared application in `tests/test_cloud_first_gui.py:43` and
+`tests/test_common_room_gui.py:21` intentionally persists across tests.
+The quick-controls fixture drains the global pool after closing its window
+(`tests/test_quick_controls.py:21–46`). Manager and activity timers are widget
+children (`src/udb/manager.py:212`, `src/udb/activity_gui.py:63`), and the
+manager's explicit quit calls `timer.stop()` (`src/udb/manager.py:1497–1510`).
+These lifetimes motivate measuring global-pool drain separately from widget
+and application disposal. The clean grouped runs in #238 do not identify a
+particular fixture or callback as the cause.
+
+The initial diagnostic compared raw full suites with pool drain only. On
+[Windows 3.12 with pool drain only](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44508026972/job/135504634209),
+pytest reported 2,295 passes, 18 skips, 29 passing subtests and return 0.
+The log recorded a live QApplication and a completed pool drain, followed by
+an access violation without a Python frame. The native process exited
+`0xC0000005` (`-1073741819`). Successful drain alone does not prevent the crash.
+
+An earlier [raw Windows Python 3.11 full suite](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44508026972/job/135504634290)
+also returned 0 from pytest, then exited `0xC0000005`. All four later
+[raw Windows 3.12 groups](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44510278304)
+exited 0. The groups were Qt-only, without direct Qt tests, without direct
+Win32 tests and without `test_manager_ui.py`. The group without direct Win32
+tests still loaded pywin32 transitively. A clean group run does not establish
+an individual triggering fixture for the full suite.
+
+The preceding diagnostic varied only the final explicit deletion of
+`QApplication` on Windows Python 3.11 and 3.12. Both arms use the same normal
+teardown to drain the pool, close widgets, process deferred deletions and quit
+the application. All four [jobs](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44547192684)
+exited 0 with 2,307 passing tests each. The two arms reached their intended
+application states. These clean runs did not isolate a cause.
+
+The next comparison runs the full suite without the managed teardown in Python
+3.11 and 3.12. Two more Python 3.11 jobs exclude just `test_manager_ui.py` or
+just `test_quick_controls.py`. Each job records whether the Qt application is
+still active, whether pywin32 is loaded, the number of remaining Python threads,
+and the native process exit. Following
+a native abort, the isolated hosted job looks for Application Error Event 1000
+for the matching Python PID and prints the module name, exception code and
+offset when present. No dump, path or settings change is needed.
+
+A faulting module can identify where Windows observed the crash. It cannot
+establish which fixture created the invalid state. Keep the managed runner
+until the cause is confirmed and three consecutive raw runs complete on each
+Windows matrix member without the workaround.

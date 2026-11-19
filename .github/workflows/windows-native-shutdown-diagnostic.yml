@@ -1,0 +1,91 @@
+name: Windows pytest native shutdown diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/windows-native-shutdown-diagnostic.yml
+
+permissions:
+  contents: read
+
+jobs:
+  raw-shutdown:
+    # Run only on the WS15 diagnostic draft. This is not a required CI check.
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'security/ws15-native-shutdown-evidence-20261119'
+    runs-on: windows-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python: '3.11'
+            group: full
+          - python: '3.12'
+            group: full
+          - python: '3.11'
+            group: without-manager-ui
+          - python: '3.11'
+            group: without-quick-controls
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install ".[office,dev]"
+      - name: Compare raw Windows shutdown by GUI test module
+        shell: pwsh
+        env:
+          PYTHONFAULTHANDLER: '1'
+          UDB_RUN_INTERACTIVE_WINDOWS_TESTS: '1'
+          UDB_NATIVE_GROUP: '${{ matrix.group }}'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $executable = Get-Command python -CommandType Application |
+              Select-Object -First 1 -ExpandProperty Source
+          $started = Get-Date
+          $child = Start-Process -FilePath $executable -ArgumentList @(
+              '-X', 'faulthandler', 'tools/probe_windows_qt_shutdown.py', 'raw', $env:UDB_NATIVE_GROUP
+          ) -NoNewWindow -PassThru
+          $child.WaitForExit()
+          $code = $child.ExitCode
+          'UDB_NATIVE_EXIT=0x{0:X8} ({1})' -f ([int64]$code -band 0xFFFFFFFFL), $code
+
+          if ($code -in @(-1073741819, -1073740791)) {
+              # Application Error events can lag briefly and are best-effort.
+              # Log bounded module information for this process only.
+              $eventFilter = @{
+                  LogName = 'Application'
+                  ProviderName = 'Application Error'
+                  Id = 1000
+                  StartTime = $started
+              }
+              $found = $false
+              for ($attempt = 0; $attempt -lt 3 -and -not $found; $attempt++) {
+                  Start-Sleep -Seconds 1
+                  foreach ($event in Get-WinEvent -FilterHashtable $eventFilter -ErrorAction SilentlyContinue) {
+                      $fields = @{}
+                      foreach ($field in ([xml]$event.ToXml()).Event.EventData.Data) {
+                          $fields[$field.Name] = $field.'#text'
+                      }
+                      $process = $fields['ProcessId']
+                      if ($process -match '^0x[0-9a-fA-F]{1,8}$' -and
+                          [Convert]::ToInt64($process.Substring(2), 16) -eq $child.Id) {
+                          $module = $fields['ModuleName']
+                          $exception = $fields['ExceptionCode']
+                          $offset = $fields['FaultingOffset']
+                          if ($module -match '^[a-zA-Z0-9_.-]{1,80}$' -and
+                              $exception -match '^[0-9a-fA-F]{8}$' -and
+                              $offset -match '^[0-9a-fA-F]{1,16}$') {
+                              "UDB_WINDOWS_FAULT module=$module exception=$exception offset=$offset"
+                              $found = $true
+                              break
+                          }
+                      }
+                  }
+              }
+              if (-not $found) { 'UDB_WINDOWS_FAULT unavailable' }
+          }
+          exit $code

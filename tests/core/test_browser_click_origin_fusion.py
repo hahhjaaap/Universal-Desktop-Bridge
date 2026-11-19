@@ -14,7 +14,9 @@ def test_click_uses_one_actionability_evaluation_and_preserves_origin():
 
     def evaluate(tab, expression, timeout=10):
         evaluation.append(expression)
-        assert expression != "location.href", "A standalone URL read costs one extra CDP RPC"
+        assert expression != "location.href", (
+            "A standalone URL read costs one extra CDP RPC"
+        )
         assert "previous_url:location.href" in expression
         return {
             "ok": True,
@@ -57,13 +59,11 @@ def test_click_without_origin_keeps_uncertain_non_navigation_receipt():
     browser.call = lambda *_args, **_kwargs: {"frameTree": {"frame": {}}}
     seen = []
     browser._mouse_click = lambda *args: seen.append(args)
-    browser._wait_for_click_navigation = (
-        lambda tab, previous_url, **kwargs: (
-            {"navigation_completed": False, "navigation_observation_limited": True}
-            if previous_url is None
-            else (_ for _ in ()).throw(AssertionError("unexpected origin"))
-        )
-    )
+    def navigation(tab, previous_url, **kwargs):
+        assert previous_url is None, "missing actionable origin must stay unknown"
+        return {"navigation_completed": False, "navigation_observation_limited": True}
+
+    browser._wait_for_click_navigation = navigation
     result = browser.element(
         "owned-tab", "click", selector="#open", observe_navigation_ms=100
     )

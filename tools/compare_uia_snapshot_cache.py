@@ -14,8 +14,9 @@ import subprocess
 import sys
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "uia_snapshot_form.ps1"
@@ -143,20 +144,28 @@ def _summary(values: list[float]) -> dict:
     }
 
 
-def compare(size: int, samples: int = 1) -> dict:
+def _validate(size: int, samples: int) -> None:
     if size not in SIZES or not 1 <= samples <= 30:
         raise ValueError("Allowed fixture sizes: 50, 500, 1000; samples: 1..30")
+
+
+def _check_pair(uncached: dict, cached: dict) -> None:
+    if uncached != cached:
+        raise AssertionError("Cached and live UIA snapshots differ")
+    if uncached.get("ok") is not True or len(uncached.get("elements", [])) < 2:
+        raise AssertionError("No useful controls exposed by test form")
+    if "UDB_PRIVATE_CANARY_MUST_NOT_APPEAR" in json.dumps(uncached):
+        raise AssertionError("Password field value was exposed")
+
+
+def compare(size: int, samples: int = 1) -> dict:
+    _validate(size, samples)
     timings: dict[str, list[float]] = {"uncached": [], "cached": []}
     with _fixture(size) as form:
         for _ in range(samples):
             uncached, plain_ms = _snapshot(form["hwnd"], form["pid"], False)
             cached, cache_ms = _snapshot(form["hwnd"], form["pid"], True)
-            if uncached != cached:
-                raise AssertionError("Cached and live UIA snapshots differ")
-            if len(uncached["elements"]) < 2:
-                raise AssertionError("No useful controls exposed by test form")
-            if "UDB_PRIVATE_CANARY_MUST_NOT_APPEAR" in json.dumps(uncached):
-                raise AssertionError("Password field value was exposed")
+            _check_pair(uncached, cached)
             timings["uncached"].append(plain_ms)
             timings["cached"].append(cache_ms)
     return {
@@ -168,17 +177,71 @@ def compare(size: int, samples: int = 1) -> dict:
     }
 
 
+def compare_warm(size: int, samples: int, *, worker_factory=None) -> dict:
+    """Compare cache modes after one cold request per private test worker."""
+    _validate(size, samples)
+    if worker_factory is None:
+        from udb.uia_worker import PersistentUIA
+
+        worker_factory = PersistentUIA
+
+    modes = ("uncached", "cached")
+    timings: dict[str, list[float]] = {mode: [] for mode in modes}
+    cold = {}
+    processes = {}
+    truncated_samples = 0
+    with _fixture(size) as form, ExitStack() as cleanup:
+        request = {"mode": "snapshot", "hwnd": form["hwnd"], "pid": form["pid"]}
+        workers = {}
+        executable = _powershell()
+        for mode in modes:
+            worker = worker_factory(executable, HELPER)
+            cleanup.callback(worker.close)
+            workers[mode] = worker
+        for index in range(samples + 1):
+            replies = {}
+            for mode in modes if index % 2 == 0 else reversed(modes):
+                worker = workers[mode]
+                with patch.dict(
+                    os.environ, UDB_UIA_SNAPSHOT_CACHE="1" if mode == "cached" else "0"
+                ):
+                    started = time.perf_counter()
+                    replies[mode] = worker.call(request, timeout=18)
+                    elapsed = (time.perf_counter() - started) * 1000
+                if index == 0:
+                    processes[mode] = worker._process
+                    cold[mode] = round(elapsed, 2)
+                else:
+                    if worker._process is not processes[mode]:
+                        raise AssertionError("UIA worker restarted during warm samples")
+                    timings[mode].append(elapsed)
+            _check_pair(replies["uncached"], replies["cached"])
+            if index:
+                truncated_samples += replies["uncached"].get("truncated") is True
+    return {
+        "controls": size,
+        "samples": samples,
+        "same_output": True,
+        "cold_ms": cold,
+        "truncated_samples": truncated_samples,
+        **{mode: _summary(timings[mode]) for mode in modes},
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", type=int, default=1)
     parser.add_argument("--sizes", type=int, nargs="+", default=list(SIZES))
+    parser.add_argument("--warm", action="store_true")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
     if sys.platform != "win32":
         parser.error("Windows UI Automation is required")
+    run = compare_warm if args.warm else compare
     result = {
         "scope": "owned synthetic WinForms fixture only; no production activation",
-        "results": [compare(size, args.samples) for size in args.sizes],
+        "measurement": "warm worker" if args.warm else "one-shot",
+        "results": [run(size, args.samples) for size in args.sizes],
     }
     report = json.dumps(result, indent=2)
     if args.output:

@@ -54,18 +54,20 @@ private password sentinel is absent. The existing 200-element output limit
 still applies to fixtures with 500/1,000 controls; parity does not mean that
 all 1,000 elements were returned.
 
-The dedicated Windows GitHub Actions workflow runs **one cold comparison**
-per fixture size and stores an isolated JSON report. This is a correctness
-gate, **not** a validated acceleration claim. The optional standalone command
-is:
+The dedicated Windows GitHub Actions workflow runs a cold comparison and 30
+warm comparisons per fixture size. The warm run uses separate test-owned
+PowerShell workers for cache on/off, checks complete output parity on each
+pair, and reports cold startup, warm p50/p95/p99, and truncation counts.
+
+From an installed development checkout, run the warm fixture directly:
 
 ```powershell
-python tools/compare_uia_snapshot_cache.py --samples 30 --sizes 50 500 1000 --output reports/uia-parity-canary.json
+python -m tools.compare_uia_snapshot_cache --warm --samples 30 --sizes 50 500 1000 --output reports/uia-snapshot-warm-parity.json
 ```
 
-Its timing includes fresh PowerShell process startup, so it does **not**
-measure persistent-worker warm latency. The summary p50/p95/p99 from a single
-CI sample are diagnostic only.
+These timings describe UIA on isolated, static WinForms controls. Real-app
+performance, worker CPU/working set, and dynamic UIA invalidation require
+separate measurements.
 
 ### Still required before cache activation
 

@@ -35,11 +35,14 @@ jobs:
         run: python -m compileall -q tools/compare_uia_snapshot_cache.py
       - name: Compare snapshot cache on/off in test-owned Windows Forms
         run: python tools/compare_uia_snapshot_cache.py --samples 1 --sizes 50 500 1000 --output reports/uia-snapshot-parity.json
+      - run: python -m pip install .
+      - name: Compare 30 warm snapshots per mode and fixture size
+        run: python -m tools.compare_uia_snapshot_cache --warm --samples 30 --sizes 50 500 1000 --output reports/uia-snapshot-warm-parity.json
       - name: Attach isolated fixture parity report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: hyperspeed-uia-parity
-          path: reports/uia-snapshot-parity.json
+          path: reports/uia-snapshot*-parity.json
           if-no-files-found: ignore
           retention-days: 7

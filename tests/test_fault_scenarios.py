@@ -103,6 +103,23 @@ def test_rpc_wait_budget_uses_elapsed_time_when_system_clock_changes(
             sleep=sleep,
         ),
     )
+
+    # The reply notifier replaces polling sleep. Advance the synthetic
+    # monotonic clock on a simulated watcher wait instead of sleeping for real.
+    # Never publish a reply: this checks the actual no-retry timeout contract.
+    class FakeReplyWake:
+        def __init__(self, folder):
+            assert folder == owner.state / "host" / "replies"
+
+        def wait(self, timeout, stop_event):
+            assert 0 < timeout <= 0.04
+            sleep(timeout)
+            return False
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(host_client, "InboxWake", FakeReplyWake)
     with pytest.raises(PolicyError, match="timed out"):
         host_client.command(owner, "start", kind="browser", task="fixture")
     assert 27 <= elapsed[0] <= 28

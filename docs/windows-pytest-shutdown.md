@@ -33,12 +33,15 @@ Run this in PowerShell 7 in a clean source checkout with the development depende
 and the same user-session conditions as the failing runner. The group names
 describe direct test-file imports. The output records transitive modules
 actually loaded and separates pytest's return from the native exit code.
+`tests/components` is collected through `test_regressions.py` subprocesses,
+matching the normal pytest configuration.
 
 ```powershell
 $env:PYTHONFAULTHANDLER = '1'
 $PSNativeCommandUseErrorActionPreference = $false
 $tests = @(Get-ChildItem tests -Recurse -Filter 'test_*.py' |
-    ForEach-Object { Resolve-Path -LiteralPath $_.FullName -Relative })
+    ForEach-Object { Resolve-Path -LiteralPath $_.FullName -Relative } |
+    Where-Object { $_ -notlike '.\tests\components\*' })
 $qt = @($tests | Where-Object {
     Select-String -LiteralPath $_ -Quiet -Pattern 'PySide6|shiboken6|QApplication|QThread|QTimer'
 })
@@ -76,7 +79,11 @@ foreach ($group in $groups.GetEnumerator()) {
     $paths = @($group.Value)
     "UDB_NATIVE_GROUP=$($group.Key) files=$($paths.Count)"
     if ($paths.Count -eq 0) { continue }
-    python -X faulthandler -c $driver @paths
+    if ($group.Key -eq 'full') {
+        python -X faulthandler -c $driver
+    } else {
+        python -X faulthandler -c $driver @paths
+    }
     $code = $LASTEXITCODE
     '{0} process exit 0x{1:X8} ({2})' -f $group.Key, ([int64]$code -band 0xFFFFFFFFL), $code
     if ($code -ne 0) { $failed = $true }

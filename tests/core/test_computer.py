@@ -355,24 +355,38 @@ def test_computer_denies_all_real_operations_without_grant(fixture):
         computer.close()
 
 
-def test_desktop_rejects_foreground_change_without_injection():
-    from udb.computer_desktop import Desktop
+def _observed_send_fixture(*, foreground, send_input):
+    """Construct a fully observed fake HWND; never access a real desktop."""
+    from udb.computer_desktop import Desktop, WindowObservation
 
     d = Desktop.__new__(Desktop)
     d.guard = lambda: True
-    d.gui = SimpleNamespace(GetForegroundWindow=lambda: 20)
-    d.u = SimpleNamespace(SendInput=lambda *a: pytest.fail("Input must not be sent"))
+    d.windows = {
+        "observed": WindowObservation(10, 100, "fixture", time.monotonic() + 30)
+    }
+    d.process = SimpleNamespace(GetWindowThreadProcessId=lambda _: (1, 100))
+    d.is_cloaked = lambda _: False
+    d.gui = SimpleNamespace(
+        IsWindow=lambda _: True,
+        IsWindowVisible=lambda _: True,
+        GetClassName=lambda _: "fixture",
+        GetForegroundWindow=lambda: foreground,
+    )
+    d.u = SimpleNamespace(SendInput=send_input)
+    return d
+
+
+def test_desktop_rejects_foreground_change_without_injection():
+    d = _observed_send_fixture(
+        foreground=20,
+        send_input=lambda *a: pytest.fail("Input must not be sent"),
+    )
     with pytest.raises(PolicyError, match="Foreground changed"):
         d.send(10, [d.key(65)])
 
 
 def test_desktop_reports_partial_injection_and_revocation():
-    from udb.computer_desktop import Desktop
-
-    d = Desktop.__new__(Desktop)
-    d.guard = lambda: True
-    d.gui = SimpleNamespace(GetForegroundWindow=lambda: 10)
-    d.u = SimpleNamespace(SendInput=lambda *a: 0)
+    d = _observed_send_fixture(foreground=10, send_input=lambda *a: 0)
     with pytest.raises(PolicyError, match="partially accepted"):
         d.send(10, [d.key(65)])
     d.guard = lambda: False

@@ -258,3 +258,160 @@ def test_capture_stream_limit_and_explicit_cleanup(engine):
     with pytest.raises(PolicyError, match="four"):
         cache.start(engine, SID, "extra")
     assert cache.stop(SID)["stopped"] and not cache.streams
+
+
+@pytest.mark.parametrize(
+    "steps",
+    [
+        [
+            {
+                "action": "click",
+                "selector": "#a",
+                "observe_after": "read",
+                "click_navigation_observe_ms": 100,
+            },
+            {"action": "fill", "selector": "#b", "value": "must_not_write"},
+        ],
+        [
+            {
+                "action": "click",
+                "selector": "#a",
+                "observe_after": "none",
+                "click_navigation_observe_ms": 100,
+            }
+        ],
+        [
+            {
+                "action": "click",
+                "selector": "#a",
+                "observe_after": "read",
+                "click_navigation_observe_ms": True,
+            }
+        ],
+        [
+            {"action": "click", "selector": "#a", "observe_after": "snapshot"},
+            {"action": "read"},
+        ],
+        [
+            {
+                "action": "click",
+                "selector": "#a",
+                "observe_after": "untrusted",
+                "click_navigation_observe_ms": 100,
+            }
+        ],
+    ],
+)
+def test_terminal_fast_click_rejects_bad_batch_before_any_input(
+    engine, monkeypatch, steps
+):
+    dispatch = Mock()
+    monkeypatch.setattr(batches, "dispatch_browser", dispatch)
+    runner = batches.BatchRunner()
+    with pytest.raises(PolicyError):
+        runner.run(
+            engine,
+            engine.sessions[SID]["object"],
+            args(steps, rid="bad-terminal-fast"),
+        )
+    dispatch.assert_not_called()
+    assert not (engine.folder / "batches" / SID).exists()
+
+
+def test_fastpath_rejects_short_click_fields_before_any_input(engine, monkeypatch):
+    dispatch = Mock()
+    monkeypatch.setattr(batches, "dispatch_browser", dispatch)
+    plan = [
+        {
+            "action": "click",
+            "step_id": "finish",
+            "selector": "#confirm",
+            "observe_after": "read",
+            "click_navigation_observe_ms": 100,
+        }
+    ]
+    with pytest.raises(PolicyError, match="FastPath does not support"):
+        batches.BatchRunner().run(
+            engine,
+            engine.sessions[SID]["object"],
+            dict(args(plan, rid="fastpath-short"), action="fastpath"),
+        )
+    dispatch.assert_not_called()
+
+
+def test_terminal_short_click_returns_redacted_observation_without_replay(
+    engine, monkeypatch
+):
+    browser = engine.sessions[SID]["object"]
+    browser.snapshot = Mock(return_value={"title": "Panel shown", "elements": []})
+    dispatch = Mock(
+        side_effect=[
+            {"ok": True, "state": "visible"},
+            {
+                "ok": True,
+                "clicked": True,
+                "replay_safe": False,
+                "navigation_completed": False,
+                "navigation_observation_limited": True,
+                "navigation_observed_ms": 100,
+            },
+        ]
+    )
+    monkeypatch.setattr(batches, "dispatch_browser", dispatch)
+    steps = [
+        {"action": "wait_for", "selector": "#panel-toggle", "state": "visible"},
+        {
+            "action": "click",
+            "selector": "#panel-toggle",
+            "observe_after": "snapshot",
+            "click_navigation_observe_ms": 100,
+        },
+    ]
+    payload = args(steps, rid="short-click-good")
+    runner = batches.BatchRunner()
+    first = runner.run(engine, browser, payload)
+    assert first["ok"] and first["state"] == "completed"
+    assert dispatch.call_count == 2
+    assert browser.snapshot.call_count == 1
+    last = first["results"][-1]["result"]
+    assert last["clicked"] and last["replay_safe"] is False
+    assert last["navigation_observation_limited"] is True
+    assert last["observation"]["title"] == "Panel shown"
+    assert last["observe_after"] == "snapshot"
+    assert runner.run(engine, browser, payload)["cached_result"]
+    assert dispatch.call_count == 2
+    assert browser.snapshot.call_count == 1
+
+
+def test_terminal_short_click_failed_observation_is_uncertain_no_replay(
+    engine, monkeypatch
+):
+    browser = engine.sessions[SID]["object"]
+    browser.read = Mock(side_effect=RuntimeError("private site detail"))
+    dispatch = Mock(
+        return_value={
+            "ok": True,
+            "clicked": True,
+            "replay_safe": False,
+            "navigation_observation_limited": True,
+        }
+    )
+    monkeypatch.setattr(batches, "dispatch_browser", dispatch)
+    steps = [
+        {
+            "action": "click",
+            "selector": "#save",
+            "observe_after": "read",
+            "click_navigation_observe_ms": 100,
+        }
+    ]
+    payload = args(steps, rid="short-click-uncertain")
+    runner = batches.BatchRunner()
+    first = runner.run(engine, browser, payload)
+    assert first["ok"] is False
+    assert first["state"] == "outcome_unknown"
+    assert first["failed_index"] == 0
+    assert first["results"][0]["result"]["observation_unavailable"] is True
+    assert "private site detail" not in json.dumps(first)
+    assert runner.run(engine, browser, payload)["cached_result"]
+    assert dispatch.call_count == 1

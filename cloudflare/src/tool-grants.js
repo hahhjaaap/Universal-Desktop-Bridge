@@ -4,6 +4,11 @@ const EMAIL = /^[a-z0-9!#$%&'*+/=?^`{|}~_-]+(?:\.[a-z0-9!#$%&'*+/=?^`{|}~_-]+)*@
 const ISSUER_SUB = /^https:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com#[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$/;
 const record = value => value !== null && typeof value === "object" && !Array.isArray(value);
 
+export function emailSubject(subject) {
+  return typeof subject === "string" && subject.length <= 200 &&
+    subject.trim() === subject && EMAIL.test(subject);
+}
+
 const SCOPABLE = new Map([
   ["computer_files", ["stat", "list", "read", "write", "mkdir", "copy", "move"]],
   ["file_operation", ["copy", "move", "read", "list", "cancel"]],
@@ -16,7 +21,7 @@ const SCOPABLE = new Map([
 export function exactToolGrant(raw, deviceId, subject, acceptsTool) {
   if (typeof deviceId !== "string" || !DEVICE_ID.test(deviceId) ||
       typeof subject !== "string" || subject.length > 200 ||
-      subject.trim() !== subject || !(EMAIL.test(subject) || ISSUER_SUB.test(subject)) ||
+      subject.trim() !== subject || !(emailSubject(subject) || ISSUER_SUB.test(subject)) ||
       typeof raw !== "string" || raw.length < 1 || raw.length > 16384) return [];
   try {
     const all = JSON.parse(raw);

@@ -55,7 +55,7 @@ class DocumentPlan(NamedTuple):
 VERSIONS = {
     "openpyxl": "3.1.5",
     "python-docx": "1.2.0",
-    "pypdf": "7.0.1",
+    "pypdf": "7.1.0",
     "reportlab": "5.1.0",
 }
 

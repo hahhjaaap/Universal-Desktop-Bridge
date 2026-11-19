@@ -108,3 +108,43 @@ def test_shared_status_is_disabled_by_default(monkeypatch):
         assert not pool.shared_status_enabled
     finally:
         pool.close()
+
+
+def test_status_backpressure_never_dispatches_queued_second_rpc(monkeypatch):
+    monkeypatch.setenv("UDB_SHARED_STATUS_PROXY", "1")
+    monkeypatch.setattr(cloud_agent, "_STATUS_LOCK_WAIT_SECONDS", 0.05, raising=False)
+    started = threading.Event()
+    release = threading.Event()
+    calls = []
+    created = []
+
+    class FakeProxy:
+        unusable = False
+
+        def __init__(self, settings):
+            created.append(self)
+
+        def call(self, rpc):
+            calls.append(rpc["id"])
+            started.set()
+            assert release.wait(timeout=5)
+            return {"jsonrpc": "2.0", "id": rpc["id"], "result": {}}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(cloud_agent, "LocalProxy", FakeProxy)
+    pool = cloud_agent.ParallelLocalProxies(SimpleNamespace())
+    try:
+        first = pool.submit(_rpc(1))
+        assert started.wait(timeout=3)
+        second = pool.submit(_rpc(2))
+        with pytest.raises(cloud_agent.ResourceBusyError, match="ResourceBusy"):
+            second.result(timeout=3)
+        assert calls == [1], "Blocked status must not be dispatched or replayed"
+        release.set()
+        assert first.result(timeout=5)["id"] == 1
+        assert len(created) == 1
+    finally:
+        release.set()
+        pool.close()

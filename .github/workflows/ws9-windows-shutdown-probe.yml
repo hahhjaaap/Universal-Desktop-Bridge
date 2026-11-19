@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [qt_only, win32_only, both, neither, full]
+        group: [qt_and_win32, qt_and_neither, win32_and_neither]
     env:
       PYTHONFAULTHANDLER: '1'
       UDB_RUN_INTERACTIVE_WINDOWS_TESTS: '1'

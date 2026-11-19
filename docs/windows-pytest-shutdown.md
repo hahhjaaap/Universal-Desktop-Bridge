@@ -27,6 +27,40 @@ observation identifies a triggering test or attributes the crash to a
 specific PySide6, Shiboken6, pywin32, or CRT object. Offscreen mode alone did
 not prevent the historical failures. No new runtime fix is proposed yet.
 
+## Hosted Windows Python 3.12 reproduction
+
+[The raw full suite](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44468408799/job/135371659260)
+passed 2,253 tests and 29 subtests, skipped 16, and printed
+`UDB_PYTEST_RETURN=0`. Python then emitted an access violation without a
+Python frame and exited `0xC0000005` (`-1073741819`). The log recorded a live
+application and loaded Qt, Shiboken and Win32 modules before the process exit.
+
+| Direct test-file group | Result | Native modules at pytest return |
+| --- | --- | --- |
+| [Qt](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44468408799/job/135371658886) | 147 passed, process exit 0 | PySide6 and Shiboken, live application |
+| [Win32](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44468408799/job/135371658984) | 140 passed, process exit 0 | pywin32, no Qt application |
+| [Neither marker](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44468408799/job/135371658953) | 1,966 passed, 16 skipped, 29 subtests passed, process exit 0 | Transitive pywin32, no Qt application |
+| [Both markers](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44468408799/job/135371658692) | No directly matching test files | No Python process started |
+
+The [managed full suite](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44468408796/job/135371737002)
+passed on the same checkout with the existing explicit Qt teardown. The Qt
+group shows that a live application can survive a clean raw process exit.
+The Win32 group can also exit cleanly. A test or combination of tests that
+triggers the raw full-suite failure remains to be isolated.
+
+The manager and activity view parent their timers to widgets. The manager
+stops its timer on the explicit shutdown path. The quick-controls fixture
+waits for the Qt pool after closing the window, and the common-room fixture
+uses a shared application. The `WINFUNCTYPE` callbacks inspected in the
+sandbox, desktop guest, and virtual pointer are scoped to synchronous
+`EnumWindows` calls. These observations do not identify a callback or
+active worker surviving interpreter shutdown.
+
+An [initial probe](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44467828309)
+exited 2 in two groups because explicitly passed `tests/components` files
+bypassed the normal pytest collection exclusion. The corrected groups
+below use the regular suite discovery boundaries.
+
 ## Grouped reproducer on disposable Windows
 
 Run this in PowerShell 7 in a clean source checkout with the development dependencies
@@ -54,6 +88,9 @@ $groups = [ordered]@{
     both = @($tests | Where-Object { $_ -in $qt -and $_ -in $win })
     neither = @($tests | Where-Object { $_ -notin $qt -and $_ -notin $win })
     full = $tests
+    qt_and_win32 = @($tests | Where-Object { $_ -in $qt -or $_ -in $win })
+    qt_and_neither = @($tests | Where-Object { $_ -in $qt -or $_ -notin $win })
+    win32_and_neither = @($tests | Where-Object { $_ -in $win -or $_ -notin $qt })
 }
 $driver = @'
 import sys
@@ -76,14 +113,13 @@ if ($env:UDB_NATIVE_GROUP -and -not $groups.Contains($env:UDB_NATIVE_GROUP)) {
 }
 foreach ($group in $groups.GetEnumerator()) {
     if ($env:UDB_NATIVE_GROUP -and $group.Key -ne $env:UDB_NATIVE_GROUP) { continue }
+    if (-not $env:UDB_NATIVE_GROUP -and $group.Key -like '*_and_*') { continue }
     $paths = @($group.Value)
     "UDB_NATIVE_GROUP=$($group.Key) files=$($paths.Count)"
     if ($paths.Count -eq 0) { continue }
-    if ($group.Key -eq 'full') {
-        python -X faulthandler -c $driver
-    } else {
-        python -X faulthandler -c $driver @paths
-    }
+    $ignored = @($tests | Where-Object { $_ -notin $paths } |
+        ForEach-Object { "--ignore=$_" })
+    python -X faulthandler -c $driver @ignored
     $code = $LASTEXITCODE
     '{0} process exit 0x{1:X8} ({2})' -f $group.Key, ([int64]$code -band 0xFFFFFFFFL), $code
     if ($code -ne 0) { $failed = $true }
@@ -91,8 +127,10 @@ foreach ($group in $groups.GetEnumerator()) {
 if ($failed) { exit 1 }
 ```
 
-Repeat the smallest failing group and bisect its test modules. Keep each run
-in a fresh Python process. When comparing Python versions, offscreen mode,
+Set `UDB_NATIVE_GROUP` to a group name to run it alone, including any pair
+listed above. The `--ignore` arguments preserve the suite's collection order
+among the selected files. Repeat the smallest failing group and bisect its
+test modules in fresh Python processes. When comparing Python versions, offscreen mode,
 or `PYTHONMALLOC=malloc`, vary one parameter at a time. Compare against
 `python tools/run_windows_pytest.py results.xml`, which already drains the
 global Qt pool, closes and disposes widgets, delivers deferred deletions, and
@@ -103,5 +141,4 @@ and common-room GUI fixtures. Audit any isolated failure for surviving
 `QApplication`, `QThread`, `QTimer`, or queued callbacks. Check Win32/ctypes
 callback lifetime if the Win32-only group reproduces it or the fault trace
 points there. A localized teardown fix should wait for a repeatable module or
-fixture and evidence that the native exit stops. These diagnostic groups have
-not been executed in the current Linux workspace.
+fixture and evidence that the native exit stops.

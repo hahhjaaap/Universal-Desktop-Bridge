@@ -879,7 +879,11 @@ def test_click_without_navigation_does_not_wait_for_document_ready():
     result = browser._wait_for_click_navigation(
         "owned-tab", "https://same.example/", observe_ms=100
     )
-    assert result == {"navigation_completed": False}
+    assert result == {
+        "navigation_completed": False,
+        "navigation_observation_limited": True,
+        "navigation_observed_ms": 100,
+    }
 
 
 def test_browser_click_navigation_detects_same_url_document_request():

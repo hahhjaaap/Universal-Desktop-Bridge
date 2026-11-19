@@ -223,6 +223,24 @@ def test_real_browser_background_click_identity_and_reload(live_browser):
         assert normalized_output("host_browser", out) == out
 
 
+def test_real_browser_short_navigation_observation_on_local_ui_button(live_browser):
+    """Real Chromium: a local button changes the DOM without navigation."""
+    browser, tab, _url, _tmp_path = live_browser
+    result = browser.element(
+        tab,
+        "click",
+        role="button",
+        name="Run",
+        observe_navigation_ms=100,
+    )
+    assert result["ok"] and result["clicked"] and not result["replay_safe"]
+    assert result["navigation_completed"] is False
+    assert result["navigation_observation_limited"] is True
+    assert result["navigation_observed_ms"] == 100
+    snapshot = browser.snapshot(tab)
+    assert snapshot["title"] == "Clicked"
+
+
 def test_real_browser_open_shadow_dom_locators_and_actions(live_browser):
     browser, tab, url, _ = live_browser
     browser.navigate(tab, url + "shadow")

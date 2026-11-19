@@ -522,9 +522,14 @@ class Browser(BrowserInputMixin):
         previous_loader_id=None,
         previous_frame_id=None,
     ):
-        if not isinstance(previous_url, str) or not previous_url:
-            return dict(navigation_completed=False)
         observation_ms = max(100, min(1000, int(observe_ms)))
+        if not isinstance(previous_url, str) or not previous_url:
+            result = dict(navigation_completed=False)
+            if observation_ms < 1000:
+                # Without a valid pre-click URL, no comparison was possible.
+                result["navigation_observation_limited"] = True
+                result["navigation_observed_ms"] = 0
+            return result
         deadline = time.monotonic() + observation_ms / 1000
         transitioned = False
         next_loader_id = None
@@ -681,7 +686,13 @@ class Browser(BrowserInputMixin):
                         break
                 time.sleep(min(0.05, max(0, deadline - time.monotonic())))
         if not transitioned:
-            return dict(navigation_completed=False)
+            result = dict(navigation_completed=False)
+            if observation_ms < 1000:
+                # The reduced budget is an explicit caller tradeoff, NOT proof
+                # that a delayed navigation cannot still be in flight.
+                result["navigation_observation_limited"] = True
+                result["navigation_observed_ms"] = observation_ms
+            return result
         try:
             return self._wait_for_document_ready(
                 tab,
@@ -972,8 +983,23 @@ class Browser(BrowserInputMixin):
         return True
 
     def element(
-        self, tab, operation, selector="", value="", role="", name="", exact=True
+        self,
+        tab,
+        operation,
+        selector="",
+        value="",
+        role="",
+        name="",
+        exact=True,
+        *,
+        observe_navigation_ms=1000,
     ):
+        if (
+            type(observe_navigation_ms) is not int
+            or not 100 <= observe_navigation_ms <= 1000
+            or (operation != "click" and observe_navigation_ms != 1000)
+        ):
+            raise PolicyError("Invalid click navigation observation budget")
         if operation not in ("click", "fill", "select_option", "check", "uncheck"):
             raise PolicyError("Unsupported browser element action")
         if not isinstance(value, str) or len(value) > 16000:
@@ -1027,6 +1053,7 @@ class Browser(BrowserInputMixin):
             navigation = self._wait_for_click_navigation(
                 tab,
                 previous_url,
+                observe_ms=observe_navigation_ms,
                 previous_loader_id=previous_loader_id,
                 previous_frame_id=previous_frame_id,
             )

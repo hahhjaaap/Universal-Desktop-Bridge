@@ -59,6 +59,7 @@ def test_click_without_origin_keeps_uncertain_non_navigation_receipt():
     browser.call = lambda *_args, **_kwargs: {"frameTree": {"frame": {}}}
     seen = []
     browser._mouse_click = lambda *args: seen.append(args)
+
     def navigation(tab, previous_url, **kwargs):
         assert previous_url is None, "missing actionable origin must stay unknown"
         return {"navigation_completed": False, "navigation_observation_limited": True}

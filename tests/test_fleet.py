@@ -96,10 +96,11 @@ def test_reject_symlinked_token(tmp_path):
 class FakeBackend:
     def __init__(self):
         self.calls = []
+        self.reply = {"result": {"content": [{"type": "text", "text": "ok"}]}}
 
     def request(self, method, args, timeout=60):
         self.calls.append((method, args))
-        return {"result": {"content": [{"type": "text", "text": "ok"}]}}
+        return self.reply
 
 
 def test_agent_loopback_only_and_owner_control_denied():
@@ -146,6 +147,25 @@ def test_agent_loopback_only_and_owner_control_denied():
             code, payload = post("bridge_status", "Bearer " + "a" * 64)
             assert code == 200 and payload["device_id"] == "pc-office"
             assert len(backend.calls) == 1
+            backend.reply = {
+                "error": {
+                    "code": -32602,
+                    "message": r"C:\Users\fixture\private-file.txt",
+                    "data": {
+                        "reason": "synthetic-secret",
+                        "trace": "synthetic-stack-trace",
+                    },
+                }
+            }
+            code, payload = post("bridge_status", "Bearer " + "a" * 64)
+            assert code == 200 and payload["device_id"] == "pc-office"
+            assert payload["result"] == {
+                "isError": True,
+                "content": [
+                    {"type": "text", "text": "ERROR | Remote UDB rejected tool call"},
+                ],
+            }
+            assert len(backend.calls) == 2
         finally:
             server.shutdown()
             thread.join(timeout=5)

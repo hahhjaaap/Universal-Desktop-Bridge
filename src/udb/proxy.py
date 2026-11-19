@@ -125,6 +125,47 @@ _PROXY_ERROR_MESSAGES = {
     TypeError: "Invalid operation data",
 }
 
+_UPSTREAM_ERROR_MESSAGES = {
+    -32700: "Invalid JSON-RPC request",
+    -32600: "Invalid JSON-RPC object",
+    -32601: "Method not found",
+    -32602: "Invalid operation or arguments",
+    -32002: "Operation timed out; inspect state before retrying",
+    -32003: "UDB Unified is busy",
+    -32005: "MCP response exceeds size limit; do not replay side effects",
+}
+_UNCERTAIN_OUTCOME_REASONS = frozenset(
+    {
+        "outcome_unknown_do_not_retry_mutations",
+        "device_disconnected_outcome_unknown",
+        "relay_unavailable_outcome_unknown",
+        "invalid_device_rpc_response",
+    }
+)
+
+
+class _UpstreamError(Exception):
+    """An RPC error received from a backend, separate from tool result data."""
+
+
+def _upstream_error(value: Any) -> dict[str, Any]:
+    upstream = value if isinstance(value, dict) else {}
+    code = upstream.get("code")
+    if type(code) is not int or abs(code) > (1 << 53) - 1:
+        code = -32603
+    print(f"UDB Unified: backend RPC error {code}", file=sys.stderr)
+    error = {
+        "code": code,
+        "message": _UPSTREAM_ERROR_MESSAGES.get(
+            code, "Backend error; inspect state before retrying"
+        ),
+    }
+    data = upstream.get("data")
+    reason = data.get("reason") if isinstance(data, dict) else None
+    if isinstance(reason, str) and reason in _UNCERTAIN_OUTCOME_REASONS:
+        error["data"] = {"reason": reason}
+    return error
+
 
 def normalized_output(tool: str, result: dict[str, Any]) -> dict[str, Any]:
     """Only backend-authored status can classify a tool call."""
@@ -505,8 +546,8 @@ class UnifiedProxy:
         if backend is self.companion:
             self._authorize_companion(name, arguments)
         reply = backend.request("tools/call", params)
-        if reply.get("error"):
-            return {"_upstream_rpc_error": reply["error"]}
+        if "error" in reply:
+            raise _UpstreamError(reply["error"])
         result = normalized_output(public_name, reply.get("result", {}))
         if (
             name == "bridge_status"
@@ -587,25 +628,26 @@ class UnifiedProxy:
                     raise PolicyMessage("MCP not initialized")
                 result = self.call_tool(params)
                 observed_result = result
-                if "_upstream_rpc_error" in result:
-                    deliver(
-                        {
-                            "jsonrpc": "2.0",
-                            "id": ident,
-                            "error": result["_upstream_rpc_error"],
-                        }
-                    )
-                    return
             elif method == "ping":
                 result = {}
             else:
                 # Keep all original UDB non-tool APIs functional.
                 reply = self.primary.request(method, params)
-                if reply.get("error"):
-                    deliver({"jsonrpc": "2.0", "id": ident, "error": reply["error"]})
-                    return
+                if "error" in reply:
+                    raise _UpstreamError(reply["error"])
                 result = reply.get("result", {})
             deliver({"jsonrpc": "2.0", "id": ident, "result": result})
+        except _UpstreamError as e:
+            observed_error = e
+            try:
+                deliver(
+                    {"jsonrpc": "2.0", "id": ident, "error": _upstream_error(e.args[0])}
+                )
+            except Exception as output_error:
+                print(
+                    "UDB Unified: response failure " + type(output_error).__name__,
+                    file=sys.stderr,
+                )
         except PolicyMessage as e:
             observed_error = e
             safely_report(str(e), -32000)
@@ -643,11 +685,7 @@ class UnifiedProxy:
                     "dispatch",
                     perf_started,
                     rpc_id=ident,
-                    ok=observed_error is None
-                    and not (
-                        isinstance(observed_result, dict)
-                        and "_upstream_rpc_error" in observed_result
-                    ),
+                    ok=observed_error is None,
                 )
             except Exception as telemetry_error:
                 # Logging must not block RPC completion or retain slots.

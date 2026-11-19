@@ -29,15 +29,16 @@ not prevent the historical failures. No new runtime fix is proposed yet.
 
 ## Grouped reproducer on disposable Windows
 
-Run this in a clean source checkout with the normal development dependencies
+Run this in PowerShell 7 in a clean source checkout with the development dependencies
 and the same user-session conditions as the failing runner. The group names
 describe direct test-file imports. The output records transitive modules
 actually loaded and separates pytest's return from the native exit code.
 
 ```powershell
 $env:PYTHONFAULTHANDLER = '1'
+$PSNativeCommandUseErrorActionPreference = $false
 $tests = @(Get-ChildItem tests -Recurse -Filter 'test_*.py' |
-    ForEach-Object { $_.FullName })
+    ForEach-Object { Resolve-Path -LiteralPath $_.FullName -Relative })
 $qt = @($tests | Where-Object {
     Select-String -LiteralPath $_ -Quiet -Pattern 'PySide6|shiboken6|QApplication|QThread|QTimer'
 })
@@ -57,19 +58,23 @@ import pytest
 
 code = int(pytest.main(["-q", *sys.argv[1:]]))
 qt_core = sys.modules.get("PySide6.QtCore")
-app = qt_core.QCoreApplication.instance() if qt_core else None
-pool = qt_core.QThreadPool.globalInstance() if qt_core else None
+app_live = qt_core is not None and qt_core.QCoreApplication.instance() is not None
 loaded = sorted(
     name for name in sys.modules
     if name.startswith(("PySide6", "shiboken6", "win32", "pywintypes"))
 )
 print(f"UDB_PYTEST_RETURN={code}", flush=True)
-print(f"UDB_NATIVE_STATE app={bool(app)} active_pool={pool.activeThreadCount() if pool else 0} modules={loaded}", flush=True)
+print(f"UDB_NATIVE_STATE app={app_live} modules={loaded}", flush=True)
 raise SystemExit(code)
 '@
 $failed = $false
+if ($env:UDB_NATIVE_GROUP -and -not $groups.Contains($env:UDB_NATIVE_GROUP)) {
+    throw 'Unexpected UDB_NATIVE_GROUP'
+}
 foreach ($group in $groups.GetEnumerator()) {
+    if ($env:UDB_NATIVE_GROUP -and $group.Key -ne $env:UDB_NATIVE_GROUP) { continue }
     $paths = @($group.Value)
+    "UDB_NATIVE_GROUP=$($group.Key) files=$($paths.Count)"
     if ($paths.Count -eq 0) { continue }
     python -X faulthandler -c $driver @paths
     $code = $LASTEXITCODE

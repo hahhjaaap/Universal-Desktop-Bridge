@@ -5,6 +5,7 @@ import json
 import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import pytest
 
@@ -78,6 +79,33 @@ def test_real_mcp_logging_keeps_stdio_parseable_and_does_not_store_payloads(tmp_
     rendered = output.getvalue()
     assert "CALLING bridge_status" in rendered and "PASS" in rendered
     assert "ERROR" in rendered and "PRIVATE_FILE_CONTENT" not in rendered
+
+
+def test_activity_read_tolerates_a_disappearing_journal(tmp_path, monkeypatch):
+    Activity(tmp_path).emit("call", "bridge_status")
+    journal = tmp_path / "state" / "activity.sqlite3-journal"
+    journal.touch()
+    is_file = Path.is_file
+
+    def finish_transaction(path):
+        result = is_file(path)
+        if path == journal and result:
+            path.unlink()
+        return result
+
+    monkeypatch.setattr(Path, "is_file", finish_transaction)
+    assert [row["tool"] for row in read_events(tmp_path)] == ["bridge_status"]
+
+
+def test_activity_read_refuses_a_hardlinked_journal(tmp_path):
+    Activity(tmp_path).emit("call", "bridge_status")
+    journal = tmp_path / "state" / "activity.sqlite3-journal"
+    other = tmp_path / "other.sqlite3"
+    other.touch()
+    journal.hardlink_to(other)
+
+    with pytest.raises(PolicyError, match="Hardlinked files"):
+        read_events(tmp_path)
 
 
 @pytest.mark.parametrize("raises", [False, True])

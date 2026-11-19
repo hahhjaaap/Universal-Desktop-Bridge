@@ -123,14 +123,20 @@ def is_under(path: Path, root: Path) -> bool:
 
 def reject_links(path: Path):
     """Reject every symlink/junction/reparse point, including ancestors."""
-    for part in [path, *path.parents]:
-        if not part.exists() and not part.is_symlink():
+    for part in (path, *path.parents):
+        try:
+            info = part.lstat()
+        except FileNotFoundError:
             continue
-        s = part.lstat()
-        if stat.S_ISLNK(s.st_mode) or getattr(s, "st_file_attributes", 0) & 0x400:
+        if (
+            stat.S_ISLNK(info.st_mode)
+            or getattr(info, "st_file_attributes", 0)
+            & stat.FILE_ATTRIBUTE_REPARSE_POINT
+        ):
             raise PolicyError("Symlink/junction/reparse points are not allowed")
-    if path.is_file() and path.stat().st_nlink != 1:
-        raise PolicyError("Hardlinked files are not allowed")
+        # A SQLite sidecar may disappear after this metadata lookup.
+        if part == path and stat.S_ISREG(info.st_mode) and info.st_nlink != 1:
+            raise PolicyError("Hardlinked files are not allowed")
 
 
 _DIFF_PREVIEW_LIMIT = 16000

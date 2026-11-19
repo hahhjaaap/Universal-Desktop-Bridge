@@ -63,6 +63,8 @@ function fixture() {
               rpc.params.name !== "bridge_status")
             return Response.json({ error: "device_disconnected_outcome_unknown" }, { status: 503 });
           const isStatus = rpc.method === "tools/call" && rpc.params.name === "bridge_status";
+          if (!isStatus && rpc.method === "tools/call" && device.rpcError)
+            return Response.json({ jsonrpc: "2.0", id: rpc.id, error: device.rpcError });
           const value = rpc.method === "tools/list" ? { tools: [
             tool("bridge_status"), tool("list_projects"), tool("computer_process",
               { action: { type: "string" } }), tool("computer_status"),
@@ -104,6 +106,24 @@ function fixture() {
     { name: "list_devices", arguments: {} })).json()).result.structuredContent.devices;
   return f;
 }
+
+test("account Fleet drops backend-authored RPC error details after device routing", async () => {
+  const f = fixture();
+  await f.add(deviceA, OWNER);
+  f.state.get(deviceA).rpcError = { code: -32602,
+    message: String.raw`C:\Users\fixture\private-file.txt synthetic-secret`,
+    data: { reason: "synthetic-secret", trace: "synthetic-stack-trace" },
+  };
+  const response = await f.call(OWNER, "tools/call", {
+    name: "list_projects", arguments: { device_id: deviceA },
+  }, 19);
+  const body = await response.text();
+  assert.equal(response.status, 200);
+  assert.equal(f.invocations.filter(({ rpc }) => rpc.id === 19).length, 1);
+  assert.doesNotMatch(body, /private-file|synthetic-secret|synthetic-stack-trace/);
+  assert.deepEqual(JSON.parse(body), { jsonrpc: "2.0", id: 19,
+    error: { code: -32602, message: "Invalid operation or arguments" } });
+});
 
 test("account discovery mirrors the authoritative Windows catalog and preserves exact schemas offline", async () => {
   const f = fixture();

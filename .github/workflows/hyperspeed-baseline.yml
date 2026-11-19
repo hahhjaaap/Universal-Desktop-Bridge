@@ -29,8 +29,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install source and test tools
@@ -49,7 +49,7 @@ jobs:
         run: |
           python -c "import json; x=json.load(open('hyperspeed-baseline.json',encoding='utf-8')); assert x['mode']=='synthetic' and x['scenario_count']==30 and x['sample_count']==120 and len(x['scenarios'])==30"
       - name: Attach synthetic diagnostic artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: hyperspeed-synthetic-${{ matrix.os }}-py${{ matrix.python-version }}
           path: |

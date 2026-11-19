@@ -569,9 +569,7 @@ class Desktop:
             raise PolicyError("Computer access was revoked; input stopped")
         # An HWND can be reused after resolve(). Recheck its observed process
         # and window identity at the physical input boundary, on every send.
-        observations = [
-            row for row in self.windows.values() if row.hwnd == hwnd
-        ]
+        observations = [row for row in self.windows.values() if row.hwnd == hwnd]
         if not observations:
             raise PolicyError("Window observation missing; list before input")
         expected = observations[0]

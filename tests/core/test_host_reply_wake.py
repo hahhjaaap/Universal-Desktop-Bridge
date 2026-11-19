@@ -32,7 +32,9 @@ def test_reply_listener_armed_before_command_publish_and_closed(owned, monkeypat
     class FakeWake:
         def __init__(self, directory):
             assert directory == replies
-            assert not list(inbox.iterdir()), "arm before command publish to avoid lost reply"
+            assert not list(inbox.iterdir()), (
+                "arm before command publish to avoid lost reply"
+            )
             events.append("armed")
 
         def wait(self, timeout, stop_event):

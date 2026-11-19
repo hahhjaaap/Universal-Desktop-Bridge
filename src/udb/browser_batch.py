@@ -73,10 +73,7 @@ def prepare(args):
         # FastPath verification semantics are intentionally unchanged.
         if any(
             step.get("action") == "click"
-            and (
-                "observe_after" in step
-                or "click_navigation_observe_ms" in step
-            )
+            and ("observe_after" in step or "click_navigation_observe_ms" in step)
             for step in steps
         ):
             raise PolicyError("FastPath does not support short click observation")

@@ -28,6 +28,46 @@ const rpcError = (rpc, code, message, status = 400) => {
   console.warn(JSON.stringify({ event: "mcp_protocol_rejected", code, reason: message }));
   return json({ jsonrpc: "2.0", id: rpc.id, error: { code, message } }, status);
 };
+const deviceErrorMessages = new Map([
+  [-32700, "Invalid JSON-RPC request"], [-32600, "Invalid JSON-RPC object"],
+  [-32601, "Method not found"], [-32602, "Invalid operation or arguments"],
+  [-32002, "Operation timed out; inspect state before retrying"],
+  [-32003, "UDB Unified is busy"],
+  [-32005, "MCP response exceeds size limit; do not replay side effects"],
+]);
+const uncertainOutcomeReasons = new Set([
+  "outcome_unknown_do_not_retry_mutations", "device_disconnected_outcome_unknown",
+  "relay_unavailable_outcome_unknown", "invalid_device_rpc_response",
+]);
+// Older agents put fixed machine-readable categories in the message field.
+const legacyAgentErrors = new Map([
+  ["DeviceBusy", "UDB Unified is busy"],
+  ["TimeoutError", "Operation timed out; inspect state before retrying"],
+  ["ResponseTooLarge", "MCP response exceeds size limit; do not replay side effects"],
+  ["ValueError", "Invalid operation or arguments"],
+  ["OSError", "Device error; inspect state before retrying"],
+  ["RuntimeError", "Device error; inspect state before retrying"],
+  ["InternalError", "Device error; inspect state before retrying"],
+]);
+const proxyPolicyMessages = new Set([
+  "MCP not initialized",
+  "Existing UDB owner computer access is required; AI cannot grant it",
+  "Existing desktop capability is required",
+  "Desktop control is paused locally; only the owner can resume in UDB",
+  "Existing execute capability is required",
+  "Machine busy or resource monitor unavailable; retry after 6 seconds",
+]);
+
+function publicDeviceError(upstream) {
+  const code = Number.isSafeInteger(upstream?.code) ? upstream.code : -32603;
+  const reported = upstream?.message;
+  const legacy = code === -32000 && legacyAgentErrors.has(reported) ? reported : undefined;
+  const policy = code === -32000 && proxyPolicyMessages.has(reported) ? reported : undefined;
+  const message = legacyAgentErrors.get(legacy) ?? policy ?? deviceErrorMessages.get(code) ??
+    "Device error; inspect state before retrying";
+  const reason = uncertainOutcomeReasons.has(upstream?.data?.reason) ? upstream.data.reason : legacy;
+  return { code, message, ...(reason === undefined ? {} : { data: { reason } }) };
+}
 const serverInfo = (user) => ({
   name: user.enrolledOwner ? "udb-cloud-local-permissions" :
     user.ownerTools?.length ? "udb-cloud-owner-gated" : "udb-cloud-readonly",
@@ -443,6 +483,8 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
     if (!filtered) return error(502, "invalid_device_project_list");
     reply.result = filtered;
   }
+  if (Object.hasOwn(reply, "error"))
+    return json({ jsonrpc: "2.0", id: rpc.id, error: publicDeviceError(reply.error) });
   if (rpc.method === "tools/list" && !reply.error) {
     await probeSetupConnection(env, stub, user);
     if (!Array.isArray(reply.result?.tools)) return error(502, "invalid_device_catalog");

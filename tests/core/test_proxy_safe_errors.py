@@ -72,3 +72,67 @@ def test_explicit_initialization_policy_message_remains_visible():
     p.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
     assert frames[0]["error"]["code"] == -32000
     assert frames[0]["error"]["message"] == "MCP not initialized"
+
+
+@pytest.mark.parametrize("route", ["direct", "fleet", "non-tool"])
+@pytest.mark.parametrize(
+    ("code", "reason", "public_code", "public_reason"),
+    [
+        (-32602, "synthetic-secret", -32602, None),
+        (
+            -32002,
+            "outcome_unknown_do_not_retry_mutations",
+            -32002,
+            "outcome_unknown_do_not_retry_mutations",
+        ),
+        (-32099, ["synthetic-secret"], -32099, None),
+        (True, None, -32603, None),
+    ],
+)
+def test_backend_rpc_error_is_sanitized(
+    route, code, reason, public_code, public_reason, capsys
+):
+    def request(_method, _params):
+        return {
+            "error": {
+                "code": code,
+                "message": r"C:\Users\fixture\private-file.txt synthetic-secret",
+                "data": {"reason": reason, "trace": "synthetic-stack-trace"},
+            },
+            "synthetic-extra": "synthetic-secret",
+        }
+
+    backend = SimpleNamespace(request=request)
+    p = proxy.UnifiedProxy(backend, object(), fleet=SimpleNamespace(local_id="pc-home"))
+    p.tool_routes = {"bridge_status": backend}
+    p.startup_ok = True
+    frames = []
+    p.send = frames.append
+    params = {"name": "bridge_status", "arguments": {}}
+    if route == "fleet":
+        params = {
+            "name": "fleet_call",
+            "arguments": {
+                "computer_id": "pc-home",
+                "tool": "bridge_status",
+                "arguments": {},
+            },
+        }
+    assert p.active_limit.acquire(blocking=False)
+    p.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 31,
+            "method": "fixture" if route == "non-tool" else "tools/call",
+            "params": params,
+        }
+    )
+    assert len(frames) == 1 and frames[0]["id"] == 31
+    error = frames[0]["error"]
+    assert error["code"] == public_code
+    assert error.get("data", {}).get("reason") == public_reason
+    if public_reason:
+        assert "inspect state before retrying" in error["message"]
+    report = json.dumps(frames) + capsys.readouterr().err
+    for secret in ("private-file", "synthetic-secret", "synthetic-stack-trace"):
+        assert secret not in report

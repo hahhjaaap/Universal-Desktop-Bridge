@@ -129,11 +129,14 @@ def _file_search(runtime, args):
         args.get("text", ""),
         args.get("limit", 30),
     )
+    skipped = r.get("skipped")
+    details = f"\nScanned: {r['scanned']} | Truncated: {r['truncated']}"
+    if skipped:
+        details += f" | Unreadable: {skipped['unreadable']} | Oversized: {skipped['too_large']}"
     return respond_text(
         "PASS",
         f"Tìm thấy {len(r['matches'])} file",
-        "\n".join(r["matches"])
-        + f"\nScanned: {r['scanned']} | Truncated: {r['truncated']}",
+        "\n".join(r["matches"]) + details,
     )
 
 

@@ -309,9 +309,23 @@ class ScopedFiles:
             raise NotADirectoryError("Search path must be a folder")
         matches = []
         scanned = 0
+        skipped = {"too_large": 0, "unreadable": 0}
+
+        def report(truncated):
+            partial = any(skipped.values())
+            return {
+                "matches": matches,
+                "scanned": min(scanned, MAX_SCAN_FILES),
+                "truncated": truncated or partial,
+                **({"skipped": skipped} if partial else {}),
+            }
+
+        def onerror(_error):
+            skipped["unreadable"] += 1
+
         cap = max(1, min(200, int(limit)))
         folded_text = text.casefold() if text else ""
-        for base, dirs, files in os.walk(root, followlinks=False):
+        for base, dirs, files in os.walk(root, followlinks=False, onerror=onerror):
             # Do not descend into protected trees just to reject every file.
             # This also avoids scanning large datasets, model weights and secrets.
             allowed_dirs = []
@@ -327,20 +341,20 @@ class ScopedFiles:
             for name in files:
                 scanned += 1
                 if scanned > MAX_SCAN_FILES:
-                    return {
-                        "matches": matches,
-                        "scanned": MAX_SCAN_FILES,
-                        "truncated": True,
-                    }
+                    return report(True)
                 if not fnmatch.fnmatch(name, pattern):
                     continue
                 p = Path(base) / name
                 try:
                     p = self.path(str(p))
+                except (OSError, ValueError):
+                    continue  # Do not expose or count paths denied by project policy.
+                try:
                     if not p.is_file():
                         continue
                     if text:
                         if p.stat().st_size > 1024 * 1024:
+                            skipped["too_large"] += 1
                             continue
                         if "\n" in text or "\r" in text:
                             # Multiline queries still need the original whole-text
@@ -362,9 +376,10 @@ class ScopedFiles:
                                 )
                         if not found:
                             continue
-                except (OSError, ValueError, PermissionError):
+                except OSError:
+                    skipped["unreadable"] += 1
                     continue
                 matches.append(str(p.relative_to(self.root)))
                 if len(matches) >= cap:
-                    return {"matches": matches, "scanned": scanned, "truncated": True}
-        return {"matches": matches, "scanned": scanned, "truncated": False}
+                    return report(True)
+        return report(False)

@@ -267,19 +267,28 @@ class Agent(AutonomyMixin):
             ).fetchone()
         return int(total), int(writable)
 
-    def project(self, project: str):
+    def _project_scope(self, project: str):
         with self.connect() as c:
+            c.execute("BEGIN")
             r = c.execute("SELECT * FROM projects WHERE id=?", (project,)).fetchone()
+            roots = tuple(
+                Path(row[0])
+                for row in c.execute("SELECT root FROM protected ORDER BY root")
+            )
         if not r:
             raise PolicyError("Unknown project; register it locally in the EXE manager")
         p = Path(r["root"])
         reject_links(p)
         if not p.is_dir() or p.resolve() != p:
             raise PolicyError("Project root changed")
-        self.check_protected(p)
-        return r, p
+        self.check_protected(p, roots)
+        return r, p, roots
 
-    def check_protected(self, p: Path):
+    def project(self, project: str):
+        row, root, _ = self._project_scope(project)
+        return row, root
+
+    def check_protected(self, p: Path, roots=None):
         # Internal agent files must never be exposed as a registered project.
         resolved = p.resolve()
         if is_under(resolved, self.state.resolve()):
@@ -290,8 +299,9 @@ class Agent(AutonomyMixin):
             raise PolicyError(
                 "Bridge installation is private; use the projects subfolder"
             )
-        with self.connect() as c:
-            roots = [Path(r[0]) for r in c.execute("SELECT root FROM protected")]
+        if roots is None:
+            with self.connect() as c:
+                roots = [Path(r[0]) for r in c.execute("SELECT root FROM protected")]
         protected = [q for q in roots if is_under(resolved, q)]
         if protected:
             from .source_access import allows
@@ -327,9 +337,12 @@ class Agent(AutonomyMixin):
         )
 
     def path(self, project: str, relative: str = ".", write=False):
-        r, root = self.project(project)
-        if write and not r["writable"]:
+        row, root, roots = self._project_scope(project)
+        if write and not row["writable"]:
             raise PolicyError("Project is read-only")
+        return self._path_in_scope(root, relative, roots)
+
+    def _path_in_scope(self, root: Path, relative: str, roots):
         if not isinstance(relative, str) or len(relative) > 240 or "\x00" in relative:
             raise PolicyError("Invalid relative path")
         w = PureWindowsPath(relative)
@@ -374,7 +387,7 @@ class Agent(AutonomyMixin):
             deny_source_parts(canonical_relative_parts(root, p))
         except PermissionError:
             raise PolicyError("Cannot verify canonical project path") from None
-        self.check_protected(p)
+        self.check_protected(p, roots)
         return p
 
     def _source_data(self, project, relative):
@@ -405,7 +418,9 @@ class Agent(AutonomyMixin):
         return {"path": relative, "sha256": sha, "text": content}
 
     def listing(self, project, relative=".", offset=0, limit=100, after=""):
-        p = self.path(project, relative)
+        scope = self._project_scope(project)
+        _, root, roots = scope
+        p = self._path_in_scope(root, relative, roots)
         if not p.is_dir():
             raise PolicyError("Listing root must be a project directory")
         offset = max(0, min(int(offset), 100000))
@@ -414,7 +429,6 @@ class Agent(AutonomyMixin):
             raise PolicyError("Invalid listing cursor")
         if after and offset:
             raise PolicyError("Use either offset or after, not both")
-        _, root = self.project(project)
         visible = []
         scan_truncated = False
         # Filter extensions before invoking the complete source path policy.
@@ -431,12 +445,16 @@ class Agent(AutonomyMixin):
                     ):
                         continue
                     relative_path = (p / entry.name).relative_to(root).as_posix()
-                    verified = self.path(project, relative_path)
+                    verified = self._path_in_scope(root, relative_path, roots)
                     visible.append(
                         {"path": relative_path, "directory": verified.is_dir()}
                     )
                 except (PolicyError, OSError):
                     continue
+
+        # Check once more before exposing results from the request snapshot.
+        if self._project_scope(project) != scope:
+            raise PolicyError("Project or protected roots changed during listing")
 
         # Casefold collisions are ordered by the original path, not scandir
         # enumeration order. Cursor paging does not repeat earlier entries if

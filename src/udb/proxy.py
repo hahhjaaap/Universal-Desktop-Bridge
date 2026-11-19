@@ -113,6 +113,19 @@ _STATUS_ENVELOPE_TOOLS = frozenset(
 )
 
 
+class PolicyMessage(RuntimeError):
+    """A fixed proxy policy explanation intended for the client."""
+
+
+_PROXY_ERROR_MESSAGES = {
+    OSError: "A local operation failed; inspect state before retrying",
+    ValueError: "Invalid operation or arguments",
+    RuntimeError: "The operation failed; inspect state before retrying",
+    KeyError: "Required operation data is missing",
+    TypeError: "Invalid operation data",
+}
+
+
 def normalized_output(tool: str, result: dict[str, Any]) -> dict[str, Any]:
     """Only backend-authored status can classify a tool call."""
     if not isinstance(result, dict) or not isinstance(result.get("content"), list):
@@ -415,17 +428,17 @@ class UnifiedProxy:
         grant = _result_payload(result)
         if result.get("isError") or grant.get("enabled") is not True:
             self.companion.request("udb/close-sessions", timeout=10)
-            raise RuntimeError(
+            raise PolicyMessage(
                 "Existing UDB owner computer access is required; AI cannot grant it"
             )
         if name == "virtual_pointer" and "desktop" not in grant.get("capabilities", []):
-            raise RuntimeError("Existing desktop capability is required")
+            raise PolicyMessage("Existing desktop capability is required")
         if (
             name == "virtual_pointer"
             and grant.get("desktop_paused")
             and arguments.get("action") not in {"status", "hide", "stop"}
         ):
-            raise RuntimeError(
+            raise PolicyMessage(
                 "Desktop control is paused locally; only the owner can resume in UDB"
             )
         if (
@@ -433,7 +446,7 @@ class UnifiedProxy:
             and arguments.get("mode") == "conpty"
             and "execute" not in grant.get("capabilities", [])
         ):
-            raise RuntimeError("Existing execute capability is required")
+            raise PolicyMessage("Existing execute capability is required")
         requirement = _resource_requirement(name, arguments)
         if requirement is None:
             return
@@ -445,7 +458,7 @@ class UnifiedProxy:
         if not isinstance(resources, dict):
             resources = {}
         if not resources.get(requirement) or not fresh(resources):
-            raise RuntimeError(
+            raise PolicyMessage(
                 "Machine busy or resource monitor unavailable; retry after 6 seconds"
             )
 
@@ -562,7 +575,7 @@ class UnifiedProxy:
                 result = self.initialize(params)
             elif method == "tools/list":
                 if not self.startup_ok:
-                    raise RuntimeError("MCP not initialized")
+                    raise PolicyMessage("MCP not initialized")
                 result = self.tools_list()
             elif method == "tools/call":
                 candidate = params.get("name")
@@ -571,7 +584,7 @@ class UnifiedProxy:
                     "call", tool, call_id, arguments=params.get("arguments")
                 )
                 if not self.startup_ok:
-                    raise RuntimeError("MCP not initialized")
+                    raise PolicyMessage("MCP not initialized")
                 result = self.call_tool(params)
                 observed_result = result
                 if "_upstream_rpc_error" in result:
@@ -593,12 +606,22 @@ class UnifiedProxy:
                     return
                 result = reply.get("result", {})
             deliver({"jsonrpc": "2.0", "id": ident, "result": result})
-        except TimeoutError as e:
-            observed_error = e
-            safely_report(str(e), -32002)
-        except (OSError, ValueError, RuntimeError, KeyError, TypeError) as e:
+        except PolicyMessage as e:
             observed_error = e
             safely_report(str(e), -32000)
+        except TimeoutError as e:
+            observed_error = e
+            print("UDB Unified: " + type(e).__name__, file=sys.stderr)
+            safely_report("Operation timed out; inspect state before retrying", -32002)
+        except (OSError, ValueError, RuntimeError, KeyError, TypeError) as e:
+            observed_error = e
+            print("UDB Unified: " + type(e).__name__, file=sys.stderr)
+            message = next(
+                message
+                for category, message in _PROXY_ERROR_MESSAGES.items()
+                if isinstance(e, category)
+            )
+            safely_report(message, -32000)
         except Exception as e:
             observed_error = e
             # Unexpected error args may contain user content or secrets.
@@ -679,7 +702,16 @@ class UnifiedProxy:
                 self.send(rpc_error(message.get("id"), "UDB Unified is busy", -32003))
                 continue
             perf.interval("mcp.dispatch", "queue", queued_at, rpc_id=message.get("id"))
-            threading.Thread(target=self.handle, args=(message,), daemon=True).start()
+            try:
+                threading.Thread(
+                    target=self.handle, args=(message,), daemon=True
+                ).start()
+            except Exception as e:
+                self.active_limit.release()
+                print("UDB Unified: " + type(e).__name__, file=sys.stderr)
+                self.send(
+                    rpc_error(ident, "Unable to start the request worker", -32603)
+                )
 
 
 def run(settings) -> int:

@@ -111,7 +111,7 @@ def test_failed_observer_never_changes_dispatch_or_replays_calls(raises, capsys)
     assert len(calls) == len(replies) == 1
     assert ("error" in replies[0]) == raises
     assert proxy.active_limit.acquire(timeout=0.1)
-    assert capsys.readouterr() == ("", "")
+    assert capsys.readouterr() == ("", "UDB Unified: TimeoutError\n" if raises else "")
 
 
 def test_retention_and_concurrent_proxies_use_one_ordered_log(tmp_path, monkeypatch):

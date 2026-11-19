@@ -19,6 +19,7 @@ from .browser_batch import BatchRunner
 from .browser_capture import CaptureCache
 from .core import PolicyError, reject_links
 from .host_client import _read_json, atomic_json, enabled
+from .host_inbox_wake import InboxWake
 from .resources import LIMITS, Governor, WindowsSampler, require_capacity
 
 _IDLE_POLL_SECONDS = 0.25
@@ -600,33 +601,37 @@ class HostService:
     def _work(self):
         poll = 0.06
         next_cleanup = 0.0
-        while not self.stop_event.is_set():
-            processed = False
-            try:
-                if self.maintenance.is_set():
-                    with self.lock:
-                        self.maintenance.clear()
-                        self._maintain()
-                for p in pending_inbox_commands(self.folder / "inbox"):
-                    if self.stop_event.is_set():
-                        break
-                    try:
-                        processed = self._process_command(p) or processed
-                    except Exception:
-                        continue  # A bad/locked entry must not block the rest of the inbox.
-                if getattr(self, "captures", None):
-                    with self.lock:
-                        self.captures.tick(self)
-                now = time.monotonic()
-                if now >= next_cleanup:
-                    next_cleanup = now + _REPLY_CLEANUP_SECONDS
-                    self._prune_replies()
-            except Exception:
-                pass  # Transient mailbox errors are retried on the next poll.
-            poll = 0.06 if processed else min(_IDLE_POLL_SECONDS, poll * 1.5)
-            if getattr(getattr(self, "captures", None), "streams", {}):
-                poll = min(poll, 0.05)
-            self.stop_event.wait(poll)
+        watcher = InboxWake(self.folder / "inbox")
+        try:
+            while not self.stop_event.is_set():
+                processed = False
+                try:
+                    if self.maintenance.is_set():
+                        with self.lock:
+                            self.maintenance.clear()
+                            self._maintain()
+                    for p in pending_inbox_commands(self.folder / "inbox"):
+                        if self.stop_event.is_set():
+                            break
+                        try:
+                            processed = self._process_command(p) or processed
+                        except Exception:
+                            continue  # A bad/locked entry must not block the rest of the inbox.
+                    if getattr(self, "captures", None):
+                        with self.lock:
+                            self.captures.tick(self)
+                    now = time.monotonic()
+                    if now >= next_cleanup:
+                        next_cleanup = now + _REPLY_CLEANUP_SECONDS
+                        self._prune_replies()
+                except Exception:
+                    pass  # Transient mailbox errors are retried on the next poll.
+                poll = 0.06 if processed else min(_IDLE_POLL_SECONDS, poll * 1.5)
+                if getattr(getattr(self, "captures", None), "streams", {}):
+                    poll = min(poll, 0.05)
+                watcher.wait(poll, self.stop_event)
+        finally:
+            watcher.close()
 
     def close(self):
         self.stop_event.set()

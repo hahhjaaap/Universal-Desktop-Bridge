@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from udb import host_client, protocol
+from udb import host_client, host_inbox_wake, protocol
 from udb.computer_jobs import Jobs
 from udb.core import Agent, PolicyError
 from udb.desktop import DesktopController
@@ -170,6 +170,8 @@ def test_one_bad_mailbox_entry_does_not_delay_later_valid_commands(
             return True
 
     service.stop_event = SingleScan()
+    # This fixture stops after one simulated polling wait.
+    monkeypatch.setattr(host_inbox_wake, "os", SimpleNamespace(name="posix"))
     service._work()
     assert calls == ["stop_all"]
     reply = json.loads((service.folder / "replies" / valid.name).read_text())

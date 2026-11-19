@@ -157,3 +157,32 @@ and common-room GUI fixtures. Audit any isolated failure for surviving
 callback lifetime if the Win32-only group reproduces it or the fault trace
 points there. A localized teardown fix should wait for a repeatable module or
 fixture and evidence that the native exit stops.
+
+## WS15 current baseline
+
+On `6b46d8322b93b56c8ab26a0b49af24d1f51f6880`, the hosted [Windows Python
+3.12 job](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44498559785/job/135479628686)
+printed `2295 passed, 18 skipped`, `UDB_PYTEST_RETURN=0`, and
+`UDB_QT_TEST_CLEANUP=completed`. GitHub recorded the regression step as
+successful. The separate `Check native Windows browser and utility APIs`
+step failed with `Owned host operation failed; inspect status before retrying`
+and process exit 1. The job failed, but this failure is distinct from the
+interpreter exit failure in #238.
+
+The shared application in `tests/test_cloud_first_gui.py:43` and
+`tests/test_common_room_gui.py:21` intentionally persists across tests.
+The quick-controls fixture drains the global pool after closing its window
+(`tests/test_quick_controls.py:21–46`). Manager and activity timers are widget
+children (`src/udb/manager.py:212`, `src/udb/activity_gui.py:63`), and the
+manager's explicit quit calls `timer.stop()` (`src/udb/manager.py:1497–1510`).
+These lifetimes motivate measuring global-pool drain separately from widget
+and application disposal. The clean grouped runs in #238 do not identify a
+particular fixture or callback as the cause.
+
+The diagnostic draft runs raw full suites on Windows Python 3.11 and 3.12
+and a pool-drain-only comparison on 3.12. A native exit remains a failed job
+even if the pytest marker is 0. The pool-drain variant leaves the QApplication
+alive so it can distinguish this stage from the complete managed teardown.
+A single successful raw run cannot rule out intermittent failure. Keep the
+managed runner until the cause is confirmed and three consecutive raw runs
+complete on each Windows matrix member without the workaround.

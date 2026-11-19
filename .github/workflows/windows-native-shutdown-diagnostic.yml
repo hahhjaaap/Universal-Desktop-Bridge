@@ -1,0 +1,68 @@
+name: Windows pytest native shutdown diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/windows-native-shutdown-diagnostic.yml
+
+permissions:
+  contents: read
+
+jobs:
+  raw-shutdown:
+    # Run only on the WS15 diagnostic draft. This is not a required CI check.
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'security/ws15-native-shutdown-evidence-20261119'
+    runs-on: windows-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python: '3.11'
+            cleanup: raw
+          - python: '3.12'
+            cleanup: raw
+          - python: '3.12'
+            cleanup: pool-only
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install ".[office,dev]"
+      - name: Record pytest and native shutdown separately
+        shell: pwsh
+        env:
+          UDB_RUN_INTERACTIVE_WINDOWS_TESTS: '1'
+          PYTHONFAULTHANDLER: '1'
+          UDB_NATIVE_CLEANUP: ${{ matrix.cleanup }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          $driver = @'
+          import os
+          import sys
+
+          import pytest
+
+          code = int(pytest.main(["-q"]))
+          print(f"UDB_PYTEST_RETURN={code}", flush=True)
+          qt = sys.modules.get("PySide6.QtCore")
+          app_live = qt is not None and qt.QCoreApplication.instance() is not None
+          loaded = sorted(name for name in sys.modules if
+                          name.startswith(("PySide6", "shiboken6", "win32", "pywintypes")))
+          print(f"UDB_NATIVE_STATE app={app_live} modules={loaded}", flush=True)
+
+          if os.environ["UDB_NATIVE_CLEANUP"] == "pool-only" and app_live:
+              pool = qt.QThreadPool.globalInstance()
+              if pool is not None and not pool.waitForDone(15_000):
+                  raise RuntimeError("Qt pool did not drain before process shutdown")
+              print("UDB_QT_POOL_DRAIN=completed", flush=True)
+          raise SystemExit(code)
+          '@
+          python -X faulthandler -c $driver
+          $code = $LASTEXITCODE
+          'UDB_NATIVE_EXIT=0x{0:X8} ({1})' -f ([int64]$code -band 0xFFFFFFFFL), $code
+          exit $code

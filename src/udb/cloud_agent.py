@@ -38,6 +38,7 @@ _MAX_FRAME = 1024 * 1024
 _MIN_RETRY_SECONDS = 5
 _MAX_RETRY_SECONDS = 120
 _MAX_PARALLEL_CALLS = 10
+_STATUS_LOCK_WAIT_SECONDS = 6.0
 # Detect half-open TCP / idle WebSocket connections without replaying RPCs.
 _HEARTBEAT_IDLE_SECONDS = 30
 _HEARTBEAT_PONG_SECONDS = 15
@@ -347,7 +348,11 @@ class ParallelLocalProxies:
             and params.get("name") == "bridge_status"
         )
         if shared_status:
-            with self.status_lock:
+            # A slow status call must not park the other nine admitted tasks
+            # indefinitely. Busy means *no* RPC was dispatched and is safe.
+            if not self.status_lock.acquire(timeout=_STATUS_LOCK_WAIT_SECONDS):
+                raise ResourceBusyError("ResourceBusy")
+            try:
                 # Re-check after a queued status request acquires the lock.
                 if self.failed.is_set():
                     raise RuntimeError("Cloud RPC pool is unavailable")
@@ -362,6 +367,8 @@ class ParallelLocalProxies:
                     with self.lock:
                         self.proxies.append(proxy)
                 return self._call_and_guard(proxy, rpc)
+            finally:
+                self.status_lock.release()
 
         desktop = kind == "desktop"
         proxy = self.desktop_proxy if desktop else getattr(self.local, "proxy", None)

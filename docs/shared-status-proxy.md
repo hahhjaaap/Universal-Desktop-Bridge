@@ -14,9 +14,11 @@ process, not in the running production bridge without validation.
 
 When enabled, only `tools/call` with the exact tool name `bridge_status`
 uses one connection-scoped local stdio proxy. Its calls are serialized under
-a lock, so responses cannot be interleaved. The normal authorization path,
-MCP request envelopes, deadlines, failure poisoning, and teardown are
-unchanged. `host_status`, `computer_status`, all file/process operations,
+a lock, so responses cannot be interleaved. Waiting for this lock is
+bounded to 6 seconds; contention returns `ResourceBusy` **before** any
+additional status RPC is dispatched, rather than holding accepted tasks
+indefinitely. The normal authorization path, MCP request envelopes, failure
+poisoning, and teardown are unchanged. `host_status`, `computer_status`, all file/process operations,
 UI/desktop, browser, and mutations continue on the existing lanes. In
 particular, this change **does not** share or retire the desktop proxy.
 
@@ -33,7 +35,8 @@ A failing/uncertain proxy poisons the full pool; no RPC is retried.
 
 Dependency-injected tests require eight overlapping status requests to
 create just one LocalProxy, preserve unique request IDs, restrict sharing
-to bridge_status (not host_status), close all workers, and fail closed
+to bridge_status (not host_status), close all workers, return busy before
+sending a second RPC after a bounded lock timeout, and fail closed
 without retrying after a poisoned result. Other pool tests still verify
 ten parallel reads on the default path.
 

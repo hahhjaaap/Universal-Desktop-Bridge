@@ -5,13 +5,16 @@ from __future__ import annotations
 import json
 import math
 import re
+import threading
 import time
 import uuid
+from contextlib import closing
 from pathlib import Path
 from time import perf_counter_ns
 
 from . import hyperspeed_perf as perf
 from .core import PolicyError, reject_links
+from .host_inbox_wake import InboxWake
 from .resources import LIMITS
 
 
@@ -170,41 +173,45 @@ def command(agent, op, **args):
     payload = dict(id=rid, expires=until, op=op, args=args)
     if len(json.dumps(payload, ensure_ascii=True).encode()) > 16 * 1048576:
         raise PolicyError("Command payload exceeds 16 MiB")
-    atomic_json(inbox / (rid + ".json"), payload)
     result_path = replies / (rid + ".json")
-    while time.monotonic() < wait_deadline:
-        if result_path.exists():
-            reject_links(result_path)
-            try:
-                result = _read_json(result_path, 12 * 1048576)
-            except (OSError, ValueError) as exc:
-                raise PolicyError(
-                    "Invalid host reply; outcome unknown, inspect host status before retrying"
-                ) from exc
-            result_path.unlink(missing_ok=True)
-            if not isinstance(result, dict) or type(result.get("ok")) is not bool:
-                raise PolicyError(
-                    "Invalid host reply; outcome unknown, inspect host status"
+    # Subscribe before publishing the request. The atomic reply rename
+    # otherwise can occur between enqueue and the first watcher wait.
+    with closing(InboxWake(replies)) as wake:
+        atomic_json(inbox / (rid + ".json"), payload)
+        fallback_wait = threading.Event()
+        while time.monotonic() < wait_deadline:
+            if result_path.exists():
+                reject_links(result_path)
+                try:
+                    result = _read_json(result_path, 12 * 1048576)
+                except (OSError, ValueError) as exc:
+                    raise PolicyError(
+                        "Invalid host reply; outcome unknown, inspect host status before retrying"
+                    ) from exc
+                result_path.unlink(missing_ok=True)
+                if not isinstance(result, dict) or type(result.get("ok")) is not bool:
+                    raise PolicyError(
+                        "Invalid host reply; outcome unknown, inspect host status"
+                    )
+                if result["ok"] is False:
+                    message = result.get("error")
+                    raise PolicyError(
+                        message[:500]
+                        if isinstance(message, str)
+                        else "Host operation failed; inspect status"
+                    )
+                if "result" not in result:
+                    raise PolicyError(
+                        "Invalid host reply; outcome unknown, inspect host status"
+                    )
+                perf.interval(
+                    "host.mailbox",
+                    "observation",
+                    mailbox_started,
+                    rpc_id=rid,
                 )
-            if result["ok"] is False:
-                message = result.get("error")
-                raise PolicyError(
-                    message[:500]
-                    if isinstance(message, str)
-                    else "Host operation failed; inspect status"
-                )
-            if "result" not in result:
-                raise PolicyError(
-                    "Invalid host reply; outcome unknown, inspect host status"
-                )
-            perf.interval(
-                "host.mailbox",
-                "observation",
-                mailbox_started,
-                rpc_id=rid,
-            )
-            return result["result"]
-        time.sleep(0.04)
-    raise PolicyError(
-        "Host operation timed out; inspect host status before retrying a write"
-    )
+                return result["result"]
+            wake.wait(0.04, fallback_wait)
+        raise PolicyError(
+            "Host operation timed out; inspect host status before retrying a write"
+        )

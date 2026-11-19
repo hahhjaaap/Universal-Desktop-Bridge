@@ -19,12 +19,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - python: '3.11'
-            cleanup: raw
           - python: '3.12'
-            cleanup: raw
+            group: qt-only
           - python: '3.12'
-            cleanup: pool-only
+            group: without-qt-tests
+          - python: '3.12'
+            group: without-win32-tests
+          - python: '3.12'
+            group: without-manager-ui
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -38,28 +40,42 @@ jobs:
         env:
           UDB_RUN_INTERACTIVE_WINDOWS_TESTS: '1'
           PYTHONFAULTHANDLER: '1'
-          UDB_NATIVE_CLEANUP: ${{ matrix.cleanup }}
+          UDB_NATIVE_GROUP: ${{ matrix.group }}
         run: |
           $PSNativeCommandUseErrorActionPreference = $false
           $driver = @'
           import os
+          import re
           import sys
+          from pathlib import Path
 
           import pytest
 
-          code = int(pytest.main(["-q"]))
+          group = os.environ["UDB_NATIVE_GROUP"]
+          tests = sorted(p for p in Path("tests").rglob("test_*.py")
+                         if p.parts[:2] != ("tests", "components"))
+          qt = set()
+          win = set()
+          for path in tests:
+              source = path.read_text(encoding="utf-8-sig")
+              if re.search(r"PySide6|shiboken6|QApplication|QThread|QTimer", source):
+                  qt.add(path)
+              if re.search(r"\bwin32[a-z]+\b|pywintypes|WINFUNCTYPE|CFUNCTYPE", source):
+                  win.add(path)
+          excluded = {
+              "qt-only": set(tests) - qt,
+              "without-qt-tests": qt,
+              "without-win32-tests": win,
+              "without-manager-ui": {Path("tests/test_manager_ui.py")},
+          }[group]
+          print(f"UDB_NATIVE_GROUP={group} files={len(tests) - len(excluded)}", flush=True)
+          code = int(pytest.main(["-q", *(f"--ignore={p}" for p in sorted(excluded))]))
           print(f"UDB_PYTEST_RETURN={code}", flush=True)
           qt = sys.modules.get("PySide6.QtCore")
           app_live = qt is not None and qt.QCoreApplication.instance() is not None
           loaded = sorted(name for name in sys.modules if
                           name.startswith(("PySide6", "shiboken6", "win32", "pywintypes")))
           print(f"UDB_NATIVE_STATE app={app_live} modules={loaded}", flush=True)
-
-          if os.environ["UDB_NATIVE_CLEANUP"] == "pool-only" and app_live:
-              pool = qt.QThreadPool.globalInstance()
-              if pool is not None and not pool.waitForDone(15_000):
-                  raise RuntimeError("Qt pool did not drain before process shutdown")
-              print("UDB_QT_POOL_DRAIN=completed", flush=True)
           raise SystemExit(code)
           '@
           python -X faulthandler -c $driver

@@ -179,10 +179,17 @@ These lifetimes motivate measuring global-pool drain separately from widget
 and application disposal. The clean grouped runs in #238 do not identify a
 particular fixture or callback as the cause.
 
-The diagnostic draft runs raw full suites on Windows Python 3.11 and 3.12
-and a pool-drain-only comparison on 3.12. A native exit remains a failed job
-even if the pytest marker is 0. The pool-drain variant leaves the QApplication
-alive so it can distinguish this stage from the complete managed teardown.
-A single successful raw run cannot rule out intermittent failure. Keep the
-managed runner until the cause is confirmed and three consecutive raw runs
-complete on each Windows matrix member without the workaround.
+The initial diagnostic compared raw full suites with pool drain only. On
+[Windows 3.12 with pool drain only](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44508026972/job/135504634209),
+pytest reported 2,295 passes, 18 skips, 29 passing subtests and return 0.
+The log recorded a live QApplication and a completed pool drain, followed by
+an access violation without a Python frame. The native process exited
+`0xC0000005` (`-1073741819`). Successful drain alone does not prevent the crash.
+
+The next round tests raw Windows 3.12 with direct Qt tests only, without direct
+Qt tests, without direct Win32 tests, and without `test_manager_ui.py`. It
+keeps normal collection order and records actual loaded modules since direct
+file markers do not capture transitive imports. A single successful raw run
+cannot rule out intermittent failure. Keep the managed runner until the cause
+is confirmed and three consecutive raw runs complete on each Windows matrix
+member without the workaround.

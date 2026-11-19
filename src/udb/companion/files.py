@@ -249,23 +249,22 @@ class ScopedFiles:
                 # race a replacement. Never suppress failed comparisons.
                 if _bounded_sha256(p).lower() != expected_sha256.lower():
                     raise ValueError("File changed before commit; write cancelled")
-                if not p.name.startswith(".udb-companion-test-"):
-                    recovery = self.root / ".udb-recovery"
-                    if is_reparse(recovery):
-                        raise PermissionError("Recovery directory is redirected")
-                    recovery.mkdir(exist_ok=True)
-                    if is_reparse(recovery):
-                        raise PermissionError("Recovery directory is redirected")
-                    backup = recovery / (
-                        digest(str(p).encode())[:12]
-                        + "-"
-                        + str(int(time.time() * 1000))
-                        + ".bak"
-                    )
-                    with backup.open("xb") as b:
-                        b.write(previous)
-                        b.flush()
-                        os.fsync(b.fileno())
+                recovery = self.root / ".udb-recovery"
+                if is_reparse(recovery):
+                    raise PermissionError("Recovery directory is redirected")
+                recovery.mkdir(exist_ok=True)
+                if is_reparse(recovery):
+                    raise PermissionError("Recovery directory is redirected")
+                backup = recovery / (
+                    digest(str(p).encode())[:12]
+                    + "-"
+                    + str(int(time.time() * 1000))
+                    + ".bak"
+                )
+                with backup.open("xb") as b:
+                    b.write(previous)
+                    b.flush()
+                    os.fsync(b.fileno())
                 os.replace(temp_name, p)
         finally:
             if os.path.exists(temp_name):

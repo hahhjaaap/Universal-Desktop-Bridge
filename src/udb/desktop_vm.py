@@ -74,7 +74,7 @@ def guest_source():
     return Path(__file__).with_name("desktop_guest.py").read_bytes()
 
 
-def propose(agent, project, task, duration_seconds=600):
+def propose(agent, project, task, duration_seconds=600, *, owner_initiated=False):
     # Reject malformed task envelopes before probing the VM or walking a
     # project snapshot. Bool/float durations are not valid clock budgets.
     if not isinstance(task, str) or not 1 <= len(task) <= 2000:
@@ -99,7 +99,7 @@ def propose(agent, project, task, duration_seconds=600):
             "memory_mb": 4096,
         },
     }
-    return agent.propose("desktop", payload)
+    return agent.propose("desktop", payload, owner_initiated=owner_initiated)
 
 
 def build_config(input_dir, output, runtime):

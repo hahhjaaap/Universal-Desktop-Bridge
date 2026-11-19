@@ -153,6 +153,7 @@ Connection and recovery:
   udb autostart enable   Enable Windows sign-in startup (owner only)
   udb autostart disable  Disable Windows sign-in startup
   udb rollback           Restore the previous managed release
+  udb retention          Preview old recovery backups and audit events
   udb quickstart         Start/check local support components
   udb update --yes       Skip attended confirmation for an intentional update
   udb rollback --yes     Skip attended confirmation for an intentional rollback
@@ -299,6 +300,7 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         "autostart",
         "update",
         "rollback",
+        "retention",
         "test",
         "revoke-access",
         "allow-source",
@@ -318,6 +320,12 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         else:
             command = subcommands.add_parser(name)
         add_settings(command, suppress=True)
+        if name == "retention":
+            command.add_argument(
+                "--apply",
+                action="store_true",
+                help="Prune the previewed history after attended Windows confirmation",
+            )
         if name == "tools":
             command.add_argument(
                 "--names",
@@ -637,6 +645,10 @@ def _run_maintenance(action: str, args: argparse.Namespace, settings: Settings) 
     from .owner_command import CommandError
 
     try:
+        if action == "retention":
+            from .retention import run
+
+            return run(settings, apply=args.apply, as_json=args.json)
         if action == "autostart":
             from .autostart import run
 
@@ -799,7 +811,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     as_json=args.json,
                     enable_autostart=args.autostart,
                 )
-        if action in ("autostart", "update", "rollback"):
+        if action in ("autostart", "update", "rollback", "retention"):
             if action in ("update", "rollback") and not _confirm_attended_maintenance(
                 action, args
             ):

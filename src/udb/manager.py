@@ -1456,7 +1456,7 @@ class MainWindow(ManagerHostMixin, ManagerRefreshMixin, QMainWindow):
         if ok and task.strip():
             response = self.guarded(
                 lambda: self.agent.propose_desktop(
-                    self.selected_project["id"], task.strip(), 600
+                    self.selected_project["id"], task.strip(), 600, owner_initiated=True
                 )
             )
             self.refresh()

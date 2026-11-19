@@ -34,6 +34,7 @@ passed 2,253 tests and 29 subtests, skipped 16, and printed
 `UDB_PYTEST_RETURN=0`. Python then emitted an access violation without a
 Python frame and exited `0xC0000005` (`-1073741819`). The log recorded a live
 application and loaded Qt, Shiboken and Win32 modules before the process exit.
+The checkout combined `75ae520` with `main` at `7f8d9f3`.
 
 | Direct test-file group | Result | Native modules at pytest return |
 | --- | --- | --- |
@@ -45,8 +46,22 @@ application and loaded Qt, Shiboken and Win32 modules before the process exit.
 The [managed full suite](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44468408796/job/135371737002)
 passed on the same checkout with the existing explicit Qt teardown. The Qt
 group shows that a live application can survive a clean raw process exit.
-The Win32 group can also exit cleanly. A test or combination of tests that
-triggers the raw full-suite failure remains to be isolated.
+The Win32 group can also exit cleanly.
+
+The paired retest combined `90506f7` with the same code on `main` and used
+normal pytest collection order within each selection.
+
+| Paired groups | Pytest result | Native process exit |
+| --- | --- | --- |
+| [Qt and Win32](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44470280975/job/135377774730) | 287 passed | `0x00000000` |
+| [Qt and neither marker](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44470280975/job/135377775307) | 2,113 passed, 16 skipped, 29 subtests passed | `0x00000000` |
+| [Win32 and neither marker](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44470280975/job/135377775237) | 2,106 passed, 16 skipped, 29 subtests passed | `0x00000000` |
+
+The Qt and Win32 pair exited cleanly with a live application and with
+PySide6, Shiboken, pywin32 and `win32ui` loaded. No pair reproduced the
+full-suite exit. The experiments establish the native failure and the
+observed success of the existing managed runner. They do not isolate a
+triggering test or rule out an intermittent failure in a smaller group.
 
 The manager and activity view parent their timers to widgets. The manager
 stops its timer on the explicit shutdown path. The quick-controls fixture
@@ -67,7 +82,7 @@ Run this in PowerShell 7 in a clean source checkout with the development depende
 and the same user-session conditions as the failing runner. The group names
 describe direct test-file imports. The output records transitive modules
 actually loaded and separates pytest's return from the native exit code.
-`tests/components` is collected through `test_regressions.py` subprocesses,
+`tests/components` runs through `test_regressions.py` subprocesses,
 matching the normal pytest configuration.
 
 ```powershell

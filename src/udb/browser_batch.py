@@ -8,7 +8,12 @@ import re
 import time
 from pathlib import Path
 
-from .browser_actions import dispatch_browser
+from .browser_actions import (
+    attach_post_observation,
+    dispatch_browser,
+    validate_click_navigation_budget,
+    validate_post_observation,
+)
 from .core import PolicyError, reject_links
 from .fastpath import compile_plan, gate, is_mutation, matches
 from .host_client import _read_json, atomic_json, enabled
@@ -18,7 +23,14 @@ FIELDS = {
     "navigate": {"url"},
     "read": set(),
     "snapshot": set(),
-    "click": {"selector", "role", "name", "exact"},
+    "click": {
+        "selector",
+        "role",
+        "name",
+        "exact",
+        "observe_after",
+        "click_navigation_observe_ms",
+    },
     "fill": {"selector", "role", "name", "exact", "value"},
     "press": {"selector", "role", "name", "exact", "key"},
     "select_option": {"selector", "role", "name", "exact", "value"},
@@ -58,13 +70,30 @@ def prepare(args):
     fastpath = args.get("action") == "fastpath"
     if fastpath:
         compile_plan(steps, FIELDS)
+        # FastPath verification semantics are intentionally unchanged.
+        if any(
+            step.get("action") == "click"
+            and (
+                "observe_after" in step
+                or "click_navigation_observe_ms" in step
+            )
+            for step in steps
+        ):
+            raise PolicyError("FastPath does not support short click observation")
     else:
-        for step in steps:
+        for index, step in enumerate(steps):
             if not isinstance(step, dict) or not isinstance(step.get("action"), str):
                 raise PolicyError("Every browser step requires an action")
             action = step["action"]
             if action not in FIELDS or set(step) - (FIELDS[action] | {"action"}):
                 raise PolicyError("Unsupported/nested browser step or unknown fields")
+            if action == "click":
+                mode = validate_post_observation(step)
+                budget = validate_click_navigation_budget(step)
+                if (mode != "none" or budget < 1000) and index != len(steps) - 1:
+                    raise PolicyError(
+                        "Observed/short click must be the terminal batch step"
+                    )
     # Preserve the exact old digest for legacy batch receipts.
     envelope = {"tab_id": args.get("tab_id", ""), "steps": steps}
     if fastpath:
@@ -229,9 +258,23 @@ class BatchRunner:
                     value = dispatch_browser(
                         browser, dict(call_args, tab_id=args.get("tab_id", ""))
                     )
+                    if (
+                        current is None
+                        and step["action"] == "click"
+                        and step.get("observe_after", "none") != "none"
+                    ):
+                        value = attach_post_observation(
+                            browser,
+                            dict(call_args, tab_id=args.get("tab_id", "")),
+                            value,
+                        )
                     uncertain = isinstance(value, dict) and any(
                         value.get(key) is True
-                        for key in ("navigation_timed_out", "timed_out")
+                        for key in (
+                            "navigation_timed_out",
+                            "timed_out",
+                            "observation_unavailable",
+                        )
                     )
                     ok = not uncertain and not (
                         isinstance(value, dict) and value.get("ok") is False

@@ -186,10 +186,24 @@ The log recorded a live QApplication and a completed pool drain, followed by
 an access violation without a Python frame. The native process exited
 `0xC0000005` (`-1073741819`). Successful drain alone does not prevent the crash.
 
-The next round tests raw Windows 3.12 with direct Qt tests only, without direct
-Qt tests, without direct Win32 tests, and without `test_manager_ui.py`. It
-keeps normal collection order and records actual loaded modules since direct
-file markers do not capture transitive imports. A single successful raw run
-cannot rule out intermittent failure. Keep the managed runner until the cause
-is confirmed and three consecutive raw runs complete on each Windows matrix
-member without the workaround.
+An earlier [raw Windows Python 3.11 full suite](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44508026972/job/135504634290)
+also returned 0 from pytest, then exited `0xC0000005`. All four later
+[raw Windows 3.12 groups](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44510278304)
+exited 0. The groups were Qt-only, without direct Qt tests, without direct
+Win32 tests and without `test_manager_ui.py`. The group without direct Win32
+tests still loaded pywin32 transitively. A clean group run does not establish
+an individual triggering fixture for the full suite.
+
+The current diagnostic varies only the final explicit deletion of
+`QApplication` on Windows Python 3.11 and 3.12. Both arms use the same normal
+teardown to drain the pool, close widgets, process deferred deletions and quit
+the application. Each run prints the pytest return, records whether the
+application is still valid, and propagates the native process exit. Following
+a native abort, the isolated hosted job looks for Application Error Event 1000
+for the matching Python PID and prints the module name, exception code and
+offset when present. No dump, path or settings change is needed.
+
+A faulting module can identify where Windows observed the crash. It cannot
+establish which fixture created the invalid state. Keep the managed runner
+until the cause is confirmed and three consecutive raw runs complete on each
+Windows matrix member without the workaround.

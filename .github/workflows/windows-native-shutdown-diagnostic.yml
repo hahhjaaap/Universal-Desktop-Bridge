@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  raw-shutdown:
+  qt-teardown:
     # Run only on the WS15 diagnostic draft. This is not a required CI check.
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'security/ws15-native-shutdown-evidence-20261119'
     runs-on: windows-latest
@@ -18,15 +18,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - python: '3.12'
-            group: qt-only
-          - python: '3.12'
-            group: without-qt-tests
-          - python: '3.12'
-            group: without-win32-tests
-          - python: '3.12'
-            group: without-manager-ui
+        python: ['3.11', '3.12']
+        mode: [keep-application, delete-application]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -35,50 +28,56 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -m pip install ".[office,dev]"
-      - name: Record pytest and native shutdown separately
+      - name: Compare Qt application lifetime at Python shutdown
         shell: pwsh
         env:
-          UDB_RUN_INTERACTIVE_WINDOWS_TESTS: '1'
           PYTHONFAULTHANDLER: '1'
-          UDB_NATIVE_GROUP: ${{ matrix.group }}
+          UDB_RUN_INTERACTIVE_WINDOWS_TESTS: '1'
+          UDB_QT_PROBE_MODE: '${{ matrix.mode }}'
         run: |
-          $PSNativeCommandUseErrorActionPreference = $false
-          $driver = @'
-          import os
-          import re
-          import sys
-          from pathlib import Path
-
-          import pytest
-
-          group = os.environ["UDB_NATIVE_GROUP"]
-          tests = sorted(p for p in Path("tests").rglob("test_*.py")
-                         if p.parts[:2] != ("tests", "components"))
-          qt = set()
-          win = set()
-          for path in tests:
-              source = path.read_text(encoding="utf-8-sig")
-              if re.search(r"PySide6|shiboken6|QApplication|QThread|QTimer", source):
-                  qt.add(path)
-              if re.search(r"\bwin32[a-z]+\b|pywintypes|WINFUNCTYPE|CFUNCTYPE", source):
-                  win.add(path)
-          excluded = {
-              "qt-only": set(tests) - qt,
-              "without-qt-tests": qt,
-              "without-win32-tests": win,
-              "without-manager-ui": {Path("tests/test_manager_ui.py")},
-          }[group]
-          print(f"UDB_NATIVE_GROUP={group} files={len(tests) - len(excluded)}", flush=True)
-          code = int(pytest.main(["-q", *(f"--ignore={p}" for p in sorted(excluded))]))
-          print(f"UDB_PYTEST_RETURN={code}", flush=True)
-          qt = sys.modules.get("PySide6.QtCore")
-          app_live = qt is not None and qt.QCoreApplication.instance() is not None
-          loaded = sorted(name for name in sys.modules if
-                          name.startswith(("PySide6", "shiboken6", "win32", "pywintypes")))
-          print(f"UDB_NATIVE_STATE app={app_live} modules={loaded}", flush=True)
-          raise SystemExit(code)
-          '@
-          python -X faulthandler -c $driver
-          $code = $LASTEXITCODE
+          $ErrorActionPreference = 'Stop'
+          $executable = (Get-Command python -CommandType Application).Source
+          $started = Get-Date
+          $child = Start-Process -FilePath $executable -ArgumentList @(
+              '-X', 'faulthandler', 'tools/probe_windows_qt_shutdown.py', $env:UDB_QT_PROBE_MODE
+          ) -NoNewWindow -PassThru
+          $child.WaitForExit()
+          $code = $child.ExitCode
           'UDB_NATIVE_EXIT=0x{0:X8} ({1})' -f ([int64]$code -band 0xFFFFFFFFL), $code
+
+          if ($code -in @(-1073741819, -1073740791)) {
+              # Application Error events can lag briefly and are best-effort.
+              # Log bounded module information for this process only.
+              $eventFilter = @{
+                  LogName = 'Application'
+                  ProviderName = 'Application Error'
+                  Id = 1000
+                  StartTime = $started
+              }
+              $found = $false
+              for ($attempt = 0; $attempt -lt 3 -and -not $found; $attempt++) {
+                  Start-Sleep -Seconds 1
+                  foreach ($event in Get-WinEvent -FilterHashtable $eventFilter -ErrorAction SilentlyContinue) {
+                      $fields = @{}
+                      foreach ($field in ([xml]$event.ToXml()).Event.EventData.Data) {
+                          $fields[$field.Name] = $field.'#text'
+                      }
+                      $process = $fields['ProcessId']
+                      if ($process -match '^0x[0-9a-fA-F]{1,8}$' -and
+                          [Convert]::ToInt64($process.Substring(2), 16) -eq $child.Id) {
+                          $module = $fields['ModuleName']
+                          $exception = $fields['ExceptionCode']
+                          $offset = $fields['FaultingOffset']
+                          if ($module -match '^[a-zA-Z0-9_.-]{1,80}$' -and
+                              $exception -match '^[0-9a-fA-F]{8}$' -and
+                              $offset -match '^[0-9a-fA-F]{1,16}$') {
+                              "UDB_WINDOWS_FAULT module=$module exception=$exception offset=$offset"
+                              $found = $true
+                              break
+                          }
+                      }
+                  }
+              }
+              if (-not $found) { 'UDB_WINDOWS_FAULT unavailable' }
+          }
           exit $code

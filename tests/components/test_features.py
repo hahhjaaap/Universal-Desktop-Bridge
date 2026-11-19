@@ -25,9 +25,9 @@ def wait_for(fn, seconds=8):
     raise AssertionError("Timed out waiting for owned fixture")
 
 
-def wait_job(bg, row):
+def wait_job(bg, row, *, seconds=8):
     jid = row["job_id"]
-    wait_for(lambda: bg.tasks[jid].state != "running")
+    wait_for(lambda: bg.tasks[jid].state != "running", seconds=seconds)
     return bg.task(jid)
 
 
@@ -201,7 +201,11 @@ class Features(unittest.TestCase):
             )
             offset = row["next_offset"]
         self.assertFalse((self.root / "large.dat").exists())
-        committed = wait_job(self.bg, self.bg.upload("commit", upload_id=uid))
+        # Large 8+ MiB staged commits may be slower on antivirus-scanned CI.
+        # Keep a finite bound and verify both completion and readback below.
+        committed = wait_job(
+            self.bg, self.bg.upload("commit", upload_id=uid), seconds=30
+        )
         self.assertEqual(committed["state"], "completed")
         self.assertEqual(self.bg.upload("status", upload_id=uid)["state"], "completed")
         with self.assertRaises(ValueError):

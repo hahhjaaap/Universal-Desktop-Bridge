@@ -1008,23 +1008,23 @@ class Browser(BrowserInputMixin):
             raise PolicyError("select_option requires an option value or label")
 
         if operation == "click":
-            try:
-                previous_url = self.evaluate(tab, "location.href", timeout=1)
-            except PolicyError:
-                previous_url = None
-            if not isinstance(previous_url, str):
-                previous_url = None
             body = (
                 """if(e.tagName==='OPTION')return {ok:false,error:'use_select_option',action:'select_option'};
                 if(e.matches(':disabled')||e.getAttribute('aria-disabled')==='true'||isInert(e))return {ok:false,error:'disabled'};
 """
                 + CLICK_POINT_SCRIPT
-                + """              return {ok:true,x:point[0],y:point[1]};"""
+                + """              return {ok:true,x:point[0],y:point[1],previous_url:location.href};"""
             )
             expression = self._locator_expression(selector, role, name, exact, body)
             result = self._wait_for_element_action(tab, expression, selector=selector)
             if not result.get("ok"):
                 return result
+            # Capture the pre-input URL in the same CDP evaluation that proves
+            # the element actionable. A separate location.href RPC is slower and
+            # can observe a stale page while actionability is still waiting.
+            previous_url = result.get("previous_url")
+            if not isinstance(previous_url, str):
+                previous_url = None
             previous_loader_id = None
             previous_frame_id = None
             try:

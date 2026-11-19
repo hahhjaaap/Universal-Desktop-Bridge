@@ -1,47 +1,29 @@
-name: Prune merged feature branches safely
+name: Audit merged feature branch heads
 
-# Never delete tags, history on main, backup branches or active PR heads.
-# Old merged PR heads require a deliberately triggered dry-run/apply.
+# This workflow inventories refs with read-only permissions.
+# See docs/maintainers.md for the repository owner's cleanup options.
 on:
   pull_request:
     types: [closed]
   workflow_dispatch:
-    inputs:
-      apply:
-        description: "Delete verified old merged feature branches (false = audit only)"
-        required: true
-        type: boolean
-        default: false
-      confirmation:
-        description: "For apply=true type PRUNE-MERGED-BRANCHES"
-        required: false
-        type: string
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: read
 
 jobs:
-  prune:
+  audit:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Safely prune only unchanged, merged, same-repository PR heads
+      - name: List unchanged, merged, same-repository PR heads
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const slug = owner + '/' + repo;
-            const inputs = context.payload.inputs || {};
-            const automatic = context.eventName === 'pull_request';
-            const requested = String(inputs.apply) === 'true';
-            const confirmed = inputs.confirmation === 'PRUNE-MERGED-BRANCHES';
-            if (!automatic && requested && !confirmed) {
-              throw new Error('Refusing bulk deletion: confirmation does not match');
-            }
-            const apply = automatic || (requested && confirmed);
             const allowed = /^(?:chore|ci|cleanup|codex|dependabot|docs|feat|feature|fix|integrate|maintenance|migration|perf|refactor|security|udb)\//;
             const protectedPrefixes = ['backup/', 'release/', 'hotfix/', 'support/', 'stable/'];
             const open = await github.paginate(github.rest.pulls.list, {
@@ -50,7 +32,7 @@ jobs:
             const openHeads = new Set(open.filter(
               p => p.head.repo && p.head.repo.full_name === slug
             ).map(p => p.head.ref));
-            const merged = automatic
+            const merged = context.eventName === 'pull_request'
               ? [context.payload.pull_request]
               : await github.paginate(github.rest.pulls.list, {
                   owner, repo, state: 'closed', per_page: 100
@@ -65,7 +47,7 @@ jobs:
               if (!candidates.has(name)) candidates.set(name, new Set());
               candidates.get(name).add(pr.head.sha);
             }
-            let removed = 0, ready = 0, skipped = 0;
+            let ready = 0, skipped = 0;
             for (const [name, heads] of candidates) {
               const ref = 'heads/' + name;
               let current;
@@ -90,27 +72,11 @@ jobs:
                 continue;
               }
               ready++;
-              if (!apply) {
-                console.log('DRY RUN would delete verified merged ref: ' + name);
-                continue;
-              }
-              try {
-                await github.rest.git.deleteRef({owner, repo, ref});
-                removed++;
-                console.log('REMOVED merged ref: ' + name);
-              } catch (error) {
-                if (error.status === 404 || error.status === 422) {
-                  console.log('SKIP already removed/protected: ' + name);
-                  skipped++;
-                  continue;
-                }
-                throw error;
-              }
+              console.log('CANDIDATE unchanged merged ref: ' + name);
             }
             console.log(JSON.stringify({
-              mode: apply ? 'apply' : 'dry-run',
+              mode: 'audit',
               candidates: candidates.size,
               verified: ready,
-              removed,
               skipped
             }));

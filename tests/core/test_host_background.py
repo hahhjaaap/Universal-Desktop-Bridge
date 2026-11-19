@@ -816,7 +816,12 @@ def test_browser_click_waits_for_navigation_and_redacts_query_string():
                 "readyState": "complete",
                 "href": "https://new.example/result?session=secret",
             }
-        return {"ok": True, "x": 21, "y": 42}
+        return {
+            "ok": True,
+            "x": 21,
+            "y": 42,
+            "previous_url": "https://old.example/",
+        }
 
     browser.evaluate = evaluate
     browser.call = lambda method, params=None, session=None, timeout=10: (

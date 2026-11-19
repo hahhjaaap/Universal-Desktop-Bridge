@@ -73,6 +73,42 @@ test("only owner-approved read tools appear or execute", async () => {
   assert.equal(forwarded.length, 3);
 });
 
+test("direct MCP responses expose only fixed device error messages and reasons", async () => {
+  const accessEnv = { UDB_AUTH_MODE: "cloudflare-access", UDB_ACCESS_AUD: "rpc-error-audience",
+    UDB_DEVICE_GRANTS: JSON.stringify({ [id]: { "owner@example.test": ["bridge_status"] } }) };
+  const access = { aud: "rpc-error-audience",
+    getIdentity: async () => ({ email: "owner@example.test" }) };
+  const cases = [
+    [-32002, "outcome_unknown_do_not_retry_mutations", -32002, "outcome_unknown_do_not_retry_mutations"],
+    [-32602, "synthetic-secret", -32602, undefined],
+    [-32099, ["synthetic-secret"], -32099, undefined],
+    [true, null, -32603, undefined],
+  ];
+  for (const [code, reason, publicCode, publicReason] of cases) {
+    const rpc = { jsonrpc: "2.0", id: 23,
+      method: "tools/call", params: { name: "bridge_status", arguments: {} } };
+    const request = new Request(resource, { method: "POST", body: JSON.stringify(rpc) });
+    let dispatches = 0;
+    const stub = { fetch: async () => {
+      dispatches += 1;
+      return Response.json({ jsonrpc: "2.0", id: rpc.id, error: {
+        code, message: String.raw`C:\Users\fixture\private-file.txt synthetic-secret`,
+        data: { reason, trace: "synthetic-stack-trace" },
+      }, extra: "synthetic-secret" });
+    } };
+    const response = await handleMcp(request, accessEnv, id, stub, fetch, access);
+    const body = await response.text();
+    assert.equal(response.status, 200);
+    assert.equal(dispatches, 1);
+    assert.doesNotMatch(body, /private-file|synthetic-secret|synthetic-stack-trace/);
+    const reply = JSON.parse(body);
+    assert.equal(reply.id, rpc.id);
+    assert.equal(reply.error.code, publicCode);
+    assert.equal(reply.error.data?.reason, publicReason);
+    if (publicReason) assert.match(reply.error.message, /inspect state before retrying/);
+  }
+});
+
 test("initialize fails closed if the local device is offline or rejects initialization", async () => {
   // Use the trusted runtime identity to avoid coupling this test to the JWT JWKS cache.
   const accessEnv = { UDB_AUTH_MODE: "cloudflare-access",

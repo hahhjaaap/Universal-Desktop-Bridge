@@ -7,41 +7,11 @@ GitHub Actions Windows test processes, never the installed owner's UDB agent.
 
 from __future__ import annotations
 
-import os
 import sys
 
 import pytest
 
-
-def release_qt_test_resources() -> None:
-    """Dispose only the test process's Qt state before Python module shutdown."""
-    if os.name != "nt" or "PySide6.QtWidgets" not in sys.modules:
-        return
-
-    from PySide6.QtCore import QCoreApplication, QEvent, QThreadPool
-    from PySide6.QtWidgets import QApplication
-    from shiboken6 import delete, isValid
-
-    app = QApplication.instance()
-    if app is None:
-        return
-
-    # The UDB GUI tests exercise background Qt workers. A live runnable at
-    # interpreter shutdown can race destruction of the native Qt DLLs.
-    pool = QThreadPool.globalInstance()
-    if pool is not None and not pool.waitForDone(15_000):
-        raise RuntimeError("Qt test worker did not stop before process shutdown")
-
-    for widget in QApplication.topLevelWidgets():
-        if isValid(widget):
-            widget.close()
-            widget.deleteLater()
-    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-    app.processEvents()
-    app.quit()
-    if isValid(app):
-        delete(app)
-    print("UDB_QT_TEST_CLEANUP=completed", flush=True)
+from udb.qt_test_shutdown import release_qt_test_resources
 
 
 def main(argv: list[str] | None = None) -> int:

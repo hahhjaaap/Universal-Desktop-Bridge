@@ -301,6 +301,12 @@ class ParallelLocalProxies:
         )
         self.local = threading.local()
         self.desktop_proxy = None
+        # Explicit staging opt-in. Only the pure bridge_status read route is
+        # serialized onto one connection-scoped stdio worker; all other lanes
+        # retain their existing per-thread isolation and authorization.
+        self.shared_status_enabled = os.environ.get("UDB_SHARED_STATUS_PROXY") == "1"
+        self.status_lock = threading.Lock()
+        self.status_proxy = None
         self.lock = threading.Lock()
         self.proxies = []
         self.scheduler = DeviceTaskScheduler()
@@ -312,13 +318,51 @@ class ParallelLocalProxies:
         with self.scheduler.execution(kind):
             return self._invoke_unlocked(rpc, queued_at_ns, kind)
 
+    def _call_and_guard(self, proxy, rpc: dict):
+        try:
+            with perf.rpc_scope(rpc.get("id")):
+                return perf.timed_call("cloud.local_rpc", "execution", proxy.call, rpc)
+        except (RuntimeError, TimeoutError, ValueError):
+            # An unknown mutating outcome must poison this whole connection.
+            child = getattr(proxy, "process", None)
+            if proxy.unusable or (child is not None and child.poll() is not None):
+                self.failed.set()
+            raise
+
     def _invoke_unlocked(self, rpc: dict, queued_at_ns, kind) -> dict:
         if queued_at_ns is not None:
             perf.interval("cloud.queue", "queue", queued_at_ns, rpc_id=rpc.get("id"))
-        # A queued task must not start a new process after another worker has
-        # poisoned the connection, even if it passed submit() earlier.
         if self.failed.is_set():
             raise RuntimeError("Cloud RPC pool is unavailable")
+
+        # Each thread normally owns a separate stdio proxy for concurrency.
+        # A status-only storm can launch many expensive onefile subprocesses,
+        # even though bridge_status does not need a per-thread session.
+        params = rpc.get("params")
+        shared_status = (
+            self.shared_status_enabled
+            and kind == "read"
+            and rpc.get("method") == "tools/call"
+            and isinstance(params, dict)
+            and params.get("name") == "bridge_status"
+        )
+        if shared_status:
+            with self.status_lock:
+                # Re-check after a queued status request acquires the lock.
+                if self.failed.is_set():
+                    raise RuntimeError("Cloud RPC pool is unavailable")
+                proxy = self.status_proxy
+                if proxy is None:
+                    try:
+                        proxy = LocalProxy(self.settings)
+                    except OSError:
+                        self.failed.set()
+                        raise
+                    self.status_proxy = proxy
+                    with self.lock:
+                        self.proxies.append(proxy)
+                return self._call_and_guard(proxy, rpc)
+
         desktop = kind == "desktop"
         proxy = self.desktop_proxy if desktop else getattr(self.local, "proxy", None)
         if proxy is None:
@@ -335,16 +379,7 @@ class ParallelLocalProxies:
                 self.proxies.append(proxy)
         if self.failed.is_set():
             raise RuntimeError("Cloud RPC pool is unavailable")
-        try:
-            with perf.rpc_scope(rpc.get("id")):
-                return perf.timed_call("cloud.local_rpc", "execution", proxy.call, rpc)
-        except (RuntimeError, TimeoutError, ValueError):
-            # A dead child process can be unusable without setting its flag:
-            # LocalProxy.call() detects process.poll() before _exchange().
-            child = getattr(proxy, "process", None)
-            if proxy.unusable or (child is not None and child.poll() is not None):
-                self.failed.set()
-            raise
+        return self._call_and_guard(proxy, rpc)
 
     def submit(self, rpc: dict, resource_kind=None):
         with self.lock:

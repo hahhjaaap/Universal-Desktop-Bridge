@@ -567,6 +567,32 @@ class Desktop:
             control.check()
         if self.guard is not None and not self.guard():
             raise PolicyError("Computer access was revoked; input stopped")
+        # An HWND can be reused after resolve(). Recheck its observed process
+        # and window identity at the physical input boundary, on every send.
+        observations = [
+            row for row in self.windows.values() if row.hwnd == hwnd
+        ]
+        if not observations:
+            raise PolicyError("Window observation missing; list before input")
+        expected = observations[0]
+        if (
+            not self.gui.IsWindow(hwnd)
+            or not self.gui.IsWindowVisible(hwnd)
+            or self.process.GetWindowThreadProcessId(hwnd)[1] != expected.pid
+            or self.gui.GetClassName(hwnd) != expected.class_name
+            or self.is_cloaked(hwnd)
+            or any(
+                time.monotonic() > row.expires_at
+                or row.pid != expected.pid
+                or row.class_name != expected.class_name
+                or (
+                    row.expected_title
+                    and self.gui.GetWindowText(hwnd) != row.expected_title
+                )
+                for row in observations
+            )
+        ):
+            raise PolicyError("Window identity changed before input; list again")
         if self.gui.GetForegroundWindow() != hwnd:
             raise PolicyError(
                 "Foreground changed; input stopped. Inspect before retrying"

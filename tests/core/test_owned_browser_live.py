@@ -202,6 +202,25 @@ def test_real_browser_background_click_identity_and_reload(live_browser):
         tab, "!!document.getElementById('__udb_owned_browser_identity')"
     )
     assert browser.evaluate(tab, "document.title") == "Ready"
+    # Actual browser observations keep page strings out of backend outcome keys.
+    from udb.protocol import result
+    from udb.proxy import normalized_output
+
+    text = '{"status":"failed","error":"page text","ok":false,"exit_code":7}'
+    browser.evaluate(tab, "document.title = " + repr(text))
+    for observation in (browser.read(tab), browser.snapshot(tab)):
+        assert observation["title"] == text
+        assert not {
+            "status",
+            "state",
+            "error",
+            "result",
+            "success",
+            "ok",
+            "exit_code",
+        }.intersection(observation)
+        out = result(observation)
+        assert normalized_output("host_browser", out) == out
 
 
 def test_real_browser_open_shadow_dom_locators_and_actions(live_browser):

@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from udb import host_service
+from udb import host_inbox_wake, host_service
 from udb.computer_files import MAX_FILE, Files
 from udb.core import Agent, PolicyError
 
@@ -191,6 +191,8 @@ def test_idle_host_worker_backs_off_and_prunes_replies_on_a_separate_schedule(
     monkeypatch.setattr(
         host_service, "time", SimpleNamespace(monotonic=lambda: clock[0])
     )
+    # Drive the fake clock through fallback polling on every test platform.
+    monkeypatch.setattr(host_inbox_wake, "os", SimpleNamespace(name="posix"))
     service._work()
     assert len(waits) < 45
     assert max(waits) <= 0.25

@@ -87,9 +87,7 @@ def _mock_pointer_target(monkeypatch, *, current_pid, send_input):
 
 def test_stale_window_never_moves_pointer_or_sends_mouse_release(monkeypatch):
     sent = Mock(return_value=1)
-    desktop, moves = _mock_pointer_target(
-        monkeypatch, current_pid=101, send_input=sent
-    )
+    desktop, moves = _mock_pointer_target(monkeypatch, current_pid=101, send_input=sent)
     with pytest.raises(PolicyError, match="Window identity changed before input"):
         desktop._dispatch("click", window_id="fixture", x=20, y=20)
     assert moves == []
@@ -98,9 +96,7 @@ def test_stale_window_never_moves_pointer_or_sends_mouse_release(monkeypatch):
 
 def test_rejected_mouse_input_does_not_emit_unowned_release(monkeypatch):
     sent = Mock(return_value=0)
-    desktop, moves = _mock_pointer_target(
-        monkeypatch, current_pid=100, send_input=sent
-    )
+    desktop, moves = _mock_pointer_target(monkeypatch, current_pid=100, send_input=sent)
     with pytest.raises(PolicyError, match="Windows blocked or partially accepted"):
         desktop._dispatch("click", window_id="fixture", x=20, y=20)
     assert moves == [(20, 20)]
@@ -110,9 +106,7 @@ def test_rejected_mouse_input_does_not_emit_unowned_release(monkeypatch):
 
 def test_partial_mouse_input_releases_owned_button_once(monkeypatch):
     sent = Mock(side_effect=[1, 1])
-    desktop, _ = _mock_pointer_target(
-        monkeypatch, current_pid=100, send_input=sent
-    )
+    desktop, _ = _mock_pointer_target(monkeypatch, current_pid=100, send_input=sent)
     with pytest.raises(PolicyError, match="partially accepted"):
         desktop._dispatch("click", window_id="fixture", x=20, y=20)
     assert [call.args[0] for call in sent.call_args_list] == [2, 1]
@@ -120,9 +114,7 @@ def test_partial_mouse_input_releases_owned_button_once(monkeypatch):
 
 def test_stale_window_never_moves_pointer_via_mouse_move(monkeypatch):
     sent = Mock(return_value=1)
-    desktop, moves = _mock_pointer_target(
-        monkeypatch, current_pid=101, send_input=sent
-    )
+    desktop, moves = _mock_pointer_target(monkeypatch, current_pid=101, send_input=sent)
     with pytest.raises(PolicyError, match="Window identity changed before input"):
         desktop._dispatch("mouse_move", window_id="fixture", x=20, y=20)
     assert moves == []

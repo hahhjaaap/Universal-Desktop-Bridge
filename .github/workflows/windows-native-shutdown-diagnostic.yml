@@ -36,7 +36,8 @@ jobs:
           UDB_QT_PROBE_MODE: '${{ matrix.mode }}'
         run: |
           $ErrorActionPreference = 'Stop'
-          $executable = (Get-Command python -CommandType Application).Source
+          $executable = Get-Command python -CommandType Application |
+              Select-Object -First 1 -ExpandProperty Source
           $started = Get-Date
           $child = Start-Process -FilePath $executable -ArgumentList @(
               '-X', 'faulthandler', 'tools/probe_windows_qt_shutdown.py', $env:UDB_QT_PROBE_MODE

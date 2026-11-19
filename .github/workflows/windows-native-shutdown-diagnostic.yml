@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  qt-teardown:
+  raw-shutdown:
     # Run only on the WS15 diagnostic draft. This is not a required CI check.
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'security/ws15-native-shutdown-evidence-20261119'
     runs-on: windows-latest
@@ -18,8 +18,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ['3.11', '3.12']
-        mode: [keep-application, delete-application]
+        include:
+          - python: '3.11'
+            group: full
+          - python: '3.12'
+            group: full
+          - python: '3.11'
+            group: without-manager-ui
+          - python: '3.11'
+            group: without-quick-controls
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -28,19 +35,19 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -m pip install ".[office,dev]"
-      - name: Compare Qt application lifetime at Python shutdown
+      - name: Compare raw Windows shutdown by GUI test module
         shell: pwsh
         env:
           PYTHONFAULTHANDLER: '1'
           UDB_RUN_INTERACTIVE_WINDOWS_TESTS: '1'
-          UDB_QT_PROBE_MODE: '${{ matrix.mode }}'
+          UDB_NATIVE_GROUP: '${{ matrix.group }}'
         run: |
           $ErrorActionPreference = 'Stop'
           $executable = Get-Command python -CommandType Application |
               Select-Object -First 1 -ExpandProperty Source
           $started = Get-Date
           $child = Start-Process -FilePath $executable -ArgumentList @(
-              '-X', 'faulthandler', 'tools/probe_windows_qt_shutdown.py', $env:UDB_QT_PROBE_MODE
+              '-X', 'faulthandler', 'tools/probe_windows_qt_shutdown.py', 'raw', $env:UDB_NATIVE_GROUP
           ) -NoNewWindow -PassThru
           $child.WaitForExit()
           $code = $child.ExitCode

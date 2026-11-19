@@ -194,11 +194,18 @@ Win32 tests and without `test_manager_ui.py`. The group without direct Win32
 tests still loaded pywin32 transitively. A clean group run does not establish
 an individual triggering fixture for the full suite.
 
-The current diagnostic varies only the final explicit deletion of
+The preceding diagnostic varied only the final explicit deletion of
 `QApplication` on Windows Python 3.11 and 3.12. Both arms use the same normal
 teardown to drain the pool, close widgets, process deferred deletions and quit
-the application. Each run prints the pytest return, records whether the
-application is still valid, and propagates the native process exit. Following
+the application. All four [jobs](https://github.com/hahhjaaap/Universal-Desktop-Bridge/actions/runs/44547192684)
+exited 0 with 2,307 passing tests each. The two arms reached their intended
+application states. These clean runs did not isolate a cause.
+
+The next comparison runs the full suite without the managed teardown in Python
+3.11 and 3.12. Two more Python 3.11 jobs exclude just `test_manager_ui.py` or
+just `test_quick_controls.py`. Each job records whether the Qt application is
+still active, whether pywin32 is loaded, the number of remaining Python threads,
+and the native process exit. Following
 a native abort, the isolated hosted job looks for Application Error Event 1000
 for the matching Python PID and prints the module name, exception code and
 offset when present. No dump, path or settings change is needed.

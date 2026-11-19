@@ -1,12 +1,33 @@
-"""Compare Windows pytest shutdown with and without explicit QApplication deletion."""
+"""Record Windows pytest shutdown and compare the Qt application lifetime."""
 
 from __future__ import annotations
 
 import sys
+import threading
 from unittest.mock import patch
 
 import pytest
 from run_windows_pytest import release_qt_test_resources
+
+_EXCLUSIONS = {
+    "full": (),
+    "without-manager-ui": ("--ignore=tests/test_manager_ui.py",),
+    "without-quick-controls": ("--ignore=tests/test_quick_controls.py",),
+}
+
+
+def observe_raw_state() -> None:
+    qt = sys.modules.get("PySide6.QtCore")
+    app_live = qt is not None and qt.QCoreApplication.instance() is not None
+    win32_loaded = any(
+        name.startswith(("win32", "pywintypes")) for name in tuple(sys.modules)
+    )
+    threads = threading.enumerate()
+    print(
+        f"UDB_QT_PROBE mode=raw app_live={app_live} pywin32_loaded={win32_loaded} "
+        f"python_threads={len(threads)} daemon_threads={sum(t.daemon for t in threads)}",
+        flush=True,
+    )
 
 
 def cleanup(mode: str) -> None:
@@ -44,13 +65,25 @@ def cleanup(mode: str) -> None:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 1 or argv[0] not in {"keep-application", "delete-application"}:
+    if not 1 <= len(argv) <= 2 or argv[0] not in {
+        "raw",
+        "keep-application",
+        "delete-application",
+    }:
         raise SystemExit(
-            "Usage: probe_windows_qt_shutdown.py keep-application|delete-application"
+            "Usage: probe_windows_qt_shutdown.py MODE [full|without-manager-ui|without-quick-controls]"
         )
-    code = int(pytest.main(["-q"]))
+    mode = argv[0]
+    group = argv[1] if len(argv) == 2 else "full"
+    if group not in _EXCLUSIONS:
+        raise SystemExit("Unknown Windows shutdown probe group")
+    print(f"UDB_NATIVE_GROUP={group}", flush=True)
+    code = int(pytest.main(["-q", *_EXCLUSIONS[group]]))
     print(f"UDB_PYTEST_RETURN={code}", flush=True)
-    cleanup(argv[0])
+    if mode == "raw":
+        observe_raw_state()
+    else:
+        cleanup(mode)
     return code
 
 

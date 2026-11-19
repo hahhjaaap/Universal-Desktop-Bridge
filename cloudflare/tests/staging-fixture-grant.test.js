@@ -12,6 +12,7 @@ const identity = (email = SUBJECT) => ({
 });
 const env = () => ({
   UDB_AUTH_MODE: "cloudflare-access",
+  UDB_DEPLOYMENT_ENV: "staging",
   UDB_ACCESS_AUD: AUD,
   UDB_DEVICE_GRANTS: "{}",
   UDB_STAGING_FIXTURE_READ_GRANT: JSON.stringify({
@@ -117,4 +118,13 @@ test("fixture grant suppresses other project names and write permissions", async
   const result = (await response.json()).result;
   assert.deepEqual(result.structuredContent.result, [{ id: PROJECT, writable: false }]);
   assert.deepEqual(forwarded.map(x => x.params.name), ["list_projects"]);
+});
+
+test("the fixture grant has no effect outside explicitly selected staging", async () => {
+  const { forwarded, call } = harness();
+  for (const fields of [{ UDB_DEPLOYMENT_ENV: undefined }, { UDB_DEPLOYMENT_ENV: "production" }, { UDB_DEPLOYMENT_ENV: "test" }]) {
+    const denied = await call("read_file", { project: PROJECT, path: "README.md" }, { ...env(), ...fields });
+    assert.equal(denied.status, 403);
+  }
+  assert.equal(forwarded.length, 0);
 });

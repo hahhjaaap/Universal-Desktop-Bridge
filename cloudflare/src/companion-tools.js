@@ -1,8 +1,7 @@
 // Owner-gated public Companion MCP operations. Read-only OAuth scopes do not
 // authorize these; each request also requires its own device/subject grant and
 // the existing local Windows permission/approval checks.
-const DEVICE_ID = /^[a-f0-9]{32}$/;
-const record = value => value && typeof value === "object" && !Array.isArray(value);
+import { exactToolGrant } from "./tool-grants.js";
 
 export const COMPANION_TOOLS = Object.freeze([
   "terminal_start", "terminal_read", "terminal_stop",
@@ -19,7 +18,8 @@ const COMPANION_READ_ONLY = new Set([
   "terminal_read", "terminal_list", "file_list", "file_read", "file_search",
   "file_stat", "file_read_lines", "file_read_chunk", "search_read", "system_process_list",
 ]);
-const COMPANION_ADDITIVE = new Set(["file_mkdir", "search_start", "work_recovery"]);
+// Recovery can publish a new file when resuming a guarded create-only copy.
+const COMPANION_ADDITIVE = new Set(["file_mkdir", "search_start"]);
 const COMPANION_OPEN_WORLD = new Set(["terminal_start", "terminal_interact", "virtual_pointer"]);
 
 export function companionAnnotations(name) {
@@ -34,25 +34,8 @@ export function companionAnnotations(name) {
 }
 
 export function companionToolGrant(env, deviceId, subject) {
-  // Never fall back from a tenant policy or another identity or device.
+  // A configured tenant policy remains authoritative.
   if (env?.UDB_ENABLE_COMPANION_TOOLS !== "true" ||
-      env?.UDB_TENANT_POLICY !== undefined ||
-      !DEVICE_ID.test(deviceId) ||
-      typeof subject !== "string" || subject.length > 200 ||
-      subject.trim() !== subject || !subject.includes("@")) return [];
-  const raw = env?.UDB_COMPANION_TOOL_GRANTS;
-  if (typeof raw !== "string" || raw.length < 1 || raw.length > 16384) return [];
-  try {
-    const grants = JSON.parse(raw);
-    if (!record(grants) || !Object.hasOwn(grants, deviceId)) return [];
-    const users = grants[deviceId];
-    if (!record(users) || !Object.hasOwn(users, subject)) return [];
-    const names = users[subject];
-    if (!Array.isArray(names) || names.length < 1 ||
-        names.length > COMPANION_TOOLS.length ||
-        new Set(names).size !== names.length ||
-        !names.every(name => typeof name === "string" && isCompanionTool(name)))
-      return [];
-    return [...names];
-  } catch { return []; }
+      env?.UDB_TENANT_POLICY !== undefined) return [];
+  return exactToolGrant(env.UDB_COMPANION_TOOL_GRANTS, deviceId, subject, isCompanionTool);
 }

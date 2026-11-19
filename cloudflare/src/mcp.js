@@ -6,6 +6,7 @@ import { accessConfig, authorizeAccess } from "./access.js";
 import { enrolledReadGrant, recordMcpProof } from "./setup-service.js";
 import { isReadTool } from "./read-tools.js";
 import { companionAnnotations, isCompanionTool } from "./companion-tools.js";
+import { allowsScopedCall } from "./tool-grants.js";
 import { edgeCatalog, edgeCatalogSupported } from "./edge-discovery.js";
 import { FAMILIES, authorizedFamilyCatalog, publicToolNames, resolveFamily } from "./tool-families.js";
 import { checkLocalPermission, permissionRequired, windowsPermissionReport,
@@ -68,14 +69,15 @@ function mirroredName(value) {
 const POTENTIALLY_DESTRUCTIVE = new Set([
   "propose_file_write", "desktop_action", "desktop_element_action", "desktop_stop",
   "desktop_app", "desktop_batch", "host_browser", "host_workspace", "host_close_session",
+  "work_recovery",
 ]);
 
-function toolDescriptor(tool) {
+function toolDescriptor(tool, user) {
   // Owner capabilities have independent grants and do not use the read scope.
   const securitySchemes = [{ type: "oauth2",
     scopes: isReadTool(tool.name) ? ["udb:read"] : [] }];
   let annotations = tool.annotations ?? companionAnnotations(tool.name);
-  if (POTENTIALLY_DESTRUCTIVE.has(tool.name))
+  if (POTENTIALLY_DESTRUCTIVE.has(tool.name) || user.actionGrants?.has(tool.name))
     annotations = { ...annotations, readOnlyHint: false, destructiveHint: true };
   return { ...tool, annotations, securitySchemes,
     _meta: { ...tool._meta, securitySchemes } };
@@ -85,7 +87,7 @@ function authorizedToolCatalog(tools, user) {
   const publicNames = user.enrolledOwner ? new Set(publicToolNames(user.catalogTools)) : null;
   return authorizedFamilyCatalog(tools, user.catalogTools || user.allowTools)
     .filter(tool => !publicNames || publicNames.has(tool.name))
-    .map(tool => fixtureToolDescriptor(toolDescriptor(tool), user))
+    .map(tool => fixtureToolDescriptor(toolDescriptor(tool, user), user))
     .map(tool => user.enrolledOwner && tool.name !== "bridge_status" ? {
       ...tool, description: (tool.description || "") + " Execution requires the Windows owner's local permission.",
       _meta: { ...tool._meta, "udb/permissionSource": "windows_owner" },
@@ -383,6 +385,8 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
     let resolved;
     try { resolved = resolveFamily(rpc.params.name, rpc.params.arguments); }
     catch { return error(400, "invalid_family_arguments"); }
+    if (!allowsScopedCall(user.actionGrants, resolved, rpc.params))
+      return error(403, "device_tool_not_authorized");
     if (!user.allowTools.includes(resolved.name)) {
       if (!user.enrolledOwner || !user.catalogTools.includes(resolved.name))
         return error(403, "device_tool_not_authorized");

@@ -10,11 +10,6 @@ from udb.computer_desktop import Desktop, WindowObservation
 from udb.core import PolicyError
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="WS14: physical input does not recheck observed PID at send boundary",
-)
 def test_physical_input_refuses_changed_window_identity_before_send():
     desktop = Desktop.__new__(Desktop)
     desktop.interactive = lambda: None
@@ -37,8 +32,14 @@ def test_physical_input_refuses_changed_window_identity_before_send():
     desktop.windows = {
         "fixture": WindowObservation(10, 100, "fixture", time.monotonic() + 30)
     }
-    try:
+    with pytest.raises(PolicyError, match="Window identity changed before input"):
         desktop._dispatch("type", window_id="fixture", text="fixture")
-    except PolicyError:
-        pass
     desktop.u.SendInput.assert_not_called()
+
+    # Same fixture remains usable when both lookups agree. No real Win32 input.
+    desktop.process.GetWindowThreadProcessId.side_effect = [
+        (1, 100),
+        (1, 100),
+    ]
+    desktop._dispatch("type", window_id="fixture", text="fixture")
+    desktop.u.SendInput.assert_called_once()

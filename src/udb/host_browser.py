@@ -779,6 +779,27 @@ class Browser(BrowserInputMixin):
             if t["targetId"] in self.tabs and t["targetId"] in safe_pages
         ]
 
+    def open_initial(self, url="about:blank"):
+        """Reuse the sole empty page of a freshly created UDB-owned session.
+
+        This is called only for the first host_browser open without an
+        existing session. An existing, changed, or non-blank page is never
+        repurposed; those cases retain the normal new-tab path.
+        """
+        validate_url(url)
+        pages = self.listing()
+        if (
+            len(pages) == 1
+            and pages[0].get("url") == "about:blank"
+            and pages[0].get("tab_id") in self.tabs
+        ):
+            tab = pages[0]["tab_id"]
+            # A navigation can have an uncertain outcome. Never retry it by
+            # falling back to Target.createTarget after it was dispatched.
+            ready = self.navigate(tab, url) if url != "about:blank" else {}
+            return dict(ready, tab_id=tab, owner="UDB", background=True)
+        return self.new(url)
+
     def new(self, url="about:blank"):
         validate_url(url)
         if len(self.listing()) >= LIMITS["max_tabs"]:

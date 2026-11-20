@@ -76,7 +76,9 @@ def test_bounded_read_has_same_elements_and_truncation_as_previous_script():
         (5000, True, False),
         (10000, False, False),
     ):
-        new = _js_output(_READ_SCRIPT, count, hide_every_third=hidden, secret_first=secret)
+        new = _js_output(
+            _READ_SCRIPT, count, hide_every_third=hidden, secret_first=secret
+        )
         previous = _js_output(old, count, hide_every_third=hidden, secret_first=secret)
         assert new["result"] == previous["result"], (
             f"Read output changed for count={count}, hidden={hidden}"

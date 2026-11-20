@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from udb import cloud_agent
-from udb.remote_task_scheduler import DeviceTaskScheduler, MAX_TASKS
+from udb.remote_task_scheduler import MAX_TASKS, DeviceTaskScheduler
 
 
 def _read(ident):
@@ -40,7 +40,9 @@ def test_bounded_worker_budget_matches_admission(monkeypatch, limit):
         assert pool.executor._max_workers == count
         for _ in range(count):
             assert pool.scheduler.admit("read")
-        assert not pool.scheduler.admit("read"), "No RPC may queue beyond worker count"
+        assert not pool.scheduler.admit("read"), (
+            "No RPC may queue beyond worker count"
+        )
         assert not pool.scheduler.admit("exclusive")
         for _ in range(count):
             pool.scheduler.release("read")
@@ -52,7 +54,8 @@ def test_bounded_worker_budget_matches_admission(monkeypatch, limit):
 
 
 @pytest.mark.parametrize(
-    "invalid", ["", "0", "11", "100", "-1", "1.0", " 2", "2 ", "yes", "２", "１", "999999"]
+    "invalid",
+    ["", "0", "11", "100", "-1", "1.0", " 2", "2 ", "yes", "２", "１", "999999"],
 )
 def test_invalid_budget_fails_before_subprocess_or_executor(monkeypatch, invalid):
     monkeypatch.setenv("UDB_CLOUD_MAX_RPC_WORKERS", invalid)

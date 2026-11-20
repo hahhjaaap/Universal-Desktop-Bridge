@@ -220,6 +220,48 @@ def background_state(home: Path, now=None) -> str:
         return "unavailable"
 
 
+def background_command(home: Path, operation: str, *, as_json=False) -> int:
+    if operation == "status":
+        state = background_state(home)
+        print(
+            json.dumps({"background": state})
+            if as_json
+            else f"UDB background: {state}."
+        )
+        return 0
+
+    from .core import reject_links
+    from .host_client import atomic_json
+    from .onboarding import attended_console
+
+    if not attended_console():
+        raise ValueError(
+            "Changing background access requires your own local Windows terminal."
+        )
+    enable = operation == "enable"
+    if enable:
+        print(
+            "Allow UDB to open private browser and workspace sessions on this machine."
+        )
+        try:
+            confirmed = input("Type ALLOW BACKGROUND to confirm, or Enter to cancel: ")
+        except (EOFError, KeyboardInterrupt):
+            confirmed = ""
+        if confirmed.strip() != "ALLOW BACKGROUND":
+            print("UDB: Background access was not changed.", file=sys.stderr)
+            return 2
+    path = home / "state" / "host-settings.json"
+    reject_links(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_json(path, {"enabled": enable})
+    print(
+        "UDB background access enabled."
+        if enable
+        else "UDB background access disabled."
+    )
+    return 0
+
+
 def headless_state(home: Path) -> dict | None:
     try:
         data = read_object(home / "state" / "headless-status.json")

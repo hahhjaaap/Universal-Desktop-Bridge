@@ -6,12 +6,51 @@ from types import SimpleNamespace
 
 import pytest
 
-from udb import cli
+from udb import cli, host_client, onboarding
 
 
 class TTY(io.StringIO):
     def isatty(self):
         return True
+
+
+def test_background_cli_enables_and_revokes_the_live_worker_setting(
+    tmp_path, monkeypatch, capsys
+):
+    args = ["background", "--home", str(tmp_path)]
+    agent = SimpleNamespace(state=tmp_path / "state")
+    monkeypatch.setattr(onboarding, "attended_console", lambda: True)
+
+    monkeypatch.setattr("builtins.input", lambda prompt: "")
+    assert cli.main([*args, "enable"]) == 2
+    assert not agent.state.exists()
+
+    def confirm(prompt):
+        assert "ALLOW BACKGROUND" in prompt
+        return "ALLOW BACKGROUND"
+
+    monkeypatch.setattr("builtins.input", confirm)
+    assert cli.main([*args, "enable"]) == 0
+    assert host_client.enabled(agent)
+    capsys.readouterr()
+    assert cli.main([*args, "status", "--json"]) == 0
+    assert capsys.readouterr().out == '{"background": "unavailable"}\n'
+
+    assert cli.main([*args, "disable"]) == 0
+    assert not host_client.enabled(agent)
+    capsys.readouterr()
+    assert cli.main([*args, "status", "--json"]) == 0
+    assert capsys.readouterr().out == '{"background": "disabled"}\n'
+
+
+@pytest.mark.parametrize("operation", ["enable", "disable"])
+def test_background_cli_refuses_unattended_grant_changes(
+    operation, tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setattr(onboarding, "attended_console", lambda: False)
+    assert cli.main(["background", operation, "--home", str(tmp_path)]) == 2
+    assert "your own local Windows terminal" in capsys.readouterr().err
+    assert not (tmp_path / "state").exists()
 
 
 @pytest.mark.parametrize(

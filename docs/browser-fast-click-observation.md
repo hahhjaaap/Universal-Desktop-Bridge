@@ -119,6 +119,10 @@ variant, with five clicks plus final verification per trial:
 python tools/check_runtime_scenarios.py --browser-only --browser-ab-trials 50
 ```
 
+The disposable QA worker gets a bounded 600-second lifetime and a 900-second
+session only for this opt-in long run; default acceptance remains 90/180 seconds.
+No production UDB permission or browser deadline changes.
+
 The resulting `reports/runtime-scenarios/results.json` includes raw timings,
 median, nearest-rank p95, and p95 reduction for the **warm Windows mailbox**
 scope. The default remains five trials per variant for normal CI. This does

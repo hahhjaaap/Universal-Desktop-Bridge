@@ -1,0 +1,42 @@
+name: Windows FastPath A/B (50 trials)
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/fastpath-windows-ab.yml"
+      - "src/udb/browser_click_postcondition.py"
+      - "src/udb/fastpath.py"
+      - "tools/check_runtime_scenarios.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fastpath-windows-ab-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  warm-windows-mailbox:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - name: Install source and test dependencies
+        run: python -m pip install ".[office,dev]"
+      - name: Run 50 interleaved trials per variant
+        run: python tools/check_runtime_scenarios.py --browser-ab-trials 50
+      - name: Verify sample counts and print warm-host percentiles
+        run: |
+          python -c "import json; d=json.load(open('reports/runtime-scenarios/results.json', encoding='utf-8')); x=next(s['browser_postcondition_ab'] for s in d['scenarios'] if 'browser_postcondition_ab' in s); assert x['samples_per_variant']==50; print('Warm Windows host/Chrome p95 (ms):', x['p95_ms']); print('p95 reduction (%):', x['p95_reduction_percent'])"
+      - name: Retain warm-host timings for review
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: fastpath-windows-ab-50
+          path: reports/runtime-scenarios/results.json
+          retention-days: 7

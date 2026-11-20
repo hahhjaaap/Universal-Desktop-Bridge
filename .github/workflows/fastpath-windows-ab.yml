@@ -28,7 +28,7 @@ jobs:
       - name: Install source and test dependencies
         run: python -m pip install ".[office,dev]"
       - name: Run 50 interleaved trials per variant
-        run: python tools/check_runtime_scenarios.py --browser-ab-trials 50
+        run: python tools/check_runtime_scenarios.py --browser-only --browser-ab-trials 50
       - name: Verify sample counts and print warm-host percentiles
         run: |
           python -c "import json; d=json.load(open('reports/runtime-scenarios/results.json', encoding='utf-8')); x=next(s['browser_postcondition_ab'] for s in d['scenarios'] if 'browser_postcondition_ab' in s); assert x['samples_per_variant']==50; print('Warm Windows host/Chrome p95 (ms):', x['p95_ms']); print('p95 reduction (%):', x['p95_reduction_percent'])"

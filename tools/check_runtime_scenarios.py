@@ -264,7 +264,7 @@ def main():
     parser.add_argument(
         "--browser-only",
         action="store_true",
-        help="Run only the disposable owned-browser fixture, without owner-access component tests",
+        help="Run isolated browser fixture without owner-access component tests",
     )
     args = parser.parse_args()
     if not 1 <= args.browser_ab_trials <= 50:

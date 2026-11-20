@@ -262,6 +262,11 @@ class HostService:
         if any(row["kind"] == kind for row in self.sessions.values()):
             raise PolicyError("Reuse the existing " + kind + " session")
         sid = uuid.uuid4().hex
+        startup = (
+            {"startup_timeout": self.browser_startup_timeout}
+            if self.browser_startup_timeout is not None
+            else {}
+        )
         if kind == "browser":
             from .browser_settings import remember_login
             from .host_browser import Browser
@@ -270,12 +275,12 @@ class HostService:
                 obj = Browser(
                     self.folder / "browser-profile",
                     persistent=True,
-                    startup_timeout=self.browser_startup_timeout,
+                    **startup,
                 )
             else:
                 obj = Browser(
                     self.folder / "profiles" / sid,
-                    startup_timeout=self.browser_startup_timeout,
+                    **startup,
                 )
         else:
             from .host_workspace import Workspace

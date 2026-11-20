@@ -108,10 +108,14 @@ def browser_fixture(*, ab_trials=5):
     with tempfile.TemporaryDirectory(prefix="udb-hostqa-") as directory:
         home = Path(directory).resolve()
         (home / "QA-ISOLATED").write_text("Disposable browser fixture")
+        qa_env = child_environment()
+        qa_env.pop("UDB_HOST_QA_LONG_BENCHMARK", None)
+        if ab_trials > 5:
+            qa_env["UDB_HOST_QA_LONG_BENCHMARK"] = "1"
         with (home / "worker.log").open("wb") as log:
             process = subprocess.Popen(
                 worker_command("core", ["--home", str(home), "--host-engine-qa"]),
-                env=child_environment(),
+                env=qa_env,
                 stdin=subprocess.DEVNULL,
                 stdout=log,
                 stderr=subprocess.STDOUT,

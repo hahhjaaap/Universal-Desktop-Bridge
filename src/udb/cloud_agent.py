@@ -271,12 +271,33 @@ class LocalProxy:
     def close(self):
         try:
             if self.process.poll() is None:
-                self.process.terminate()
-                try:
-                    self.process.wait(timeout=3)
-                except subprocess.TimeoutExpired:
-                    self.process.kill()
-                    self.process.wait(timeout=3)
+                # The stdio proxy's main loop exits on EOF. Let it retire its
+                # own child workers and return normally so a frozen onefile
+                # bootloader can clean its temporary extraction directory.
+                # The caller has already drained in-flight RPCs; never replay.
+                pipe = self.process.stdin
+                eof_sent = False
+                if pipe is not None:
+                    try:
+                        pipe.close()
+                    except (OSError, ValueError):
+                        pass
+                    else:
+                        eof_sent = True
+                if eof_sent:
+                    try:
+                        self.process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        pass
+                if self.process.poll() is None:
+                    # An unresponsive worker must not hang disconnect. Retain
+                    # the previous bounded terminate-then-kill fallback.
+                    self.process.terminate()
+                    try:
+                        self.process.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        self.process.kill()
+                        self.process.wait(timeout=3)
         finally:
             for name in ("stdin", "stdout"):
                 stream = getattr(self.process, name, None)

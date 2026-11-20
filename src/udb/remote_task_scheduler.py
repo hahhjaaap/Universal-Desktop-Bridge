@@ -95,7 +95,12 @@ class DeviceTaskScheduler:
     Calls classified as exclusive keep the pre-existing no-overlap policy.
     """
 
-    def __init__(self):
+    def __init__(self, max_tasks: int = MAX_TASKS):
+        # A connection may lower admission pressure, never exceed the
+        # hard ceiling of ten. Reject bool (an int subclass) as a config.
+        if type(max_tasks) is not int or not 1 <= max_tasks <= MAX_TASKS:
+            raise ValueError("Cloud RPC admission must be 1..10")
+        self.max_tasks = max_tasks
         self.condition = threading.Condition()
         self.inflight = 0
         self.exclusive = False
@@ -109,7 +114,7 @@ class DeviceTaskScheduler:
         with self.condition:
             if (
                 self.closed
-                or self.inflight >= MAX_TASKS
+                or self.inflight >= self.max_tasks
                 or self.exclusive
                 or (kind == "exclusive" and self.inflight != 0)
             ):

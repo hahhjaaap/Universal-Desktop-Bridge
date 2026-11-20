@@ -272,7 +272,9 @@ class HostService:
             from .host_browser import Browser
 
             if remember_login(self.agent):
-                obj = Browser(self.folder / "browser-profile", persistent=True, **startup)
+                obj = Browser(
+                    self.folder / "browser-profile", persistent=True, **startup
+                )
             else:
                 obj = Browser(self.folder / "profiles" / sid, **startup)
         else:

@@ -292,6 +292,7 @@ class HostService:
 
         open_deadline = time.monotonic() + 20
         url = validate_url(args.get("url", "about:blank"))
+        created_session = False
         if sid:
             self._session(sid, kind="browser")
         else:
@@ -308,6 +309,7 @@ class HostService:
                     dict(kind="browser", task="Open a UDB-owned background web page")
                 )
                 sid = started["session_id"]
+                created_session = True
         # Never replay a navigation or fall back to a visible user browser.
         obj = self.sessions[sid]["object"]
         obj.deadline = open_deadline
@@ -317,7 +319,15 @@ class HostService:
             )
         from .browser_actions import attach_post_observation
 
-        result = attach_post_observation(obj, args, obj.new(url))
+        # Chrome already created an about:blank page during first startup.
+        # Reuse it only for this new UDB-owned session. Repeated opens and
+        # explicit sessions preserve their normal new-tab behavior.
+        open_page = (
+            obj.open_initial
+            if created_session and hasattr(obj, "open_initial")
+            else obj.new
+        )
+        result = attach_post_observation(obj, args, open_page(url))
         return dict(
             result,
             session_id=sid,

@@ -301,7 +301,7 @@ class LocalProxy:
         finally:
             for name in ("stdin", "stdout"):
                 stream = getattr(self.process, name, None)
-                if stream is not None:
+                if stream is not None and not getattr(stream, "closed", False):
                     stream.close()
             reader = getattr(self, "reader", None)
             if reader is not None and reader is not threading.current_thread():

@@ -86,6 +86,11 @@ def _browser_postcondition_ab(agent, args, *, trials=5):
         mode: sorted(values)[(95 * len(values) + 99) // 100 - 1]
         for mode, values in windows_ms.items()
     }
+    reduction = (
+        round(100 * (1 - p95_ms["postcondition"] / p95_ms["legacy"]), 2)
+        if p95_ms["legacy"] > 0
+        else None
+    )
     return {
         "scope": "Windows host mailbox and owned Chrome, warm session",
         "clicks_per_batch": 5,
@@ -94,9 +99,7 @@ def _browser_postcondition_ab(agent, args, *, trials=5):
             mode: statistics.median(values) for mode, values in windows_ms.items()
         },
         "p95_ms": p95_ms,
-        "p95_reduction_percent": round(
-            100 * (1 - p95_ms["postcondition"] / p95_ms["legacy"]), 2
-        ) if p95_ms["legacy"] > 0 else None,
+        "p95_reduction_percent": reduction,
         "samples_ms": windows_ms,
     }
 
@@ -251,7 +254,9 @@ def main():
         help="Also install a wheel in a fresh temporary venv",
     )
     parser.add_argument(
-        "--browser-ab-trials", type=int, default=5,
+        "--browser-ab-trials",
+        type=int,
+        default=5,
         help="A/B samples per variant (1..50; default 5 for CI)",
     )
     args = parser.parse_args()

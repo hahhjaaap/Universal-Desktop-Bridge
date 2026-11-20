@@ -12,7 +12,14 @@ _READ_SCRIPT = """(() => {
   const roots=openShadowRoots;
   const shadowText=roots.slice(1).map(root=>Array.from(root.children||[])
     .filter(visible).map(element=>String(element.innerText||'')).join(' ')).join(' ');
-  const visibleElements=all.filter(visible);
+  // Only the first 120 visible controls are returned. Finding a 121st
+  // proves truncation; avoid layout/style work for thousands of later nodes.
+  const visibleElements=[];
+  for(const element of all){
+    if(!visible(element))continue;
+    visibleElements.push(element);
+    if(visibleElements.length>120)break;
+  }
   const elements=visibleElements.slice(0,120).map(e=>{
     const type=(e.getAttribute('type')||'').toLowerCase();
     const secret=type==='password'||type==='file'||/password|secret|token|otp|one-time-code/i.test([e.autocomplete,e.name,e.id].join(' '));

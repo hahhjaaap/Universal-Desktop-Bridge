@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -40,6 +41,53 @@ def _wait_for_fixture_host(agent, process, session_id, *, timeout=12):
             return
         time.sleep(0.1)
     raise RuntimeError("Disposable browser worker heartbeat did not become ready")
+
+
+def _browser_postcondition_ab(agent, args):
+    """Time both FastPath variants on one warm Windows browser and mailbox."""
+    windows_ms = {"legacy": [], "postcondition": []}
+    page = 1
+    for trial in range(5):
+        for guarded in (False, True) if trial % 2 == 0 else (True, False):
+            mode = "postcondition" if guarded else "legacy"
+            steps = []
+            for _ in range(5):
+                page += 1
+                step = {"action": "click", "selector": "#next"}
+                if guarded:
+                    step["click_postcondition"] = {
+                        "selector": "#page",
+                        "text": f"Page {page}",
+                    }
+                steps.append(step)
+            steps.append(
+                {
+                    "action": "wait_for",
+                    "selector": "#page",
+                    "state": "text",
+                    "value": f"Page {page}",
+                }
+            )
+            started = time.perf_counter()
+            result = host_command(
+                agent,
+                "browser",
+                action="fastpath",
+                request_id=f"ab-{mode}-{trial}",
+                steps=steps,
+                **args,
+            )
+            windows_ms[mode].append(round((time.perf_counter() - started) * 1000, 2))
+            assert result["ok"] and result["completed_steps"] == len(steps), result
+    return {
+        "scope": "Windows host mailbox and owned Chrome, warm session",
+        "clicks_per_batch": 5,
+        "samples_per_variant": 5,
+        "median_ms": {
+            mode: statistics.median(values) for mode, values in windows_ms.items()
+        },
+        "samples_ms": windows_ms,
+    }
 
 
 def browser_fixture():
@@ -148,6 +196,7 @@ def browser_fixture():
                 assert (
                     receipt["state"] == "completed" and receipt["completed_steps"] == 3
                 )
+                postcondition_ab = _browser_postcondition_ab(agent, args)
                 capture = host_command(agent, "browser", action="capture_start", **args)
                 assert capture["active"] and capture["target_fps"] == 1
                 cached = host_command(
@@ -177,6 +226,7 @@ def browser_fixture():
         read_fill_click_screenshot=True,
         native_select_and_disabled=True,
         native_batch_replay_barrier=True,
+        browser_postcondition_ab=postcondition_ab,
         native_cached_capture=True,
         permissions_issued=False,
     )

@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import secrets
 
-from .browser_cdp import DOCUMENT_NAVIGATION_EVENTS
 from .core import PolicyError
 
 _WORLD = "UDBClickPostcondition"
@@ -85,12 +84,7 @@ def click_with_postcondition(browser, tab, selector, condition, expected_documen
         }, expected_document
     channel = browser._cdp
     if expected_document is None:
-        # Drop evidence for the already committed loader, retaining new navigation.
-        channel.discard_events(
-            DOCUMENT_NAVIGATION_EVENTS,
-            session,
-            {"frameId": frame_id, "loaderId": loader_id},
-        )
+        channel.discard_committed_navigation(session, frame_id, loader_id)
     point = browser._click_point(tab, selector)
     if not point.get("ok"):
         return point, expected_document

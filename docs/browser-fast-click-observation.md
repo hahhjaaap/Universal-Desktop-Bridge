@@ -106,3 +106,8 @@ observer reports its outcome and the guarded sequence stops. Missing
 post-click evidence yields `outcome_unknown` under the existing one-shot receipt.
 Success carries `postcondition_met=true` and
 `navigation_observation_limited=true`; the page can still start navigating later.
+
+The Windows host acceptance fixture runs five interleaved trials per variant
+with five pagination clicks and a final verification each. It reports
+individual durations and medians for the warm Windows host mailbox and Chrome.
+The ChatGPT-to-Windows performance target requires a separate end-to-end A/B.

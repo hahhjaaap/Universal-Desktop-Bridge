@@ -210,7 +210,9 @@ def test_real_browser_click_postcondition_requires_fresh_same_document_evidence(
     )
     assert not result["ok"]
     result, document = click_with_postcondition(browser, tab, "#next", condition, None)
-    assert result["postcondition_met"] and result["navigation_observation_limited"]
+    assert result.get("postcondition_met") and result.get(
+        "navigation_observation_limited"
+    ), result
     result, _ = click_with_postcondition(browser, tab, "#next", condition, document)
     assert not result["ok"]  # Matching before input does not count as fresh evidence.
     condition["text"] = "3"
@@ -231,7 +233,9 @@ def test_real_browser_click_postcondition_stops_on_delayed_navigation(live_brows
     result, document = click_with_postcondition(
         browser, tab, "#delayed", condition, None
     )
-    assert result["navigation_completed"] and result["observation_unavailable"]
+    assert result.get("navigation_completed") and result.get(
+        "observation_unavailable"
+    ), result
     assert not result["postcondition_met"]
     result, _ = click_with_postcondition(browser, tab, "#next", condition, document)
     assert not result["ok"]

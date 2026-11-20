@@ -108,6 +108,37 @@ class CDPChannel:
                 for event in self._events
             )
 
+    def discard_committed_navigation(self, session, frame_id, loader_id):
+        """Discard the known navigation history while retaining a newer attempt."""
+
+        def relevant(event):
+            return (
+                event["method"] in DOCUMENT_NAVIGATION_EVENTS
+                and event.get("sessionId") == session
+                and event.get("frameId") == frame_id
+            )
+
+        with self._lock:
+            committed = max(
+                (
+                    i
+                    for i, event in enumerate(self._events)
+                    if relevant(event)
+                    and event["method"] == "Page.frameNavigated"
+                    and event.get("loaderId") == loader_id
+                ),
+                default=-1,
+            )
+            self._events = deque(
+                (
+                    event
+                    for i, event in enumerate(self._events)
+                    if not relevant(event)
+                    or (i > committed and event.get("loaderId") != loader_id)
+                ),
+                maxlen=MAX_EVENT_QUEUE,
+            )
+
     def wait_for_event(self, methods, session=None, timeout=1, match=None):
         """Wait for a whitelisted event without retaining page URLs or payloads."""
         from websocket import (

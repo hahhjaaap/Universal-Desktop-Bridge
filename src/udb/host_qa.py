@@ -68,7 +68,10 @@ def run(home):
     if agent.projects() or (agent.state / "connection.json").exists():
         raise PolicyError("Host acceptance refuses configured owner state")
     atomic_json(agent.state / "host-settings.json", dict(enabled=True))
-    service = HostService(agent)
+    # A hosted Windows runner can need a longer cold Chrome startup budget;
+    # the production HostService still uses Browser's 20-second default.
+    ci_startup = 45 if os.environ.get("GITHUB_ACTIONS") == "true" else None
+    service = HostService(agent, browser_startup_timeout=ci_startup)
     try:
         deadline = time.monotonic() + 60
         while not service.resource.get("admission_ready"):

@@ -261,6 +261,11 @@ def main():
         default=5,
         help="A/B samples per variant (1..50; default 5 for CI)",
     )
+    parser.add_argument(
+        "--browser-only",
+        action="store_true",
+        help="Run only the disposable owned-browser fixture, without owner-access component tests",
+    )
     args = parser.parse_args()
     if not 1 <= args.browser_ab_trials <= 50:
         parser.error("--browser-ab-trials must be between 1 and 50")
@@ -288,12 +293,13 @@ def main():
         results.append(dict(scenario=name, state="PASS"))
         print(json.dumps(results[-1]), flush=True)
 
-    for name in (
-        "test_backend_recovery_mcp",
-        "test_documents_mcp",
-        "test_uia_provider",
-    ):
-        run(name, [sys.executable, str(root / "tests/components" / (name + ".py"))])
+    if not args.browser_only:
+        for name in (
+            "test_backend_recovery_mcp",
+            "test_documents_mcp",
+            "test_uia_provider",
+        ):
+            run(name, [sys.executable, str(root / "tests/components" / (name + ".py"))])
     print(json.dumps(dict(scenario="owned_browser", state="RUNNING")), flush=True)
     results.append(browser_fixture(ab_trials=args.browser_ab_trials))
     print(json.dumps(results[-1]), flush=True)

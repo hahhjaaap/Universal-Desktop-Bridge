@@ -41,8 +41,10 @@ def test_unresponsive_stdio_falls_back_to_terminate():
     class Pipe:
         def __init__(self, name):
             self.name = name
+            self.closed = False
 
         def close(self):
+            self.closed = True
             events.append(f"{self.name}.close")
 
     class Process:

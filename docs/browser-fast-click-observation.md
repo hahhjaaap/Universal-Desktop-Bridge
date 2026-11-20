@@ -111,3 +111,17 @@ The Windows host acceptance fixture runs five interleaved trials per variant
 with five pagination clicks and a final verification each. It reports
 individual durations and medians for the warm Windows host mailbox and Chrome.
 The ChatGPT-to-Windows performance target requires a separate end-to-end A/B.
+
+An opt-in longer Windows host/Chrome test runs 50 interleaved trials **per**
+variant, with five clicks plus final verification per trial:
+
+```sh
+python tools/check_runtime_scenarios.py --browser-ab-trials 50
+```
+
+The resulting `reports/runtime-scenarios/results.json` includes raw timings,
+median, nearest-rank p95, and p95 reduction for the **warm Windows mailbox**
+scope. The default remains five trials per variant for normal CI. This does
+**not** measure ChatGPT → Cloudflare → UDB end-to-end latency. The release
+gate still requires 50 end-to-end A/B trials per build with at least 40% p95
+reduction and candidate p95 at most 6 seconds.

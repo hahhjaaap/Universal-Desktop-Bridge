@@ -40,9 +40,7 @@ def test_bounded_worker_budget_matches_admission(monkeypatch, limit):
         assert pool.executor._max_workers == count
         for _ in range(count):
             assert pool.scheduler.admit("read")
-        assert not pool.scheduler.admit("read"), (
-            "No RPC may queue beyond worker count"
-        )
+        assert not pool.scheduler.admit("read"), "No RPC may queue beyond worker count"
         assert not pool.scheduler.admit("exclusive")
         for _ in range(count):
             pool.scheduler.release("read")

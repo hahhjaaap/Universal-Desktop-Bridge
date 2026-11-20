@@ -43,11 +43,13 @@ def _wait_for_fixture_host(agent, process, session_id, *, timeout=12):
     raise RuntimeError("Disposable browser worker heartbeat did not become ready")
 
 
-def _browser_postcondition_ab(agent, args):
+def _browser_postcondition_ab(agent, args, *, trials=5):
     """Time both FastPath variants on one warm Windows browser and mailbox."""
+    if not 1 <= trials <= 50:
+        raise ValueError("Browser A/B trials must be between 1 and 50")
     windows_ms = {"legacy": [], "postcondition": []}
     page = 1
-    for trial in range(5):
+    for trial in range(trials):
         for guarded in (False, True) if trial % 2 == 0 else (True, False):
             mode = "postcondition" if guarded else "legacy"
             steps = []
@@ -79,18 +81,27 @@ def _browser_postcondition_ab(agent, args):
             )
             windows_ms[mode].append(round((time.perf_counter() - started) * 1000, 2))
             assert result["ok"] and result["completed_steps"] == len(steps), result
+    # Nearest-rank p95 is meaningful for the opt-in 50-trial acceptance run.
+    p95_ms = {
+        mode: sorted(values)[(95 * len(values) + 99) // 100 - 1]
+        for mode, values in windows_ms.items()
+    }
     return {
         "scope": "Windows host mailbox and owned Chrome, warm session",
         "clicks_per_batch": 5,
-        "samples_per_variant": 5,
+        "samples_per_variant": trials,
         "median_ms": {
             mode: statistics.median(values) for mode, values in windows_ms.items()
         },
+        "p95_ms": p95_ms,
+        "p95_reduction_percent": round(
+            100 * (1 - p95_ms["postcondition"] / p95_ms["legacy"]), 2
+        ) if p95_ms["legacy"] > 0 else None,
         "samples_ms": windows_ms,
     }
 
 
-def browser_fixture():
+def browser_fixture(*, ab_trials=5):
     with tempfile.TemporaryDirectory(prefix="udb-hostqa-") as directory:
         home = Path(directory).resolve()
         (home / "QA-ISOLATED").write_text("Disposable browser fixture")
@@ -196,7 +207,7 @@ def browser_fixture():
                 assert (
                     receipt["state"] == "completed" and receipt["completed_steps"] == 3
                 )
-                postcondition_ab = _browser_postcondition_ab(agent, args)
+                postcondition_ab = _browser_postcondition_ab(agent, args, trials=ab_trials)
                 capture = host_command(agent, "browser", action="capture_start", **args)
                 assert capture["active"] and capture["target_fps"] == 1
                 cached = host_command(
@@ -239,7 +250,13 @@ def main():
         action="store_true",
         help="Also install a wheel in a fresh temporary venv",
     )
+    parser.add_argument(
+        "--browser-ab-trials", type=int, default=5,
+        help="A/B samples per variant (1..50; default 5 for CI)",
+    )
     args = parser.parse_args()
+    if not 1 <= args.browser_ab_trials <= 50:
+        parser.error("--browser-ab-trials must be between 1 and 50")
     root = Path(__file__).resolve().parents[1]
     logs = root / "reports" / "runtime-scenarios"
     logs.mkdir(parents=True, exist_ok=True)
@@ -271,7 +288,7 @@ def main():
     ):
         run(name, [sys.executable, str(root / "tests/components" / (name + ".py"))])
     print(json.dumps(dict(scenario="owned_browser", state="RUNNING")), flush=True)
-    results.append(browser_fixture())
+    results.append(browser_fixture(ab_trials=args.browser_ab_trials))
     print(json.dumps(results[-1]), flush=True)
     if args.wheel:
         destination = root / "build" / "runtime-wheel"

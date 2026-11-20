@@ -2,16 +2,108 @@
 
 import argparse
 import io
+import subprocess
+import sys
+import time
 from types import SimpleNamespace
 
 import pytest
 
-from udb import cli
+from udb import cli, host_client, onboarding
 
 
 class TTY(io.StringIO):
     def isatty(self):
         return True
+
+
+def test_background_cli_enables_and_revokes_the_live_worker_setting(
+    tmp_path, monkeypatch, capsys
+):
+    args = ["background", "--home", str(tmp_path)]
+    agent = SimpleNamespace(state=tmp_path / "state")
+    monkeypatch.setattr(onboarding, "attended_console", lambda: True)
+
+    monkeypatch.setattr("builtins.input", lambda prompt: "")
+    assert cli.main([*args, "enable"]) == 2
+    assert not agent.state.exists()
+
+    def confirm(prompt):
+        assert "ALLOW BACKGROUND" in prompt
+        return "ALLOW BACKGROUND"
+
+    monkeypatch.setattr("builtins.input", confirm)
+    assert cli.main([*args, "enable"]) == 0
+    assert host_client.enabled(agent)
+    capsys.readouterr()
+    assert cli.main([*args, "status", "--json"]) == 0
+    assert capsys.readouterr().out == '{"background": "unavailable"}\n'
+
+    assert cli.main([*args, "disable"]) == 0
+    assert not host_client.enabled(agent)
+    capsys.readouterr()
+    assert cli.main([*args, "status", "--json"]) == 0
+    assert capsys.readouterr().out == '{"background": "disabled"}\n'
+
+
+@pytest.mark.parametrize("operation", ["enable", "disable"])
+def test_background_cli_refuses_unattended_grant_changes(
+    operation, tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setattr(onboarding, "attended_console", lambda: False)
+    assert cli.main(["background", operation, "--home", str(tmp_path)]) == 2
+    assert "your own local Windows terminal" in capsys.readouterr().err
+    assert not (tmp_path / "state").exists()
+
+
+def test_background_cli_rejects_redirected_confirmation(tmp_path):
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "udb",
+            "background",
+            "enable",
+            "--home",
+            str(tmp_path),
+        ],
+        input="ALLOW BACKGROUND\n",
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 2, result.stderr
+    assert "your own local Windows terminal" in result.stderr
+    assert not (tmp_path / "state").exists()
+
+
+@pytest.mark.parametrize(
+    ("preferences", "resources", "expected"),
+    [
+        ({"enabled": True, "padding": " " * 4096}, {}, "invalid_settings"),
+        ({"enabled": True, "other": float("nan")}, {}, "invalid_settings"),
+        ({"enabled": True}, {"cpu_percent": None}, "unavailable"),
+        ({"enabled": True}, {"at": 10**500}, "unavailable"),
+    ],
+)
+def test_background_cli_does_not_report_false_readiness(
+    tmp_path, capsys, preferences, resources, expected
+):
+    state = tmp_path / "state"
+    (state / "host").mkdir(parents=True)
+    host_client.atomic_json(state / "host-settings.json", preferences)
+    resource_status = {
+        "at": time.time(),
+        "paused": False,
+        "admission_ready": resources.get("cpu_percent", 20) is not None,
+        **resources,
+    }
+    host_client.atomic_json(
+        state / "host" / "status.json",
+        {"worker_ready": True, "resources": resource_status},
+    )
+    assert cli.main(["background", "status", "--home", str(tmp_path), "--json"]) == 0
+    assert capsys.readouterr().out == f'{{"background": "{expected}"}}\n'
 
 
 @pytest.mark.parametrize(

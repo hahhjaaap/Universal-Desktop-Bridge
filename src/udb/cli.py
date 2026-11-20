@@ -159,6 +159,9 @@ Connection and recovery:
   udb rollback --yes     Skip attended confirmation for an intentional rollback
 
 Permissions (owner-attended):
+  udb background status   Check background browser and workspace readiness
+  udb background enable   Allow background sessions from the local Windows console
+  udb background disable  Revoke background sessions from the local Windows console
   udb --access computer   Attended opt-in to broad Windows access
   udb revoke-access      Revoke broad Windows computer access
   udb allow-source       Grant source access (--path required)
@@ -303,6 +306,7 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         "retention",
         "test",
         "revoke-access",
+        "background",
         "allow-source",
         "revoke-source",
         "tools",
@@ -381,17 +385,18 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
             command.add_argument(
                 "topic", nargs="?", choices=("advanced", "vi", *command_names)
             )
-        if name in ("autostart", "update", "rollback", "version"):
+        if name in ("autostart", "background", "update", "rollback", "version"):
             command.add_argument(
                 "--json", action="store_true", default=argparse.SUPPRESS
             )
-        if name == "autostart":
+        if name in ("autostart", "background"):
             command.add_argument(
                 "operation",
                 choices=("enable", "disable", "status"),
                 default="status",
                 nargs="?",
             )
+        if name == "autostart":
             command.add_argument(
                 "--cloud-agent",
                 action="store_true",
@@ -848,6 +853,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         if action == "gui":
             return _run_gui(args, settings)
+        if action == "background":
+            if args.access or (args.json and args.operation != "status"):
+                raise ValueError(
+                    "Use --json only with background status and omit --access"
+                )
+            from .owner_command import background_command
+
+            return background_command(settings.home, args.operation, as_json=args.json)
         if action in ("allow-source", "revoke-source"):
             if args.access or args.json:
                 raise ValueError(

@@ -39,7 +39,7 @@ def report(
         )
     if not background:
         actions.append(
-            "For owned browser sessions, enable background access in the local UDB manager."
+            "For owned browser sessions, run udb background enable in your own local terminal."
         )
     return {
         "state": state,

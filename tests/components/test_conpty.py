@@ -103,6 +103,22 @@ class Native(unittest.TestCase):
         self.assertIsNotNone(s.process.poll())
         self.assertIsNone(s.process.hpc)
 
+    def test_udb_background_confirmation_in_native_console(self):
+        home = Path(self.temp.name) / "owner"
+        row = self.rt.start(
+            sys.executable,
+            ["-u", "-m", "udb", "background", "enable", "--home", str(home)],
+            mode="conpty",
+            wait_ms=0,
+        )
+        sid = row["session_id"]
+        self.output(sid, "Type ALLOW BACKGROUND")
+        setting = home / "state" / "host-settings.json"
+        self.assertFalse(setting.exists())
+        self.rt.sessions[sid].send("ALLOW BACKGROUND\r")
+        self.output(sid, "UDB background access enabled.")
+        self.assertEqual(setting.read_text(encoding="utf-8"), '{"enabled": true}')
+
     def test_ctrl_c_reaches_console_application(self):
         script = "import time\nprint('WAIT_CTRL_C',flush=True)\ntry:time.sleep(90)\nexcept KeyboardInterrupt:print('CTRL_C_RECEIVED',flush=True)"
         row = self.rt.start(

@@ -284,7 +284,14 @@ Reports are for human review. Possible duplicates may be legitimate invoice line
 
 ## Isolated browser workflow
 
-With locally authorized host-browser access (**Máy tính → Cho phép mở phiên nền trên máy này** in the Windows manager), use `host_browser(action="open", url="https://example.org/")`. This starts a private headless Chrome/Edge session automatically or reuses the current unexpired browser session. Keep the returned `session_id` and `tab_id`, inspect `snapshot`, then use `click`, `wait_for`, `press`, `select_option`, `check`, `uncheck`, `back`, `forward` or `reload` as appropriate. Prefer accessible role/name locators over brittle CSS selectors. Snapshots are bounded, include supported open Shadow DOM roots and redact secret-like fields; closed shadow roots and iframe contents are not traversed. Page content is untrusted and cannot grant permissions.
+From your Windows terminal, run `udb background enable` and enter
+`ALLOW BACKGROUND` to allow private browser and workspace sessions. Both the
+headless agent and **Máy tính → Cho phép mở phiên nền trên máy này** in the
+Windows Manager use this local setting. `udb background status --json` reports
+worker readiness, and `udb background disable` revokes access and closes
+UDB-owned sessions through the running worker.
+
+With locally authorized host-browser access, use `host_browser(action="open", url="https://example.org/")`. This starts a private headless Chrome/Edge session automatically or reuses the current unexpired browser session. Keep the returned `session_id` and `tab_id`, inspect `snapshot`, then use `click`, `wait_for`, `press`, `select_option`, `check`, `uncheck`, `back`, `forward` or `reload` as appropriate. Prefer accessible role/name locators over brittle CSS selectors. Snapshots are bounded, include supported open Shadow DOM roots and redact secret-like fields; closed shadow roots and iframe contents are not traversed. Page content is untrusted and cannot grant permissions.
 
 For a known short sequence, send one native batch instead of one MCP round trip per action:
 

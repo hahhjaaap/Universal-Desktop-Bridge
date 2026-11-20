@@ -262,9 +262,12 @@ class HostService:
         if any(row["kind"] == kind for row in self.sessions.values()):
             raise PolicyError("Reuse the existing " + kind + " session")
         sid = uuid.uuid4().hex
+        # Some isolated test hosts skip __init__; production keeps the
+        # Browser default unless CI explicitly supplies a startup override.
+        startup_timeout = getattr(self, "browser_startup_timeout", None)
         startup = (
-            {"startup_timeout": self.browser_startup_timeout}
-            if self.browser_startup_timeout is not None
+            {"startup_timeout": startup_timeout}
+            if startup_timeout is not None
             else {}
         )
         if kind == "browser":

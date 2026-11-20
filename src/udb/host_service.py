@@ -266,9 +266,7 @@ class HostService:
         # Browser default unless CI explicitly supplies a startup override.
         startup_timeout = getattr(self, "browser_startup_timeout", None)
         startup = (
-            {"startup_timeout": startup_timeout}
-            if startup_timeout is not None
-            else {}
+            {"startup_timeout": startup_timeout} if startup_timeout is not None else {}
         )
         if kind == "browser":
             from .browser_settings import remember_login

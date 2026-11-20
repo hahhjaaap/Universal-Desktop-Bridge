@@ -45,8 +45,9 @@ def pending_inbox_commands(folder):
 
 
 class HostService:
-    def __init__(self, agent):
+    def __init__(self, agent, *, browser_startup_timeout=None):
         self.agent = agent
+        self.browser_startup_timeout = browser_startup_timeout
         perf.configure(agent.state)
         self.folder = agent.state / "host"
         reject_links(self.folder)
@@ -266,9 +267,16 @@ class HostService:
             from .host_browser import Browser
 
             if remember_login(self.agent):
-                obj = Browser(self.folder / "browser-profile", persistent=True)
+                obj = Browser(
+                    self.folder / "browser-profile",
+                    persistent=True,
+                    startup_timeout=self.browser_startup_timeout,
+                )
             else:
-                obj = Browser(self.folder / "profiles" / sid)
+                obj = Browser(
+                    self.folder / "profiles" / sid,
+                    startup_timeout=self.browser_startup_timeout,
+                )
         else:
             from .host_workspace import Workspace
 

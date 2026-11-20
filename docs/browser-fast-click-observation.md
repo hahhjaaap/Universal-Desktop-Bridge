@@ -116,7 +116,7 @@ An opt-in longer Windows host/Chrome test runs 50 interleaved trials **per**
 variant, with five clicks plus final verification per trial:
 
 ```sh
-python tools/check_runtime_scenarios.py --browser-ab-trials 50
+python tools/check_runtime_scenarios.py --browser-only --browser-ab-trials 50
 ```
 
 The resulting `reports/runtime-scenarios/results.json` includes raw timings,

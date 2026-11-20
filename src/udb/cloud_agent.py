@@ -38,6 +38,7 @@ _MAX_FRAME = 1024 * 1024
 _MIN_RETRY_SECONDS = 5
 _MAX_RETRY_SECONDS = 120
 _MAX_PARALLEL_CALLS = 10
+_RPC_WORKER_LIMIT_ENV = "UDB_CLOUD_MAX_RPC_WORKERS"
 _STATUS_LOCK_WAIT_SECONDS = 6.0
 # Detect half-open TCP / idle WebSocket connections without replaying RPCs.
 _HEARTBEAT_IDLE_SECONDS = 30
@@ -56,6 +57,24 @@ _REMOTE_READ_TOOLS = frozenset(
         "computer_status",
     }
 )
+
+
+def cloud_rpc_worker_limit() -> int:
+    """Staging opt-in to cap concurrent Cloud RPCs without queueing mutations.
+
+    Each admitted task must have an execution thread. We therefore lower
+    DeviceTaskScheduler admission and executor capacity together. This is a
+    concurrency bound, NOT a guarantee about retained/desktop proxy count.
+    """
+    raw = os.environ.get(_RPC_WORKER_LIMIT_ENV)
+    if raw is None:
+        return _MAX_PARALLEL_CALLS
+    if not raw.isascii() or not raw.isdecimal() or len(raw) > 2:
+        raise ValueError("UDB_CLOUD_MAX_RPC_WORKERS must be 1..10")
+    count = int(raw)
+    if not 1 <= count <= _MAX_PARALLEL_CALLS:
+        raise ValueError("UDB_CLOUD_MAX_RPC_WORKERS must be 1..10")
+    return count
 
 
 def is_parallel_read_rpc(rpc: dict) -> bool:
@@ -297,8 +316,9 @@ class ParallelLocalProxies:
 
     def __init__(self, settings):
         self.settings = settings
+        self.max_rpc_workers = cloud_rpc_worker_limit()
         self.executor = ThreadPoolExecutor(
-            max_workers=_MAX_PARALLEL_CALLS, thread_name_prefix="udb-cloud-rpc"
+            max_workers=self.max_rpc_workers, thread_name_prefix="udb-cloud-rpc"
         )
         self.local = threading.local()
         self.desktop_proxy = None
@@ -310,7 +330,7 @@ class ParallelLocalProxies:
         self.status_proxy = None
         self.lock = threading.Lock()
         self.proxies = []
-        self.scheduler = DeviceTaskScheduler()
+        self.scheduler = DeviceTaskScheduler(max_tasks=self.max_rpc_workers)
         self.failed = threading.Event()
         self.closed = False
 

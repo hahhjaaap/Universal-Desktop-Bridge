@@ -69,6 +69,74 @@ def payload(steps, request_id="fastpath-test"):
     }
 
 
+def test_postcondition_pins_document_and_uncertain_click_is_never_replayed(
+    owned, monkeypatch
+):
+    service, browser = owned
+    document = ("frame", "loader", "https://example.org/")
+    guarded_click = Mock(
+        side_effect=[
+            ({"ok": True, "postcondition_met": True}, document),
+            ({"ok": False, "observation_unavailable": True}, document),
+        ]
+    )
+    monkeypatch.setattr(browser_batch, "click_with_postcondition", guarded_click)
+    steps = [
+        {
+            "action": "click",
+            "selector": "#next",
+            "click_postcondition": {"selector": "#page", "text": str(i)},
+        }
+        for i in range(2, 5)
+    ]
+    result = service.dispatch("browser", payload(steps))
+    assert result["state"] == "outcome_unknown" and result["completed_steps"] == 1
+    assert not result["results"][1]["verified"]
+    assert guarded_click.call_args_list[0].args == (
+        browser,
+        "tab-a",
+        "#next",
+        {"selector": "#page", "text": "2", "timeout_ms": 1000},
+        None,
+    )
+    assert guarded_click.call_args_list[1].args[-1] == document
+    assert service.dispatch("browser", payload(steps))["cached_result"]
+    service.batches = browser_batch.BatchRunner()
+    assert service.dispatch("browser", payload(steps))["state"] == "outcome_unknown"
+    assert guarded_click.call_count == 2
+
+
+@pytest.mark.parametrize(
+    "invalid_step",
+    [
+        {"action": "click", "selector": "#submit"},
+        {"action": "fill", "selector": "#input", "value": "data"},
+        {"action": "navigate", "url": "https://example.org"},
+    ],
+)
+def test_postcondition_disallows_later_unguarded_input(
+    owned, monkeypatch, invalid_step
+):
+    service, _ = owned
+    dispatch = Mock()
+    monkeypatch.setattr(browser_batch, "click_with_postcondition", dispatch)
+    with pytest.raises(PolicyError, match="followed by reads"):
+        service.dispatch(
+            "browser",
+            payload(
+                [
+                    {
+                        "action": "click",
+                        "selector": "#next",
+                        "click_postcondition": {"selector": "#page", "text": "2"},
+                    },
+                    invalid_step,
+                ]
+            ),
+        )
+    dispatch.assert_not_called()
+
+
 def test_11_14_fastpath_dispatches_three_steps_in_one_owned_batch(owned, monkeypatch):
     service, browser = owned
     dispatch = Mock(

@@ -14,6 +14,7 @@ from .browser_actions import (
     validate_click_navigation_budget,
     validate_post_observation,
 )
+from .browser_click_postcondition import click_with_postcondition
 from .core import PolicyError, reject_links
 from .fastpath import compile_plan, gate, is_mutation, matches
 from .host_client import _read_json, atomic_json, enabled
@@ -70,7 +71,7 @@ def prepare(args):
     fastpath = args.get("action") == "fastpath"
     if fastpath:
         compile_plan(steps, FIELDS)
-        # FastPath verification semantics are intentionally unchanged.
+        # The legacy short navigation window is still terminal-only.
         if any(
             step.get("action") == "click"
             and ("observe_after" in step or "click_navigation_observe_ms" in step)
@@ -143,6 +144,7 @@ class BatchRunner:
         fastpath = args.get("action") == "fastpath"
         plan = compile_plan(steps, FIELDS) if fastpath else None
         observed = {}
+        click_document = None
         if path.exists():
             old = _read_json(path, 4096)
             if old.get("digest") != digest:
@@ -252,9 +254,17 @@ class BatchRunner:
                         continue
                 try:
                     call_args = current.arguments if current is not None else step
-                    value = dispatch_browser(
-                        browser, dict(call_args, tab_id=args.get("tab_id", ""))
-                    )
+                    tab = args.get("tab_id", "")
+                    if current is not None and current.click_postcondition is not None:
+                        value, click_document = click_with_postcondition(
+                            browser,
+                            tab,
+                            call_args["selector"],
+                            current.click_postcondition,
+                            click_document,
+                        )
+                    else:
+                        value = dispatch_browser(browser, dict(call_args, tab_id=tab))
                     if (
                         current is None
                         and step["action"] == "click"
@@ -284,7 +294,9 @@ class BatchRunner:
                             },
                             False,
                         )
-                    verified = True
+                    verified = (
+                        current is None or current.click_postcondition is None or ok
+                    )
                     if ok and current is not None and current.verify is not None:
                         try:
                             verified = matches(value, current.verify)
@@ -304,10 +316,7 @@ class BatchRunner:
                     if current is None or current.return_result:
                         entry["result"] = value
                     if current is not None:
-                        entry.update(
-                            step_id=current.step_id,
-                            verified=verified,
-                        )
+                        entry.update(step_id=current.step_id, verified=verified)
                         observed[current.step_id] = {
                             "skipped": False,
                             "ok": ok,

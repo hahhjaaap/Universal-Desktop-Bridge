@@ -83,7 +83,7 @@ def parse_key(value):
 class BrowserInputMixin:
     """Input methods shared by the UDB-owned browser; no OS cursor takeover."""
 
-    def _mouse_click(self, tab, x, y):
+    def _mouse_click(self, tab, x, y, *, before_press=None):
         self._show_identity(tab, x, y)
         session = self.sid(tab)
         point = dict(x=float(x), y=float(y))
@@ -93,6 +93,8 @@ class BrowserInputMixin:
             session,
             timeout=2,
         )
+        if before_press is not None and not before_press():
+            return False
         press_error = None
         try:
             self.call(
@@ -116,6 +118,7 @@ class BrowserInputMixin:
                     raise
         if press_error is not None:
             raise press_error
+        return True
 
     def press(self, tab, key, selector="", role="", name="", exact=True):
         info = parse_key(key)

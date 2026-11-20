@@ -33,14 +33,15 @@ def _read_json(path, limit, encoding="utf-8"):
         raise ValueError("Invalid host JSON structure") from exc
 
 
-def _validate_health(result):
+def _validate_health(result, *, now=None):
     if not isinstance(result, dict) or not isinstance(result.get("resources"), dict):
         raise ValueError("invalid health object")
     if type(result.get("worker_ready", False)) is not bool:
         raise ValueError("invalid worker state")
     resource = result["resources"]
     stamp = resource["at"]
-    if type(stamp) not in (int, float) or not -2 <= time.time() - stamp <= 6:
+    observed_at = time.time() if now is None else now
+    if type(stamp) not in (int, float) or not -2 <= observed_at - stamp <= 6:
         raise ValueError("stale or invalid health timestamp")
     if type(resource.get("admission_ready", False)) is not bool:
         raise ValueError("invalid admission state")
@@ -82,23 +83,37 @@ def atomic_json(path, value):
         tmp.unlink(missing_ok=True)
 
 
-def enabled(agent):
-    p = agent.state / "host-settings.json"
+def read_background_enabled(state):
+    p = state / "host-settings.json"
     reject_links(p)
+    value = _read_json(p, 4096, "utf-8-sig")
+    if not isinstance(value, dict):
+        raise ValueError("Invalid background settings")
+    return value.get("enabled") is True
+
+
+def enabled(agent):
     try:
-        value = _read_json(p, 4096, "utf-8-sig")
-        return isinstance(value, dict) and value.get("enabled") is True
+        return read_background_enabled(agent.state)
+    except PolicyError:
+        raise
     except (OSError, ValueError):
         return False
 
 
-def status(agent):
-    p = agent.state / "host" / "status.json"
+def read_health(state, *, now=None):
+    p = state / "host" / "status.json"
     reject_links(p)
+    return _validate_health(_read_json(p, 128 * 1024), now=now)
+
+
+def status(agent):
     try:
-        result = _validate_health(_read_json(p, 128 * 1024))
+        result = read_health(agent.state)
         result["enabled"] = enabled(agent)
         return result
+    except PolicyError:
+        raise
     except (OSError, ValueError, KeyError, OverflowError):
         return dict(
             enabled=enabled(agent),

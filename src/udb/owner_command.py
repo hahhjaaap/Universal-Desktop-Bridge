@@ -10,7 +10,6 @@ import contextlib
 import ctypes
 import hashlib
 import json
-import math
 import os
 import re
 import subprocess
@@ -195,29 +194,71 @@ def tunnel_ready(home: Path, opener=None) -> bool:
 
 
 def background_state(home: Path, now=None) -> str:
+    from .host_client import read_background_enabled, read_health
+
+    state = home / "state"
     try:
-        prefs = read_object(home / "state" / "host-settings.json")
+        enabled = read_background_enabled(state)
     except FileNotFoundError:
         return "disabled"
-    except (OSError, ValueError, CommandError):
+    except (OSError, ValueError):
         return "invalid_settings"
-    if prefs.get("enabled") is not True:
+    if not enabled:
         return "disabled"
     try:
-        state = read_object(home / "state" / "host" / "status.json")
-        stamp = state.get("resources", {}).get("at")
-        if (
-            isinstance(stamp, bool)
-            or not isinstance(stamp, (int, float))
-            or not math.isfinite(stamp)
-        ):
-            return "unavailable"
-        age = (time.time() if now is None else now) - stamp
-        if not -2 <= age <= 6 or state.get("worker_ready") is not True:
-            return "unavailable"
-        return "paused" if state["resources"].get("paused") is True else "ready"
-    except (OSError, ValueError, TypeError, AttributeError, CommandError):
+        health = read_health(state, now=now)
+    except (OSError, ValueError, KeyError, OverflowError):
         return "unavailable"
+    if health["worker_ready"] is not True:
+        return "unavailable"
+    resource = health["resources"]
+    if resource.get("paused") is True:
+        return "paused"
+    if resource.get("admission_ready") is True and resource.get("paused") is False:
+        return "ready"
+    return "unavailable"
+
+
+def background_command(home: Path, operation: str, *, as_json=False) -> int:
+    if operation == "status":
+        state = background_state(home)
+        print(
+            json.dumps({"background": state})
+            if as_json
+            else f"UDB background: {state}."
+        )
+        return 0
+
+    from .core import reject_links
+    from .host_client import atomic_json
+    from .onboarding import attended_console
+
+    if not attended_console():
+        raise ValueError(
+            "Changing background access requires your own local Windows terminal."
+        )
+    enable = operation == "enable"
+    if enable:
+        print(
+            "Allow UDB to open private browser and workspace sessions on this machine."
+        )
+        try:
+            confirmed = input("Type ALLOW BACKGROUND to confirm, or Enter to cancel: ")
+        except (EOFError, KeyboardInterrupt):
+            confirmed = ""
+        if confirmed.strip() != "ALLOW BACKGROUND":
+            print("UDB: Background access was not changed.", file=sys.stderr)
+            return 2
+    path = home / "state" / "host-settings.json"
+    reject_links(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_json(path, {"enabled": enable})
+    print(
+        "UDB background access enabled."
+        if enable
+        else "UDB background access disabled."
+    )
+    return 0
 
 
 def headless_state(home: Path) -> dict | None:

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from udb import cli, onboarding
 from udb.core import Agent, PolicyError
 from udb.host_browser import (
     Browser,
@@ -1186,6 +1187,38 @@ class BackgroundBrowser:
 
     def close(self):
         self.closed = True
+
+
+def test_cli_background_lifecycle_controls_existing_worker(engine, monkeypatch, capsys):
+    args = ["background", "--home", str(engine.agent.home)]
+    monkeypatch.setattr(onboarding, "attended_console", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: "ALLOW BACKGROUND")
+    monkeypatch.setattr("udb.host_browser.Browser", BackgroundBrowser)
+    engine.stop_event = threading.Event()
+
+    def cli_status(expected):
+        engine.publish()
+        capsys.readouterr()
+        assert cli.main([*args, "status", "--json"]) == 0
+        assert json.loads(capsys.readouterr().out) == {"background": expected}
+
+    assert cli.main([*args, "disable"]) == 0
+    cli_status("disabled")
+    request = {"action": "open", "url": "https://example.org/"}
+    with pytest.raises(PolicyError, match="disabled by owner"):
+        engine.dispatch("browser", request)
+
+    assert cli.main([*args, "enable"]) == 0
+    cli_status("ready")
+    session = engine.dispatch("browser", request)["session_id"]
+    browser = engine.sessions[session]["object"]
+
+    assert cli.main([*args, "disable"]) == 0
+    with pytest.raises(PolicyError, match="disabled by owner"):
+        engine.dispatch("browser", request)
+    engine._maintain()
+    assert browser.closed and not engine.sessions
+    cli_status("disabled")
 
 
 def test_browser_open_starts_and_reuses_one_background_session(engine, monkeypatch):

@@ -210,7 +210,9 @@ def browser_fixture(*, ab_trials=5):
                 assert (
                     receipt["state"] == "completed" and receipt["completed_steps"] == 3
                 )
-                postcondition_ab = _browser_postcondition_ab(agent, args, trials=ab_trials)
+                postcondition_ab = _browser_postcondition_ab(
+                    agent, args, trials=ab_trials
+                )
                 capture = host_command(agent, "browser", action="capture_start", **args)
                 assert capture["active"] and capture["target_fps"] == 1
                 cached = host_command(

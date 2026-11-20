@@ -123,7 +123,7 @@ def browser_fixture(*, ab_trials=5):
             )
             try:
                 ready = home / "fixture-ready.json"
-                deadline = time.monotonic() + 75
+                deadline = time.monotonic() + (120 if ab_trials > 5 else 75)
                 while not ready.exists():
                     if process.poll() is not None or time.monotonic() > deadline:
                         details = (home / "worker.log").read_text(

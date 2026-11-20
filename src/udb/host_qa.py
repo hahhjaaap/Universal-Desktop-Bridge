@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 import time
 from pathlib import Path
@@ -59,6 +60,10 @@ def run(home):
         or not (home / "QA-ISOLATED").is_file()
     ):
         raise PolicyError("Host acceptance requires a marked disposable OS temp home")
+    setting = os.environ.get("UDB_HOST_QA_LONG_BENCHMARK", "")
+    if setting not in ("", "1"):
+        raise PolicyError("Invalid isolated QA benchmark setting")
+    long_benchmark = setting == "1"
     agent = Agent(home)
     if agent.projects() or (agent.state / "connection.json").exists():
         raise PolicyError("Host acceptance refuses configured owner state")
@@ -76,7 +81,7 @@ def run(home):
                 dict(
                     kind="browser",
                     task="Disposable acceptance fixture",
-                    duration_seconds=180,
+                    duration_seconds=900 if long_benchmark else 180,
                 ),
             )
             obj = service.sessions[result["session_id"]]["object"]
@@ -87,7 +92,9 @@ def run(home):
                 home / "fixture-ready.json",
                 dict(session_id=result["session_id"], tab_id=tab),
             )
-        deadline = time.monotonic() + 90
+        # Only the isolated 50-trial benchmark extends QA life; the ordinary
+        # acceptance worker remains bounded at 90 seconds.
+        deadline = time.monotonic() + (600 if long_benchmark else 90)
         while not (home / "stop.flag").exists() and time.monotonic() < deadline:
             time.sleep(0.1)
     finally:

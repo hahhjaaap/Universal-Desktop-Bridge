@@ -8,7 +8,6 @@ import pytest
 from udb.core import PolicyError
 from udb.desktop_fastpath_receipts import run_once
 
-
 GRANT = "a" * 32
 PLAN = [{"action": "type", "text": "sensitive user content"}]
 

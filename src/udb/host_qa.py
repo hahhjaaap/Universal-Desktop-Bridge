@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 import time
 from pathlib import Path
@@ -19,7 +20,9 @@ FIXTURE = """<!doctype html><meta charset="utf-8"><title>UDB owned fixture</titl
 <h1>Private UDB acceptance fixture</h1><input id="name"><button id="confirm"
 onclick="document.querySelector('#result').innerText=document.querySelector('#name').value">Confirm</button><p id="result"></p>
 <select id="choice"><option value="">Choose</option><option value="VN">Vietnam</option></select>
-<input id="disabled" disabled><input id="readonly" readonly value="locked">"""
+<input id="disabled" disabled><input id="readonly" readonly value="locked">
+<output id="page">Page 1</output><button id="next" type="button" data-page="1"
+onclick="document.querySelector('#page').innerText='Page '+ ++this.dataset.page">Next</button>"""
 
 
 def prepare_fixture(browser, tab, html=FIXTURE):
@@ -57,11 +60,18 @@ def run(home):
         or not (home / "QA-ISOLATED").is_file()
     ):
         raise PolicyError("Host acceptance requires a marked disposable OS temp home")
+    setting = os.environ.get("UDB_HOST_QA_LONG_BENCHMARK", "")
+    if setting not in ("", "1"):
+        raise PolicyError("Invalid isolated QA benchmark setting")
+    long_benchmark = setting == "1"
     agent = Agent(home)
     if agent.projects() or (agent.state / "connection.json").exists():
         raise PolicyError("Host acceptance refuses configured owner state")
     atomic_json(agent.state / "host-settings.json", dict(enabled=True))
-    service = HostService(agent)
+    # A hosted Windows runner can need a longer cold Chrome startup budget;
+    # the production HostService still uses Browser's 20-second default.
+    ci_startup = 45 if os.environ.get("GITHUB_ACTIONS") == "true" else None
+    service = HostService(agent, browser_startup_timeout=ci_startup)
     try:
         deadline = time.monotonic() + 60
         while not service.resource.get("admission_ready"):
@@ -74,7 +84,7 @@ def run(home):
                 dict(
                     kind="browser",
                     task="Disposable acceptance fixture",
-                    duration_seconds=180,
+                    duration_seconds=900 if long_benchmark else 180,
                 ),
             )
             obj = service.sessions[result["session_id"]]["object"]
@@ -85,7 +95,9 @@ def run(home):
                 home / "fixture-ready.json",
                 dict(session_id=result["session_id"], tab_id=tab),
             )
-        deadline = time.monotonic() + 90
+        # Only the isolated 50-trial benchmark extends QA life; the ordinary
+        # acceptance worker remains bounded at 90 seconds.
+        deadline = time.monotonic() + (600 if long_benchmark else 90)
         while not (home / "stop.flag").exists() and time.monotonic() < deadline:
             time.sleep(0.1)
     finally:

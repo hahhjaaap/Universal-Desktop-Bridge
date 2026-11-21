@@ -7,7 +7,11 @@ Changes from v0.13.0 in the integrated source for this release.
 - **MCP and reliability.** Structured tool result contracts, sanitized backend errors, cleaner frozen stdio proxy shutdown, and better diagnostics for expiring computer-access grants. Opt-in shared status proxies and Cloud RPC worker limits are available for staging characterization. (#240, #250, #259, #236, #257, #258)
 - **Security.** Browser URL validation, stricter Access identity and tool-grant handling, and additional approval and backup checks. The Windows archive carries a SHA-256 file inventory. (#224, #252, #234, #237)
 
-The DOM postcondition clicks proposed in PR #262 are outside this release candidate. The warm Windows Chrome benchmark for that PR covers a separate revision and workload. Optional prewarm, proxy reuse, RPC worker limits, and the Windows UIA snapshot cache are experimental.
+- **Opt-in FastPath DOM postconditions.** Owned-browser FastPath can advance after each supported click when the expected visible text appears in the same document. The sequence stops on uncertain outcomes and uses the existing no-replay receipt. (#262)
+
+The FastPath benchmark measures a warm Windows host and Chrome. Full-route ChatGPT → Cloudflare → Windows acceptance is pending. The staging fixture and scorer are documented in [FastPath end-to-end acceptance](fastpath-e2e-acceptance.md). (#265)
+
+Optional prewarm, proxy reuse, RPC worker limits, and the Windows UIA snapshot cache are experimental.
 
 ## Install, update and rollback
 

@@ -79,3 +79,53 @@ python tools/export_fleet_catalog.py --check
 ```
 
 No deployment or owner permission changes occur when merging this code.
+
+## FastPath clicks with a UI postcondition
+
+For observed controls that only change the view, a FastPath click can advance
+on a fresh, visible exact text match. For example, these are two steps for a
+known pagination button and page indicator:
+
+```json
+[
+  {"action":"click","selector":"#next","click_postcondition":{"selector":"#page","text":"2"}},
+  {"action":"click","selector":"#next","click_postcondition":{"selector":"#page","text":"3"}}
+]
+```
+
+Both selectors are simple IDs in the main document. The target is a native
+`button[type=button]`. Use it for read-only UI actions such as pagination or
+filters. The default observation timeout is 1000 ms, and `timeout_ms` accepts
+100–2000 ms.
+
+UDB arms the observer before input, checks the button again immediately before
+the press, and requires the visible text match after the trusted click. The
+sequence is pinned to the same frame, loader and URL. It may contain
+observations and more guarded clicks. When navigation is detected, the standard
+observer reports its outcome and the guarded sequence stops. Missing
+post-click evidence yields `outcome_unknown` under the existing one-shot receipt.
+Success carries `postcondition_met=true` and
+`navigation_observation_limited=true`; the page can still start navigating later.
+
+The Windows host acceptance fixture runs five interleaved trials per variant
+with five pagination clicks and a final verification each. It reports
+individual durations and medians for the warm Windows host mailbox and Chrome.
+The ChatGPT-to-Windows performance target requires a separate end-to-end A/B.
+
+An opt-in longer Windows host/Chrome test runs 50 interleaved trials **per**
+variant, with five clicks plus final verification per trial:
+
+```sh
+python tools/check_runtime_scenarios.py --browser-only --browser-ab-trials 50
+```
+
+The disposable QA worker gets a bounded 600-second lifetime and a 900-second
+session only for this opt-in long run; default acceptance remains 90/180 seconds.
+No production UDB permission or browser deadline changes.
+
+The resulting `reports/runtime-scenarios/results.json` includes raw timings,
+median, nearest-rank p95, and p95 reduction for the **warm Windows mailbox**
+scope. The default remains five trials per variant for normal CI. This does
+**not** measure ChatGPT → Cloudflare → UDB end-to-end latency. The release
+gate still requires 50 end-to-end A/B trials per build with at least 40% p95
+reduction and candidate p95 at most 6 seconds.

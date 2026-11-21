@@ -20,6 +20,12 @@ MAX_EVENT_MARKERS = 128
 MAX_EVENT_QUEUE = 128
 MAX_COMMAND_TIMEOUT_SECONDS = 60
 _EVENT_PREFIXES = ("Target.", "Page.", "Runtime.", "Network.")
+DOCUMENT_NAVIGATION_EVENTS = (
+    "Page.frameStartedNavigating",
+    "Page.frameNavigated",
+    "Page.navigatedWithinDocument",
+    "Network.requestWillBeSent",
+)
 
 
 class CDPChannel:
@@ -60,13 +66,15 @@ class CDPChannel:
                 value = frame.get(key)
                 if isinstance(value, str) and len(value) <= 128:
                     event["frameId" if key == "id" else key] = value
-        elif method == "Page.navigatedWithinDocument":
-            frame_id = params.get("frameId")
-            nav_type = params.get("navigationType")
-            if isinstance(frame_id, str) and len(frame_id) <= 128:
-                event["frameId"] = frame_id
-            if isinstance(nav_type, str) and len(nav_type) <= 32:
-                event["navigationType"] = nav_type
+        elif method in {"Page.navigatedWithinDocument", "Page.frameStartedNavigating"}:
+            for key, limit in (
+                ("frameId", 128),
+                ("loaderId", 128),
+                ("navigationType", 32),
+            ):
+                value = params.get(key)
+                if isinstance(value, str) and len(value) <= limit:
+                    event[key] = value
         elif method == "Page.lifecycleEvent":
             for key in ("frameId", "loaderId", "name"):
                 value = params.get(key)
@@ -89,6 +97,47 @@ class CDPChannel:
         else:
             return
         self._events.append(event)
+
+    def has_pending_navigation(self, session, frame_id):
+        """Check events already received by the same CDP socket reader."""
+        with self._lock:
+            return any(
+                event["method"] in DOCUMENT_NAVIGATION_EVENTS
+                and event.get("sessionId") == session
+                and event.get("frameId") == frame_id
+                for event in self._events
+            )
+
+    def discard_committed_navigation(self, session, frame_id, loader_id):
+        """Discard the known navigation history while retaining a newer attempt."""
+
+        def relevant(event):
+            return (
+                event["method"] in DOCUMENT_NAVIGATION_EVENTS
+                and event.get("sessionId") == session
+                and event.get("frameId") == frame_id
+            )
+
+        with self._lock:
+            committed = max(
+                (
+                    i
+                    for i, event in enumerate(self._events)
+                    if relevant(event)
+                    and event["method"] == "Page.frameNavigated"
+                    and event.get("loaderId") == loader_id
+                ),
+                default=-1,
+            )
+            self._events = deque(
+                (
+                    event
+                    for i, event in enumerate(self._events)
+                    if not relevant(event)
+                    or (i > committed and event.get("loaderId") != loader_id)
+                ),
+                maxlen=MAX_EVENT_QUEUE,
+            )
 
     def wait_for_event(self, methods, session=None, timeout=1, match=None):
         """Wait for a whitelisted event without retaining page URLs or payloads."""

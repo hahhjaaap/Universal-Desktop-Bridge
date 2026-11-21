@@ -9,10 +9,12 @@ import os
 import shutil
 import subprocess
 import threading
+import time
 
 import pytest
 
 from udb import host_browser
+from udb.browser_click_postcondition import click_with_postcondition
 from udb.host_browser import Browser
 
 
@@ -81,6 +83,29 @@ def live_browser(tmp_path, monkeypatch):
                 </select></label>
                 <script>window.changes=0;document.querySelector('#country').addEventListener('change',()=>window.changes++);</script>
                 <button>Submit</button></form>"""
+            elif self.path == "/postcondition":
+                body = b"""<title>Pagination</title><output id="page">1</output>
+                <button type="button" id="next">Next</button>
+                <button type="button" id="wrong">Wrong</button>
+                <button type="button" id="delayed">Delayed navigation</button>
+                <form><button type="submit" id="submit">Submit</button></form>
+                <script>
+                window.clicks = 0;
+                document.querySelector('#next').onclick = () => {
+                  window.clicks++;
+                  setTimeout(() => {
+                    const page = document.querySelector('#page');
+                    page.textContent = Number(page.textContent) + 1;
+                  }, 30);
+                };
+                document.querySelector('#wrong').onclick = () => {
+                  window.clicks++;
+                  document.querySelector('#page').textContent = 'wrong';
+                };
+                document.querySelector('#delayed').onclick = () => {
+                  setTimeout(() => location.assign('/destination'), 180);
+                };
+                </script>"""
             elif self.path.startswith("/destination"):
                 body = b"<title>Destination</title><h1>Arrived</h1>"
             elif self.path.startswith("/shadow-delay"):
@@ -134,6 +159,7 @@ def live_browser(tmp_path, monkeypatch):
         fixture_url + "destination",
         fixture_url + "shadow",
         fixture_url + "shadow-delay",
+        fixture_url + "postcondition",
         fixture_url.replace("127.0.0.1", "localhost") + "destination",
     }
     # This test exercises CDP/DOM identity, not public-site network policy.
@@ -172,6 +198,60 @@ def live_browser(tmp_path, monkeypatch):
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def test_real_browser_click_postcondition_requires_fresh_same_document_evidence(
+    live_browser, monkeypatch
+):
+    browser, tab, fixture_url, _ = live_browser
+    browser.navigate(tab, fixture_url + "postcondition")
+    condition = {"selector": "#page", "text": "2", "timeout_ms": 300}
+    result, document = click_with_postcondition(
+        browser, tab, "#submit", condition, None
+    )
+    assert not result["ok"]
+    call = browser.call
+
+    def delayed_release(method, params=None, session=None, timeout=10):
+        if method == "Input.dispatchMouseEvent" and params["type"] == "mouseReleased":
+            # Native dispatch can consume time before the browser sees a click.
+            time.sleep(0.35)
+        return call(method, params, session, timeout)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(browser, "call", delayed_release)
+        result, document = click_with_postcondition(
+            browser, tab, "#next", condition, None
+        )
+    assert result.get("postcondition_met") and result.get(
+        "navigation_observation_limited"
+    ), (result, browser.evaluate(tab, "window.clicks"))
+    result, _ = click_with_postcondition(browser, tab, "#next", condition, document)
+    assert not result["ok"]  # Matching before input does not count as fresh evidence.
+    condition["text"] = "3"
+    result, document = click_with_postcondition(
+        browser, tab, "#next", condition, document
+    )
+    assert result["postcondition_met"] and browser.evaluate(tab, "window.clicks") == 2
+    condition["text"] = "4"
+    result, _ = click_with_postcondition(browser, tab, "#wrong", condition, document)
+    assert result["observation_unavailable"] and not result["postcondition_met"]
+    assert browser.evaluate(tab, "window.clicks") == 3
+
+
+def test_real_browser_click_postcondition_stops_on_delayed_navigation(live_browser):
+    browser, tab, fixture_url, _ = live_browser
+    browser.navigate(tab, fixture_url + "postcondition")
+    condition = {"selector": "#page", "text": "2", "timeout_ms": 600}
+    result, document = click_with_postcondition(
+        browser, tab, "#delayed", condition, None
+    )
+    assert result.get("navigation_completed") and result.get(
+        "observation_unavailable"
+    ), result
+    assert not result["postcondition_met"]
+    result, _ = click_with_postcondition(browser, tab, "#next", condition, document)
+    assert not result["ok"]
 
 
 def test_real_browser_background_click_identity_and_reload(live_browser):

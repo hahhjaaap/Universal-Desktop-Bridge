@@ -45,8 +45,9 @@ def pending_inbox_commands(folder):
 
 
 class HostService:
-    def __init__(self, agent):
+    def __init__(self, agent, *, browser_startup_timeout=None):
         self.agent = agent
+        self.browser_startup_timeout = browser_startup_timeout
         perf.configure(agent.state)
         self.folder = agent.state / "host"
         reject_links(self.folder)
@@ -261,14 +262,22 @@ class HostService:
         if any(row["kind"] == kind for row in self.sessions.values()):
             raise PolicyError("Reuse the existing " + kind + " session")
         sid = uuid.uuid4().hex
+        # Some isolated test hosts skip __init__; production keeps the
+        # Browser default unless CI explicitly supplies a startup override.
+        startup_timeout = getattr(self, "browser_startup_timeout", None)
+        startup = (
+            {"startup_timeout": startup_timeout} if startup_timeout is not None else {}
+        )
         if kind == "browser":
             from .browser_settings import remember_login
             from .host_browser import Browser
 
             if remember_login(self.agent):
-                obj = Browser(self.folder / "browser-profile", persistent=True)
+                obj = Browser(
+                    self.folder / "browser-profile", persistent=True, **startup
+                )
             else:
-                obj = Browser(self.folder / "profiles" / sid)
+                obj = Browser(self.folder / "profiles" / sid, **startup)
         else:
             from .host_workspace import Workspace
 

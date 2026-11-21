@@ -14,7 +14,9 @@ from dataclasses import dataclass
 from .core import PolicyError
 
 MAX_FASTPATH_STEPS = 12
-PLAN_FIELDS = frozenset({"step_id", "depends_on", "when", "verify", "return_result"})
+PLAN_FIELDS = frozenset(
+    {"step_id", "depends_on", "when", "verify", "return_result", "click_postcondition"}
+)
 RESULT_FIELDS = frozenset(
     {
         "ok",
@@ -26,6 +28,7 @@ RESULT_FIELDS = frozenset(
         "navigation_timed_out",
         "timed_out",
         "clicked",
+        "postcondition_met",
         "changed",
         "selected",
         "checked",
@@ -33,6 +36,7 @@ RESULT_FIELDS = frozenset(
 )
 READ_ONLY = frozenset({"read", "snapshot", "wait_for"})
 _STEP_ID = re.compile(r"[a-zA-Z][a-zA-Z0-9_]{0,31}\Z")
+_ID_SELECTOR = re.compile(r"#[a-zA-Z_][a-zA-Z0-9_-]{0,127}\Z")
 
 
 @dataclass(frozen=True)
@@ -44,6 +48,36 @@ class PlannedStep:
     when: dict | None
     verify: dict | None
     return_result: bool
+    click_postcondition: dict | None
+
+
+def _click_postcondition(raw, arguments):
+    if not isinstance(raw, dict) or not {"selector", "text"} <= set(raw) <= {
+        "selector",
+        "text",
+        "timeout_ms",
+    }:
+        raise PolicyError("FastPath click_postcondition requires selector and text")
+    if arguments["action"] != "click" or set(arguments) != {"action", "selector"}:
+        raise PolicyError("FastPath click_postcondition requires an ID-only click")
+    for selector in (arguments["selector"], raw["selector"]):
+        if not isinstance(selector, str) or not _ID_SELECTOR.fullmatch(selector):
+            raise PolicyError(
+                "FastPath click_postcondition requires simple ID selectors"
+            )
+    timeout = raw.get("timeout_ms", 1000)
+    if type(timeout) is not int or not 100 <= timeout <= 2000:
+        raise PolicyError("FastPath click_postcondition timeout_ms must be 100..2000")
+    expected = raw["text"]
+    if (
+        not isinstance(expected, str)
+        or not 1 <= len(expected) <= 160
+        or expected != expected.strip()
+    ):
+        raise PolicyError(
+            "FastPath click_postcondition requires trimmed text of 1..160 characters"
+        )
+    return {"selector": raw["selector"], "text": expected, "timeout_ms": timeout}
 
 
 def _scalar(value):
@@ -81,6 +115,7 @@ def compile_plan(steps, allowed):
         raise PolicyError("FastPath requires 1..12 steps")
     result = []
     known = {}
+    postcondition_started = False
     for index, raw in enumerate(steps):
         if not isinstance(raw, dict):
             raise PolicyError("FastPath step must be an object")
@@ -122,6 +157,14 @@ def compile_plan(steps, allowed):
         if type(retain) is not bool:
             raise PolicyError("FastPath return_result must be boolean")
         arguments = {key: value for key, value in raw.items() if key not in PLAN_FIELDS}
+        postcondition = None
+        if "click_postcondition" in raw:
+            postcondition = _click_postcondition(raw["click_postcondition"], arguments)
+            postcondition_started = True
+        elif postcondition_started and is_mutation(action):
+            raise PolicyError(
+                "FastPath postcondition clicks can only be followed by reads or other postcondition clicks"
+            )
         result.append(
             PlannedStep(
                 step_id=step_id,
@@ -131,6 +174,7 @@ def compile_plan(steps, allowed):
                 when=when,
                 verify=verify,
                 return_result=retain,
+                click_postcondition=postcondition,
             )
         )
         known[step_id] = index

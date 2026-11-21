@@ -184,6 +184,34 @@ def test_cdp_channel_discards_only_matching_stale_navigation_events():
     )
 
 
+def test_cdp_channel_keeps_navigation_started_after_current_document_committed():
+    channel = CDPChannel(Socket([]), Process())
+    for loader in ("old", "current"):
+        channel._record_event(
+            {
+                "method": "Page.frameNavigated",
+                "sessionId": "owned",
+                "params": {"frame": {"id": "main", "loaderId": loader}},
+            }
+        )
+    channel._record_event(
+        {
+            "method": "Page.frameStartedNavigating",
+            "sessionId": "owned",
+            "params": {"frameId": "main", "loaderId": "next", "url": "private"},
+        }
+    )
+    channel.discard_committed_navigation("owned", "main", "current")
+    assert channel.has_pending_navigation("owned", "main")
+    assert channel.wait_for_event("Page.frameStartedNavigating", "owned") == {
+        "method": "Page.frameStartedNavigating",
+        "sessionId": "owned",
+        "frameId": "main",
+        "loaderId": "next",
+    }
+    assert not channel.has_pending_navigation("owned", "main")
+
+
 def test_cdp_channel_queues_events_seen_while_waiting_for_a_reply():
     socket = Socket(
         [

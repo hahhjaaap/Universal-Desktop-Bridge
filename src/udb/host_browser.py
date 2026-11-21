@@ -1003,6 +1003,17 @@ class Browser(BrowserInputMixin):
             return False
         return True
 
+    def _click_point(self, tab, selector, role="", name="", exact=True):
+        body = (
+            """if(e.tagName==='OPTION')return {ok:false,error:'use_select_option',action:'select_option'};
+                if(e.matches(':disabled')||e.getAttribute('aria-disabled')==='true'||isInert(e))return {ok:false,error:'disabled'};
+"""
+            + CLICK_POINT_SCRIPT
+            + """return {ok:true,x:point[0],y:point[1],previous_url:location.href};"""
+        )
+        expression = self._locator_expression(selector, role, name, exact, body)
+        return self._wait_for_element_action(tab, expression, selector=selector)
+
     def element(
         self,
         tab,
@@ -1029,15 +1040,7 @@ class Browser(BrowserInputMixin):
             raise PolicyError("select_option requires an option value or label")
 
         if operation == "click":
-            body = (
-                """if(e.tagName==='OPTION')return {ok:false,error:'use_select_option',action:'select_option'};
-                if(e.matches(':disabled')||e.getAttribute('aria-disabled')==='true'||isInert(e))return {ok:false,error:'disabled'};
-"""
-                + CLICK_POINT_SCRIPT
-                + """              return {ok:true,x:point[0],y:point[1],previous_url:location.href};"""
-            )
-            expression = self._locator_expression(selector, role, name, exact, body)
-            result = self._wait_for_element_action(tab, expression, selector=selector)
+            result = self._click_point(tab, selector, role, name, exact)
             if not result.get("ok"):
                 return result
             # Capture the pre-input URL in the same CDP evaluation that proves

@@ -2,7 +2,7 @@
 
 | Surface | Status when preparing v0.14.0 | How to verify |
 | --- | --- | --- |
-| Candidate source | 0.14.0 on `release/0.14.0` | `git rev-parse HEAD` and `src/udb/_version.py` |
+| Candidate source | 0.14.0 in the integrated source | `git rev-parse HEAD` and `src/udb/_version.py` |
 | Published Windows release | v0.13.0 | [GitHub Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases) |
 | Installed Windows executable | Per device | `udb version --json` and `udb doctor --json` |
 | Cloudflare relay and ChatGPT | Per deployment and grant | Worker deployment identity, MCP discovery, and an authorized read-only call |

@@ -165,7 +165,9 @@ def test_release_workflow_requires_explicit_manual_confirmation():
     assert "approve_v014_without_live_acceptance:" in workflow
     assert "inputs.approve_v014_without_live_acceptance == true" in workflow
     assert "inputs.confirm_release_acceptance == true ||" in workflow
-    assert "The explicit owner live-acceptance waiver is limited to v0.14.0." in workflow
+    assert (
+        "The explicit owner live-acceptance waiver is limited to v0.14.0." in workflow
+    )
     assert "steps.gate.outputs.version" in workflow
     assert workflow.count("default: false") >= 3
     assert "needs: build" in workflow

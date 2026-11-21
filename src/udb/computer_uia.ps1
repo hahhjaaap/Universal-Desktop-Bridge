@@ -38,7 +38,7 @@ try {
     }
     if($raw.Length -gt 100000){throw 'Request too large'}
     $r=$raw|ConvertFrom-Json
-    if($r.mode -notin @('snapshot','set_value','invoke','uia_focus','wait_for','read_text','set_checked','select','expand','collapse','scroll_into_view','poll_chatgpt_reply','chatgpt_prepare','chatgpt_commit')){throw 'Unsupported UIA mode'}
+    if($r.mode -notin @('snapshot','set_value','invoke','uia_focus','wait_for','read_text','set_checked','select','expand','collapse','scroll_into_view','ranked_control','poll_chatgpt_reply','chatgpt_prepare','chatgpt_commit')){throw 'Unsupported UIA mode'}
     $root=[Windows.Automation.AutomationElement]::FromHandle([IntPtr][long]$r.hwnd)
     if(!$root -or $root.Current.ProcessId -ne [int]$r.pid){throw 'Observed window changed'}
     # Initialize AutomationElement before registering the standard .NET proxies.
@@ -288,6 +288,79 @@ try {
         $hasChildren=$rows.Count -gt 1
         $next=if($hasChildren){''}else{'No accessible child controls exposed. List windows again and select the application frame; do not assume a generic Pane is actionable.'}
         @{ok=$true;elements=$rows.ToArray();truncated=($queue.Count -gt 0);tree_view=$view;children_exposed=$hasChildren;next_action=$next}|ConvertTo-Json -Depth 7 -Compress
+        return
+    }
+    if($r.mode -eq 'ranked_control') {
+        # Read-only bounded semantic selection within one exact UIA container.
+        # No arbitrary queries or JavaScript; the later invoke revalidates
+        # exact name/type and refuses ambiguity or stale windows.
+        $needle=[string]$r.text
+        if($needle.Length -lt 4 -or $needle.Length -gt 160 -or
+           (!$r.name -and !$r.automation_id)) {
+            throw 'ranked_control requires a 4..160 character phrase and exact container'
+        }
+        $allowedTypes=@{
+            Hyperlink=[Windows.Automation.ControlType]::Hyperlink;
+            Button=[Windows.Automation.ControlType]::Button;
+            ListItem=[Windows.Automation.ControlType]::ListItem;
+            MenuItem=[Windows.Automation.ControlType]::MenuItem
+        }
+        $kind=([string]$r.control_type) -creplace '^ControlType\.',''
+        if(!$allowedTypes.ContainsKey($kind)){throw 'Unsupported ranked control type'}
+        $containerConditions=[Collections.Generic.List[Windows.Automation.Condition]]::new()
+        if($r.automation_id){
+            $containerConditions.Add([Windows.Automation.PropertyCondition]::new(
+                [Windows.Automation.AutomationElement]::AutomationIdProperty,
+                [string]$r.automation_id))
+        }
+        if($r.name){
+            $containerConditions.Add([Windows.Automation.PropertyCondition]::new(
+                [Windows.Automation.AutomationElement]::NameProperty,
+                [string]$r.name))
+        }
+        $containerCondition=if($containerConditions.Count -eq 1){
+            $containerConditions[0]
+        }else{
+            [Windows.Automation.AndCondition]::new($containerConditions.ToArray())
+        }
+        $containers=$root.FindAll([Windows.Automation.TreeScope]::Descendants,$containerCondition)
+        if($containers.Count -ne 1){throw 'Ranked control container is absent or ambiguous'}
+        if($containers[0].Current.IsPassword){throw 'Password containers are refused'}
+        $filter=[Windows.Automation.PropertyCondition]::new(
+            [Windows.Automation.AutomationElement]::ControlTypeProperty,
+            $allowedTypes[$kind])
+        $items=$containers[0].FindAll([Windows.Automation.TreeScope]::Descendants,$filter)
+        if($items.Count -gt 1500){throw 'Ranked control scan exceeds bounded scope'}
+        $candidates=[Collections.Generic.List[object]]::new()
+        foreach($node in $items) {
+            $current=$node.Current
+            if($current.IsPassword -or !$current.IsEnabled -or $current.IsOffscreen){continue}
+            $label=[string]$current.Name
+            if($label.Length -gt 500 -or
+                $label.IndexOf($needle,[StringComparison]::OrdinalIgnoreCase) -lt 0){continue}
+            $rect=$current.BoundingRectangle
+            if($rect.IsEmpty -or $rect.Width -le 0 -or $rect.Height -le 0){continue}
+            $pattern=$null
+            if(!$node.TryGetCurrentPattern(
+                [Windows.Automation.InvokePattern]::Pattern,[ref]$pattern)){continue}
+            $candidates.Add(@{name=$label;automation_id=[string]$current.AutomationId;
+                control_type=$current.ControlType.ProgrammaticName;
+                left=[double]$rect.Left;top=[double]$rect.Top})
+            if($candidates.Count -gt 64){throw 'Ranked control matches exceed limit'}
+        }
+        if($candidates.Count -eq 0) {
+            @{ok=$true;found=$false;matched=0}|ConvertTo-Json -Compress
+            return
+        }
+        $ordered=@($candidates|Sort-Object -Property top,left)
+        if($ordered.Count -gt 1 -and $ordered[0].top -eq $ordered[1].top -and
+            $ordered[0].left -eq $ordered[1].left){
+            throw 'Ranked first control is ambiguous'
+        }
+        $chosen=$ordered[0]
+        @{ok=$true;found=$true;matched=$ordered.Count;
+          name=$chosen.name;automation_id=$chosen.automation_id;
+          control_type=$chosen.control_type}|ConvertTo-Json -Compress
         return
     }
     $conditions=[Collections.Generic.List[Windows.Automation.Condition]]::new()

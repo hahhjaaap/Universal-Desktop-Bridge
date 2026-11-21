@@ -112,7 +112,7 @@ establish a signed or independently audited product.
 
 ## Owner-triggered release
 
-`one-command-windows-release` accepts a manual dispatch on `main` from the repository owner. The owner also confirms review of the external release acceptance results. The existing `confirm_unprotected_release` input and checks on the original dispatcher and rerun initiator remain in place. GitHub's [main ruleset](https://github.com/hahhjaaap/Universal-Desktop-Bridge/rules/27626286) requires PRs and CI.
+`one-command-windows-release` accepts a manual dispatch on `main` from the repository owner. Ordinarily the owner confirms review of external acceptance results. For **v0.14.0 only**, the owner may instead explicitly select `approve_v014_without_live_acceptance` to accept publication with the live paired-device and end-to-end FastPath evidence **still missing**; this is a documented risk waiver, not a passing test result. The build job rejects use of that option for any other version. The existing `confirm_unprotected_release` input and checks on the original dispatcher and rerun initiator remain in place. GitHub's [main ruleset](https://github.com/hahhjaaap/Universal-Desktop-Bridge/rules/27626286) requires PRs and CI.
 
 The read-only build job checks exact-commit push CI, builds the Windows EXE and exercises the installer. Its output is handed to the publication job, which has the write and OIDC permissions. Before upload it verifies build provenance for the ZIP, installer script, and checksum file against this workflow and the exact `main` SHA. A failed attestation or verification stops publication. The job rechecks `main`, CI and version availability immediately before creating the release.
 

@@ -162,6 +162,14 @@ def test_release_workflow_requires_explicit_manual_confirmation():
     assert "tools/check_installer.py" in workflow
     assert "tools/check_public_installer.py" in workflow
     assert "inputs.confirm_release_acceptance == true" in workflow
+    assert "approve_v014_without_live_acceptance:" in workflow
+    assert "inputs.approve_v014_without_live_acceptance == true" in workflow
+    assert "inputs.confirm_release_acceptance == true ||" in workflow
+    assert (
+        "The explicit owner live-acceptance waiver is limited to v0.14.0." in workflow
+    )
+    assert "steps.gate.outputs.version" in workflow
+    assert workflow.count("default: false") >= 3
     assert "needs: build" in workflow
     assert (
         workflow.index("actions/attest-build-provenance@")

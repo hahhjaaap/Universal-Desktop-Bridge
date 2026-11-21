@@ -1,5 +1,14 @@
 # UDB 0.14.0 Windows release notes
 
+**Owner-accepted release limitation:** The v0.14.0 repository owner explicitly
+elected to publish without the separate *real paired-device* upgrade/rollback
+acceptance or 50-trial ChatGPT → Cloudflare → Windows end-to-end FastPath A/B
+measurement. These checks are **not verified**, and p95 ≤ 6 seconds is **not
+established**. The exact-main Windows/Linux, packaging, installer and rollback
+CI is green, but it uses isolated/disposable fixtures. The executable is
+unsigned by Authenticode. Follow-up acceptance is tracked in
+[issue #269](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/269).
+
 Changes from v0.13.0 in the integrated source for this release.
 
 - **Windows background access.** The `udb background` CLI lets the owner enable, inspect and revoke access for UDB-owned browser and workspace sessions. Reauthorization and revocation are local owner operations. Existing computer-access and background grants are separate. (#263)

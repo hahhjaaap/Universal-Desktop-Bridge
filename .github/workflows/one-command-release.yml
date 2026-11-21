@@ -12,6 +12,11 @@ on:
         required: true
         type: boolean
         default: false
+      approve_v014_without_live_acceptance:
+        description: "I explicitly accept missing live paired-device and ChatGPT end-to-end evidence for v0.14.0"
+        required: true
+        type: boolean
+        default: false
 permissions: {}
 concurrency:
   group: one-command-windows-release
@@ -30,7 +35,8 @@ jobs:
       github.actor == github.repository_owner &&
       github.triggering_actor == github.repository_owner &&
       inputs.confirm_unprotected_release == true &&
-      inputs.confirm_release_acceptance == true
+      (inputs.confirm_release_acceptance == true ||
+       inputs.approve_v014_without_live_acceptance == true)
     runs-on: windows-latest
     timeout-minutes: 40
     env:
@@ -52,6 +58,13 @@ jobs:
           $arguments = @('tools/release_gate.py', '--repository', $env:GITHUB_REPOSITORY, '--sha', $env:UDB_RELEASE_SHA, '--manual-unprotected')
           python @arguments
           if ($LASTEXITCODE -ne 0) { throw 'Release CI gate failed.' }
+      - name: Fail closed if the missing-live-acceptance waiver is used for any other version
+        if: inputs.approve_v014_without_live_acceptance == true && steps.gate.outputs.publish == 'true'
+        shell: pwsh
+        run: |
+          if ('${{ steps.gate.outputs.version }}' -cne '0.14.0') {
+            throw 'The explicit owner live-acceptance waiver is limited to v0.14.0.'
+          }
       - if: steps.gate.outputs.publish == 'true'
         run: python -m pip install ".[office,dev,freeze]"
       - name: Build standalone Windows package

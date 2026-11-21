@@ -7,6 +7,18 @@ import secrets
 
 from .core import PolicyError
 
+class GuardedClickPhaseError(PolicyError):
+    """Stable, non-sensitive diagnostic for a failed guarded-click stage.
+
+    The enclosing batch still reports outcome_unknown and never replays a
+    possibly dispatched mouse event. Underlying CDP/page text is not exposed.
+    """
+
+    def __init__(self, phase):
+        super().__init__("Guarded click failed; inspect page state before retrying")
+        self.phase = phase
+
+
 _WORLD = "UDBClickPostcondition"
 # Bound cleanup when native input never produces a trusted click. CDP calls
 # and the enclosing browser action retain their own deadlines.
@@ -81,7 +93,10 @@ def _document(browser, session):
 
 def click_with_postcondition(browser, tab, selector, condition, expected_document):
     session = browser.sid(tab)
-    frame_id, loader_id = _document(browser, session)
+    try:
+        frame_id, loader_id = _document(browser, session)
+    except PolicyError as exc:
+        raise GuardedClickPhaseError("document_identity") from exc
     if expected_document is not None and expected_document[:2] != (frame_id, loader_id):
         return {
             "ok": False,
@@ -90,7 +105,10 @@ def click_with_postcondition(browser, tab, selector, condition, expected_documen
     channel = browser._cdp
     if expected_document is None:
         channel.discard_committed_navigation(session, frame_id, loader_id)
-    point = browser._click_point(tab, selector)
+    try:
+        point = browser._click_point(tab, selector)
+    except PolicyError as exc:
+        raise GuardedClickPhaseError("target_resolution") from exc
     if not point.get("ok"):
         return point, expected_document
     url = point.get("previous_url")
@@ -100,12 +118,15 @@ def click_with_postcondition(browser, tab, selector, condition, expected_documen
     if channel.has_pending_navigation(session, frame_id):
         return {"ok": False, "error": "postcondition_navigation_pending"}, document
 
-    context = browser.call(
-        "Page.createIsolatedWorld",
-        {"frameId": frame_id, "worldName": _WORLD},
-        session,
-        timeout=1,
-    )["executionContextId"]
+    try:
+        context = browser.call(
+            "Page.createIsolatedWorld",
+            {"frameId": frame_id, "worldName": _WORLD},
+            session,
+            timeout=1,
+        )["executionContextId"]
+    except (PolicyError, KeyError) as exc:
+        raise GuardedClickPhaseError("observer_context") from exc
     token = secrets.token_hex(16)
     timeout = condition["timeout_ms"]
 
@@ -139,7 +160,11 @@ def click_with_postcondition(browser, tab, selector, condition, expected_documen
             token=token,
         )
     )
-    if evaluate(f"{_WATCH}({options})") is not True:
+    try:
+        armed = evaluate(f"{_WATCH}({options})")
+    except PolicyError as exc:
+        raise GuardedClickPhaseError("watch_arm") from exc
+    if armed is not True:
         return {
             "ok": False,
             "error": "postcondition_unavailable_or_already_met",
@@ -154,7 +179,11 @@ def click_with_postcondition(browser, tab, selector, condition, expected_documen
 
     confirmed = False
     try:
-        if not browser._mouse_click(tab, x, y, before_press=before_press):
+        try:
+            pressed = browser._mouse_click(tab, x, y, before_press=before_press)
+        except PolicyError as exc:
+            raise GuardedClickPhaseError("input_dispatch") from exc
+        if not pressed:
             return {"ok": False, "error": "postcondition_target_changed"}, document
         try:
             confirmed = (

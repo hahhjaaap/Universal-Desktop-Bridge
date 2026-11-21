@@ -66,7 +66,13 @@ class FakeBrowser:
 
 @pytest.mark.parametrize(
     "phase",
-    ["document_identity", "target_resolution", "observer_context", "watch_arm", "input_dispatch"],
+    [
+        "document_identity",
+        "target_resolution",
+        "observer_context",
+        "watch_arm",
+        "input_dispatch",
+    ],
 )
 def test_guarded_click_error_contains_only_safe_phase(phase):
     browser = FakeBrowser(phase)

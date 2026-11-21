@@ -213,6 +213,7 @@ def test_prefix_ambiguity_is_refused_without_input(desktop):
     desktop.gui.rows[333] = dict(desktop.gui.rows[111])
     desktop.gui.rows[111]["title"] = "YouTube - Tab A"
     desktop.gui.rows[333]["title"] = "YouTube - Tab B"
+
     def refuse_input(action, window_id="", x=0, y=0):
         pytest.fail("ambiguous locator must not send input")
 

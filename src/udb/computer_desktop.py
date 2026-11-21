@@ -166,17 +166,18 @@ class Desktop:
             cloaked_windows_hidden=True,
         )
 
-    def find_window(self, pid, class_name, title):
-        """Locate one previously observed native window by exact identity.
+    def find_window(self, pid, class_name, title=None, title_prefix=None):
+        """Reobserve one PID/class-bound window with an exact or prefix title.
 
-        This is a read-only in-batch refresh of an expiring window_id.
-        Refuse title-only lookups, ambiguous matches, cloaked/shell windows,
-        and any window whose current process or class differs from the plan.
-        Each later action revalidates HWND, PID, class and exact title.
+        The prefix is for a known window whose title changes during navigation.
+        Never discover by title alone, and never choose among ambiguous matches.
+        Bind every returned window_id to the *actual* observed complete title.
         """
-        self._validate_window_locator(
-            {"pid": pid, "class_name": class_name, "title": title}
+        locator = {"pid": pid, "class_name": class_name}
+        locator.update(
+            {"title": title} if title is not None else {"title_prefix": title_prefix}
         )
+        self._validate_window_locator(locator)
         self.interactive()
         matches = []
 
@@ -187,23 +188,25 @@ class Desktop:
                 return
             if self.gui.GetClassName(hwnd) != class_name:
                 return
-            if self.gui.GetWindowText(hwnd) != title:
+            observed_title = self.gui.GetWindowText(hwnd)
+            if title is not None:
+                if observed_title != title:
+                    return
+            elif not observed_title.startswith(title_prefix):
                 return
             try:
                 if self.is_cloaked(hwnd):
                     return
             except PolicyError:
                 return
-            matches.append(hwnd)
+            matches.append((hwnd, observed_title))
 
         self.gui.EnumWindows(visit, None)
         if len(matches) > 1:
             raise PolicyError("Ambiguous window identity; observe windows again")
         if not matches:
             return {"found": False}
-        hwnd = matches[0]
-        # Never keep indefinitely accumulating expired identities when a
-        # long-running agent refreshes windows without calling list().
+        hwnd, observed_title = matches[0]
         current = time.monotonic()
         self.windows = {
             key: value
@@ -211,21 +214,51 @@ class Desktop:
             if value.expires_at > current
         }
         if len(self.windows) >= 64:
-            # Refuse to evict potentially live window IDs mid-workflow.
             raise PolicyError("Window observation capacity; list windows again")
         wid = uuid.uuid4().hex
         self.windows[wid] = WindowObservation(
-            hwnd, pid, class_name, current + 60, title
+            hwnd, pid, class_name, current + 60, observed_title
         )
         return {
             "found": True,
             "window_id": wid,
             "pid": pid,
             "class_name": class_name,
-            "title": title,
+            "title": observed_title,
             "foreground": hwnd == self.gui.GetForegroundWindow(),
             "minimized": bool(self.gui.IsIconic(hwnd)),
         }
+
+    def wait_window(self, pid, class_name, title=None, title_prefix=None, wait_ms=1000):
+        """Bounded, read-only wait for a changing app/window title.
+
+        Does not retry any input and verifies the interactive desktop and
+        current PID/class on every observation.
+        """
+        if type(wait_ms) is not int or not 0 <= wait_ms <= 10000:
+            raise PolicyError("wait_window requires wait_ms 0..10000")
+        self._validate_window_locator(
+            {
+                "pid": pid,
+                "class_name": class_name,
+                **(
+                    {"title": title}
+                    if title is not None
+                    else {"title_prefix": title_prefix}
+                ),
+            }
+        )
+        deadline = time.monotonic() + wait_ms / 1000
+        while True:
+            result = self.find_window(
+                pid, class_name, title=title, title_prefix=title_prefix
+            )
+            if result["found"]:
+                return result
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return {"found": False, "timed_out": True}
+            time.sleep(min(0.08, remaining))
 
     @staticmethod
     def _chrome_image_path(pid):
@@ -817,10 +850,12 @@ class Desktop:
             "list",
             "displays",
             "snapshot",
+            "find_control",
             "screenshot",
             "frame_state",
             "wait_for",
             "batch",
+            "fastpath",
             "read_text",
             "chatgpt_read_reply",
         }:
@@ -833,8 +868,8 @@ class Desktop:
         if action == "screenshot" and (display_index != -1 or region is not None):
             self.interactive()
             return self.display_capture(display_index, region)
-        if action == "batch":
-            return self.batch(window_id, steps)
+        if action in ("batch", "fastpath"):
+            return self.batch(window_id, steps, fastpath=action == "fastpath")
         if action == "open_chrome_tab":
             return self.open_chrome_tab(text)
         if action == "open_chatgpt":
@@ -864,6 +899,7 @@ class Desktop:
                 "screenshot",
                 "frame_state",
                 "snapshot",
+                "find_control",
                 "set_value",
                 "invoke",
                 "uia_focus",
@@ -892,7 +928,7 @@ class Desktop:
         if action in UIA_ACTIONS:
             return self.uia(
                 hwnd,
-                action,
+                "ranked_control" if action == "find_control" else action,
                 text,
                 automation_id,
                 name,
@@ -1103,17 +1139,22 @@ class Desktop:
 
     @staticmethod
     def _validate_window_locator(row):
+        title = row.get("title")
+        prefix = row.get("title_prefix")
         if (
             type(row.get("pid")) is not int
             or not 1 <= row["pid"] <= 0xFFFFFFFF
             or type(row.get("class_name")) is not str
             or not 1 <= len(row["class_name"]) <= 128
-            or type(row.get("title")) is not str
-            or not 1 <= len(row["title"]) <= 300
+            or (type(title) is str) == (type(prefix) is str)
+            or (type(title) is str and not 1 <= len(title) <= 300)
+            or (type(prefix) is str and not 8 <= len(prefix) <= 300)
         ):
-            raise PolicyError("find_window needs exact pid/class_name/title")
+            raise PolicyError(
+                "Window locator needs pid/class_name and exact title or title_prefix (min 8 chars)"
+            )
 
-    def batch(self, window_id, steps):
+    def batch(self, window_id, steps, *, fastpath=False):
         """Execute one bounded desktop workflow without extra remote round trips.
 
         Optional when and depends_on guards use only exact equality against
@@ -1126,7 +1167,7 @@ class Desktop:
         import inspect
 
         metadata = frozenset(
-            {"when", "verify", "depends_on", "return_result", "window_ref"}
+            {"when", "verify", "depends_on", "return_result", "window_ref", "element_ref"}
         )
         evidence_fields = frozenset(
             {
@@ -1156,14 +1197,18 @@ class Desktop:
         forbidden = {
             "list",
             "batch",
+            "fastpath",
             "screenshot",
             "displays",
-            "open_chrome_tab",
             "open_chatgpt",
             "verified_submit",
             "chatgpt_roundtrip",
             "chatgpt_read_reply",
         }
+
+        if not fastpath:
+            # The older batch deliberately retains its existing navigation boundary.
+            forbidden.add("open_chrome_tab")
 
         def validate_predicate(value, *, current, previous):
             allowed = (
@@ -1200,15 +1245,36 @@ class Desktop:
         for index, row in enumerate(steps):
             if not isinstance(row, dict) or not isinstance(row.get("action"), str):
                 raise PolicyError("Invalid desktop batch step")
-            if row["action"] == "find_window":
-                # The locator is deliberately batch-only. Its exact identity
-                # must come from a previously observed desktop list result.
-                if (
-                    set(row) - metadata - {"action", "pid", "class_name", "title"}
-                    or "window_ref" in row
-                ):
+            if row["action"] in ("find_window", "wait_window"):
+                allowed = {"action", "pid", "class_name", "title", "title_prefix"}
+                if row["action"] == "wait_window":
+                    allowed.add("wait_ms")
+                    duration = row.get("wait_ms", 1000)
+                    if type(duration) is not int or not 0 <= duration <= 10000:
+                        raise PolicyError("wait_window requires wait_ms 0..10000")
+                if set(row) - metadata - allowed or "window_ref" in row:
                     raise PolicyError("Invalid window locator step")
                 self._validate_window_locator(row)
+            elif row["action"] == "find_control":
+                allowed = {
+                    "action", "window_id", "text", "name",
+                    "automation_id", "control_type",
+                }
+                if (
+                    not fastpath
+                    or set(row) - allowed - metadata
+                    or type(row.get("text")) is not str
+                    or not 4 <= len(row["text"]) <= 160
+                    or not (row.get("name") or row.get("automation_id"))
+                    or type(row.get("name", "")) is not str
+                    or len(row.get("name", "")) > 300
+                    or type(row.get("automation_id", "")) is not str
+                    or len(row.get("automation_id", "")) > 128
+                    or row.get("control_type") not in (
+                        "Hyperlink", "Button", "ListItem", "MenuItem"
+                    )
+                ):
+                    raise PolicyError("Invalid bounded semantic control discovery")
             else:
                 if (
                     set(row) - fields - metadata
@@ -1239,11 +1305,26 @@ class Desktop:
                 if (
                     type(ref) is not int
                     or not 0 <= ref < index
-                    or steps[ref]["action"] != "find_window"
+                    or steps[ref]["action"] not in ("find_window", "wait_window")
                     or "window_id" in row
                 ):
                     raise PolicyError(
-                        "window_ref requires one earlier find_window step"
+                        "window_ref requires one earlier window locator step"
+                    )
+            if "element_ref" in row:
+                ref = row["element_ref"]
+                if (
+                    not fastpath
+                    or row["action"] != "invoke"
+                    or type(ref) is not int
+                    or not 0 <= ref < index
+                    or steps[ref]["action"] != "find_control"
+                    or any(key in row for key in ("name", "automation_id", "control_type"))
+                    or row.get("window_ref") != steps[ref].get("window_ref")
+                    or row.get("window_id") != steps[ref].get("window_id")
+                ):
+                    raise PolicyError(
+                        "element_ref must invoke one earlier same-window find_control"
                     )
             if "when" in row:
                 validate_predicate(row["when"], current=index, previous=True)
@@ -1298,7 +1379,7 @@ class Desktop:
         from .windows_actions import READ_ACTIONS
 
         metadata = frozenset(
-            {"when", "verify", "depends_on", "return_result", "window_ref"}
+            {"when", "verify", "depends_on", "return_result", "window_ref", "element_ref"}
         )
         deadline = time.monotonic() + 20
         results = []
@@ -1306,8 +1387,9 @@ class Desktop:
         completed = 0
         mutations_attempted = False
         for index, row in enumerate(steps):
-            mutating = (
-                row["action"] not in READ_ACTIONS and row["action"] != "find_window"
+            mutating = row["action"] not in READ_ACTIONS and row["action"] not in (
+                "find_window",
+                "wait_window",
             )
             attempted = False
             try:
@@ -1330,9 +1412,22 @@ class Desktop:
                         results.append({"index": index, "skipped": True})
                         continue
                 args = {key: val for key, val in row.items() if key not in metadata}
-                if row["action"] == "find_window":
-                    value = self.find_window(
-                        args["pid"], args["class_name"], args["title"]
+                if row["action"] in ("find_window", "wait_window"):
+                    target = (
+                        self.wait_window
+                        if row["action"] == "wait_window"
+                        else self.find_window
+                    )
+                    value = target(
+                        args["pid"],
+                        args["class_name"],
+                        title=args.get("title"),
+                        title_prefix=args.get("title_prefix"),
+                        **(
+                            {"wait_ms": args.get("wait_ms", 1000)}
+                            if row["action"] == "wait_window"
+                            else {}
+                        ),
                     )
                 else:
                     if "window_ref" in row:
@@ -1344,6 +1439,17 @@ class Desktop:
                         args["window_id"] = located["window_id"]
                     else:
                         args.setdefault("window_id", window_id)
+                    if "element_ref" in row:
+                        selected = observations[row["element_ref"]]
+                        if selected is None or not selected.get("found"):
+                            observations[index] = None
+                            results.append({"index": index, "skipped": True})
+                            continue
+                        args.update(
+                            name=selected["name"],
+                            automation_id=selected["automation_id"],
+                            control_type=selected["control_type"],
+                        )
                     attempted = mutating
                     value = self._dispatch(**args)
                     mutations_attempted |= attempted

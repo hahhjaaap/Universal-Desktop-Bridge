@@ -850,6 +850,7 @@ class Desktop:
             "list",
             "displays",
             "snapshot",
+            "find_control",
             "screenshot",
             "frame_state",
             "wait_for",
@@ -926,7 +927,7 @@ class Desktop:
         if action in UIA_ACTIONS:
             return self.uia(
                 hwnd,
-                action,
+                "ranked_control" if action == "find_control" else action,
                 text,
                 automation_id,
                 name,
@@ -1165,7 +1166,7 @@ class Desktop:
         import inspect
 
         metadata = frozenset(
-            {"when", "verify", "depends_on", "return_result", "window_ref"}
+            {"when", "verify", "depends_on", "return_result", "window_ref", "element_ref"}
         )
         evidence_fields = frozenset(
             {
@@ -1342,7 +1343,7 @@ class Desktop:
         from .windows_actions import READ_ACTIONS
 
         metadata = frozenset(
-            {"when", "verify", "depends_on", "return_result", "window_ref"}
+            {"when", "verify", "depends_on", "return_result", "window_ref", "element_ref"}
         )
         deadline = time.monotonic() + 20
         results = []

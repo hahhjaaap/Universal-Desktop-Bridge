@@ -14,6 +14,26 @@ These modes do not share permissions, sessions, DOM state or identities.
 Host Desktop FastPath runs only an explicit validated plan. It never treats
 application text as new instructions or grants permission.
 
+## Durable no-replay receipts
+
+Host Desktop FastPath now **requires a stable request_id** supplied by the
+caller, unique per intended workflow and scoped to the current locally issued
+computer-access grant. The runner persists a payload-free `running` receipt
+**before Windows input** and finalizes the receipt after the batch returns.
+
+- Reissuing the **same request_id and same plan** returns receipt metadata
+  (completed/failed/unknown), **never runs input a second time**.
+- Reusing a request_id with a different plan is rejected.
+- The receipt stores plan digests and bounded status only — never UI text,
+  screenshots, typed content or URLs.
+- A crash, lost reply or uncertain mutation leaves an outcome-unknown receipt
+  until independently inspected. Do not invent a fresh ID to replay writes.
+- This protects against the dangerous replay case but is **not transaction
+  rollback** and cannot itself determine whether an external app committed.
+- Each grant has a bounded count of receipts; a new grant does not confer
+  additional scope over that owner's Windows session.
+
+
 ## Changes
 
 Host FastPath preserves the 1–12 step / 20-second desktop batch budget and
@@ -41,6 +61,7 @@ title. The sample values below are placeholders, not real device identities.
 ~~~json
 {
   "action": "fastpath",
+  "request_id": "youtube-and-excel-unique-001",
   "steps": [
     {
       "action": "open_chrome_tab",
@@ -85,9 +106,10 @@ mutating app step. Reobserve any window after its title changes.
 - The owner must already have enabled computer access locally. The FastPath
   cannot elevate, authorize itself, disable emergency pause, or use UAC/
   secure desktops.
-- Unlike the isolated browser FastPath, the current Windows FastPath is a
-  desktop batch WITHOUT a persistent request receipt. Never retry an
-  unknown/timed-out mutating plan; inspect first.
+- The native batch execution is non-transactional, but the host FastPath
+  endpoint now persists a per-grant, one-shot receipt before dispatch.
+  On uncertain completion, inspect independently instead of issuing a new ID
+  to re-run the input.
 - open_chrome_tab success means a tab was requested, not that a page finished
   loading. Verify through wait_window and UIA observations.
 - UIA invoke requires a uniquely identified control. Dynamically choosing

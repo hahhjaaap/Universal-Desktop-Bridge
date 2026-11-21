@@ -351,10 +351,13 @@ def main():
             # Reproduce an upgrade from released v0.10.0, where the managed
             # helper was named udb.ps1 and shadowed the working .cmd file.
             old_helper = install / "bin/udb.ps1"
-            old_helper.write_bytes((install / "bin/udb-launcher.ps1").read_bytes())
-            run_install()
-            assert not old_helper.exists(), "Legacy PowerShell shadow remains"
-            assert (install / "bin/udb-launcher.ps1").is_file()
+            launcher = install / "bin/udb-launcher.ps1"
+            helper_lf = launcher.read_bytes().replace(b"\r\n", b"\n")
+            for newline in (b"\n", b"\r\n"):
+                old_helper.write_bytes(helper_lf.replace(b"\n", newline))
+                run_install()
+                assert not old_helper.exists(), "Legacy PowerShell shadow remains"
+                assert launcher.is_file()
 
             # A user-modified script must never be deleted by a repair.
             old_helper.write_text("Write-Host 'owner file'\n", encoding="utf-8")

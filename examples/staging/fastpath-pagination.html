@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>UDB staging pagination fixture</title>
+<h1>UDB staging pagination fixture</h1>
+<output id="page" aria-live="polite">Page 1</output>
+<button id="next" type="button">Next page</button>
+<button id="no-change" type="button">Leave page unchanged</button>
+<button id="delayed-navigation" type="button">Navigate after a delay</button>
+<script>
+const page = document.querySelector("#page");
+let index = 1;
+let pending = false;
+document.querySelector("#next").addEventListener("click", () => {
+  if (pending) return;
+  pending = true;
+  setTimeout(() => {
+    index += 1;
+    page.textContent = "Page " + index;
+    pending = false;
+  }, 20);
+});
+document.querySelector("#delayed-navigation").addEventListener("click", () => {
+  setTimeout(() => {
+    const next = new URL(window.location.href);
+    next.searchParams.set("navigated", "1");
+    window.location.assign(next.href);
+  }, 200);
+});
+</script>
+</html>

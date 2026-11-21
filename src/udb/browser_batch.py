@@ -14,7 +14,10 @@ from .browser_actions import (
     validate_click_navigation_budget,
     validate_post_observation,
 )
-from .browser_click_postcondition import click_with_postcondition
+from .browser_click_postcondition import (
+    GuardedClickPhaseError,
+    click_with_postcondition,
+)
 from .core import PolicyError, reject_links
 from .fastpath import compile_plan, gate, is_mutation, matches
 from .host_client import _read_json, atomic_json, enabled
@@ -342,6 +345,11 @@ class BatchRunner:
                             "ok": False,
                             "error_type": type(exc).__name__,
                             "error": "Browser step failed; inspect page before retrying a mutation",
+                            **(
+                                {"error_phase": exc.phase}
+                                if isinstance(exc, GuardedClickPhaseError)
+                                else {}
+                            ),
                         }
                     )
                     state, failed_index = "outcome_unknown", index

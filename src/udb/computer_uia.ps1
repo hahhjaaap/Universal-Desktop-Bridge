@@ -352,7 +352,7 @@ try {
             @{ok=$true;found=$false;matched=0}|ConvertTo-Json -Compress
             return
         }
-        $ordered=@($candidates|Sort-Object -Property top,left)
+        $ordered=@($candidates|Sort-Object -Property @{Expression={$_.top};Ascending=$true},@{Expression={$_.left};Ascending=$true})
         if($ordered.Count -gt 1 -and $ordered[0].top -eq $ordered[1].top -and
             $ordered[0].left -eq $ordered[1].left){
             throw 'Ranked first control is ambiguous'

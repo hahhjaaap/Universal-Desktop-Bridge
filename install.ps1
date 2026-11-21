@@ -371,10 +371,10 @@ try {
     # healthy installation unusable. Keep the helper at a *different* name.
     $legacy = Assert-LocalPath (Join-Path $bin 'udb.ps1')
     if (Test-Path -LiteralPath $legacy) {
-        # Only remove the EXACT UDB v0.10.0 managed helper. Refuse any
-        # modified/unrecognized owner script; never silently delete it.
+        # Only remove the UDB v0.10.0 managed helper. GitHub raw and
+        # Windows Git checkouts can differ in line endings.
         if (!(Test-Path -LiteralPath $legacy -PathType Leaf) -or
-            [IO.File]::ReadAllText($legacy) -cne $launcher) {
+            [IO.File]::ReadAllText($legacy).Replace("`r`n","`n") -cne $launcher.Replace("`r`n","`n")) {
             throw 'Unrecognized udb.ps1 in the managed bin folder. Preserve it and resolve the name collision locally before updating.'
         }
     }

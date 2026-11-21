@@ -16,7 +16,11 @@ from udb.core import PolicyError
 class FakeGui:
     def __init__(self):
         self.rows = {
-            101: {"pid": 100, "class_name": "Chrome_WidgetWin_1", "title": "YouTube - Chrome"},
+            101: {
+                "pid": 100,
+                "class_name": "Chrome_WidgetWin_1",
+                "title": "YouTube - Chrome",
+            },
             202: {"pid": 200, "class_name": "XLMAIN", "title": "Book1 - Excel"},
         }
 
@@ -136,10 +140,26 @@ def test_missing_semantic_match_skips_invoke_and_never_sends_input(desktop):
 @pytest.mark.parametrize(
     "find_step",
     [
-        {"action": "find_control", "text": "a", "name": "Results", "control_type": "Hyperlink"},
+        {
+            "action": "find_control",
+            "text": "a",
+            "name": "Results",
+            "control_type": "Hyperlink",
+        },
         {"action": "find_control", "text": "Music", "control_type": "Hyperlink"},
-        {"action": "find_control", "text": "Music", "name": "Results", "control_type": "Edit"},
-        {"action": "find_control", "text": "Music", "name": "Results", "control_type": "Hyperlink", "run_shell": "whoami"},
+        {
+            "action": "find_control",
+            "text": "Music",
+            "name": "Results",
+            "control_type": "Edit",
+        },
+        {
+            "action": "find_control",
+            "text": "Music",
+            "name": "Results",
+            "control_type": "Hyperlink",
+            "run_shell": "whoami",
+        },
     ],
 )
 def test_bad_semantic_selector_is_rejected_before_any_action(desktop, find_step):
@@ -174,9 +194,7 @@ def test_legacy_batch_does_not_gain_semantic_control_selection(desktop):
         {"window_ref": 0, "element_ref": 0},
     ],
 )
-def test_element_ref_rejects_forged_selector_or_other_window(
-    desktop, invoke_args
-):
+def test_element_ref_rejects_forged_selector_or_other_window(desktop, invoke_args):
     desktop._dispatch = lambda **_: pytest.fail("must validate before I/O")
     with pytest.raises(PolicyError):
         desktop.batch(

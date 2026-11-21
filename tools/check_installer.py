@@ -380,13 +380,18 @@ def main():
             preference = home / "state/startup-preferences.json"
             preference.parent.mkdir(exist_ok=True)
             preference.write_text('{"schema":1,"mode":"offline"}')
-            app("start", "--detach", "--json", "--wait", "60")
+            app("start", "--offline", "--detach", "--json", "--wait", "60")
             before_mode = preference.read_bytes()
             pairing_fixture = {}
             if args.from_v013:
+                # Managed activation calls mcp-config even in offline mode.
+                # Use valid metadata for a fixture with no real device or token.
                 pairing_fixture = {
                     home / "cloud-pairing.json": json.dumps(
-                        {"relay": "https://fixture.invalid", "device_id": "0" * 32}
+                        {
+                            "relay": "https://udb-acceptance-fixture.invalid.workers.dev",
+                            "device_id": "0" * 32,
+                        }
                     ).encode("ascii"),
                     home / "cloud-device-token": b"offline-test-fixture",
                 }
@@ -432,6 +437,9 @@ def main():
             assert (
                 switched["manager_running"] and switched["connection_mode"] == "offline"
             )
+            if args.from_v013:
+                assert switched["cloudflare_pairing_configured"]
+                assert not switched["cloud_agent_running"]
             assert (
                 preference.read_bytes() == before_mode
                 and sentinel.read_text() == "existing owner data"

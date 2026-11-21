@@ -7,6 +7,7 @@ import secrets
 
 from .core import PolicyError
 
+
 class GuardedClickPhaseError(PolicyError):
     """Stable, non-sensitive diagnostic for a failed guarded-click stage.
 

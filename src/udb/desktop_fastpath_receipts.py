@@ -28,7 +28,9 @@ def _receipt(state, grant_id, request_id):
     if not isinstance(grant_id, str) or not _GRANT.fullmatch(grant_id):
         raise PolicyError("Invalid local computer access grant")
     if not isinstance(request_id, str) or not _REQUEST.fullmatch(request_id):
-        raise PolicyError("Desktop FastPath requires stable request_id (1..80 characters)")
+        raise PolicyError(
+            "Desktop FastPath requires stable request_id (1..80 characters)"
+        )
     folder = Path(state) / "desktop-fastpath-receipts" / grant_id
     path = folder / (hashlib.sha256(request_id.encode("ascii")).hexdigest() + ".json")
     reject_links(folder)
@@ -41,7 +43,11 @@ def _digest(steps):
         raise PolicyError("Desktop FastPath requires 1..12 steps")
     try:
         raw = json.dumps(
-            steps, sort_keys=True, ensure_ascii=True, allow_nan=False, separators=(",", ":")
+            steps,
+            sort_keys=True,
+            ensure_ascii=True,
+            allow_nan=False,
+            separators=(",", ":"),
         ).encode("ascii")
     except (TypeError, ValueError, OverflowError, RecursionError) as exc:
         raise PolicyError("Desktop FastPath plan must be bounded JSON") from exc
@@ -90,11 +96,15 @@ def run_once(state, grant_id, request_id, steps, execute):
     if path.exists():
         row = _read_json(path, 4096)
         if not isinstance(row, dict) or row.get("digest") != digest:
-            raise PolicyError("Desktop FastPath request_id reused for different actions")
+            raise PolicyError(
+                "Desktop FastPath request_id reused for different actions"
+            )
         return _summary(row, request_id)
 
     if sum(p.suffix == ".json" for p in folder.iterdir()) >= _MAX_RECEIPTS:
-        raise PolicyError("Desktop FastPath receipt capacity exceeded; renew owner grant")
+        raise PolicyError(
+            "Desktop FastPath receipt capacity exceeded; renew owner grant"
+        )
 
     row = {
         "request_id": request_id,
@@ -121,7 +131,9 @@ def run_once(state, grant_id, request_id, steps, execute):
             os.fsync(stream.fileno())
     except Exception as exc:
         # A partially written receipt must still block replay.
-        raise PolicyError("Desktop FastPath receipt creation failed; do not retry") from exc
+        raise PolicyError(
+            "Desktop FastPath receipt creation failed; do not retry"
+        ) from exc
 
     try:
         result = execute()
@@ -156,9 +168,11 @@ def run_once(state, grant_id, request_id, steps, execute):
     row.update(
         state=state_name,
         completed_steps=max(0, min(12, result.get("completed_steps", 0)))
-        if type(result.get("completed_steps")) is int else 0,
+        if type(result.get("completed_steps")) is int
+        else 0,
         failed_index=result.get("failed_index")
-        if type(result.get("failed_index")) is int else None,
+        if type(result.get("failed_index")) is int
+        else None,
         finished_at=time.time(),
     )
     try:

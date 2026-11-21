@@ -1266,6 +1266,10 @@ class Desktop:
                     or type(row.get("text")) is not str
                     or not 4 <= len(row["text"]) <= 160
                     or not (row.get("name") or row.get("automation_id"))
+                    or type(row.get("name", "")) is not str
+                    or len(row.get("name", "")) > 300
+                    or type(row.get("automation_id", "")) is not str
+                    or len(row.get("automation_id", "")) > 128
                     or row.get("control_type") not in (
                         "Hyperlink", "Button", "ListItem", "MenuItem"
                     )

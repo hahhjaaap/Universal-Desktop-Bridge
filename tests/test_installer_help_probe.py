@@ -61,3 +61,66 @@ def test_installer_detection_remains_a_read_only_help_probe():
         command in probe
         for command in ("& $Image start", "& $Image setup", "Invoke-WebRequest")
     )
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows PowerShell 5.1 contract")
+def test_release_switch_refuses_a_separate_cloud_agent_before_stopping_the_manager(
+    tmp_path,
+):
+    source = (ROOT / "install.ps1").read_text(encoding="utf-8-sig")
+    start = source.index("function Set-ActiveRelease")
+    end = source.index("function Register-UdbStartMenu", start)
+    pairing = tmp_path / "cloud-pairing.json"
+    pairing.write_text("{}", encoding="utf-8")
+    harness = r"""
+$ErrorActionPreference = 'Stop'
+$DataHome = $PSScriptRoot
+$InstallRoot = $PSScriptRoot
+function Assert-Release($Record) {}
+function Assert-PinnedSigner([string]$Image) {}
+function Assert-LocalPath([string]$Path) { return $Path }
+function Get-AgentState([string]$Image) {
+    return @{manager_running=$true;connection_mode='offline'}
+}
+function Assert-CloudAgentQuiescent([string]$Image) {
+    if ($Image -cne $expectedImage) { throw 'Incorrect Cloud Agent probe image.' }
+    throw 'Active standalone Cloud Agent.'
+}
+foreach ($Rollback in @($false, $true)) {
+    $expectedImage = if ($Rollback) { 'current.exe' } else { 'target.exe' }
+    try {
+        Set-ActiveRelease @{exe='target.exe'} @{exe='current.exe'}
+        exit 10
+    } catch {
+        if ($_.Exception.Message -cne 'Active standalone Cloud Agent.') { throw }
+    }
+}
+"""
+    script = tmp_path / "test-release-switch.ps1"
+    script.write_text(source[start:end] + "\n" + harness, encoding="utf-8")
+    powershell = (
+        Path(os.environ["SystemRoot"])
+        / "System32"
+        / "WindowsPowerShell"
+        / "v1.0"
+        / "powershell.exe"
+    )
+    completed = subprocess.run(
+        [
+            str(powershell),
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(script),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert pairing.read_text(encoding="utf-8") == "{}"
+    assert not (tmp_path / "install.json").exists()
+    assert not (tmp_path / "mcp.json").exists()

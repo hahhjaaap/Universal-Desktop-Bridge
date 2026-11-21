@@ -572,6 +572,15 @@ def launch_gate(home: Path, timeout=40):
                 fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
 
+def cloud_agent_lease_held(home: Path) -> bool:
+    """Check the existing Cloud Agent lifecycle lease without inspecting credentials."""
+    try:
+        with launch_gate(home / "cloud-agent", timeout=0):
+            return False
+    except CommandError:
+        return True
+
+
 def start(
     home: Path,
     exe: Path,

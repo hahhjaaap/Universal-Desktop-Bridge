@@ -9,7 +9,20 @@ from types import SimpleNamespace
 
 import pytest
 
-from udb import cli, host_client, onboarding
+from udb import cli, host_client, onboarding, owner_command
+
+
+def test_installer_probe_observes_only_the_selected_cloud_agent(tmp_path, capsys):
+    home = tmp_path.resolve()
+    args = ["status", "--home", str(home), "--cloud-agent-lease", "--json"]
+    with owner_command.launch_gate(home / "other-profile" / "cloud-agent"):
+        assert cli.main(args) == 0
+    assert capsys.readouterr().out == '{"cloud_agent_lease_held": false}\n'
+
+    with owner_command.launch_gate(home / "cloud-agent"):
+        assert cli.main(args) == 0
+    assert capsys.readouterr().out == '{"cloud_agent_lease_held": true}\n'
+    assert not (home / "state").exists()
 
 
 class TTY(io.StringIO):

@@ -451,6 +451,9 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
             _exclusive_flags(command, "offline", "online", inherit=True, hidden=True)
         if name == "status":
             command.add_argument(
+                "--cloud-agent-lease", action="store_true", help=argparse.SUPPRESS
+            )
+            command.add_argument(
                 "--watch",
                 action="store_true",
                 help="Watch metadata-only headless status",
@@ -893,6 +896,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             "--wait",
             str(getattr(args, "wait", 30)),
         ]
+        if action == "status" and args.cloud_agent_lease:
+            if not args.json or args.watch or args.access or args.offline or args.online:
+                raise ValueError("Use --cloud-agent-lease with status --json only")
+            print(
+                json.dumps(
+                    {
+                        "cloud_agent_lease_held": owner_command.cloud_agent_lease_held(
+                            settings.home
+                        )
+                    }
+                )
+            )
+            return 0
         if action == "status" and args.watch:
             if args.access:
                 raise ValueError("Status monitoring cannot activate owner access")

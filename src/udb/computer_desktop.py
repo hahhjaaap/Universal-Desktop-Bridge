@@ -899,6 +899,7 @@ class Desktop:
                 "screenshot",
                 "frame_state",
                 "snapshot",
+                "find_control",
                 "set_value",
                 "invoke",
                 "uia_focus",

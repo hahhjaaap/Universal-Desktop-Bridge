@@ -1167,7 +1167,14 @@ class Desktop:
         import inspect
 
         metadata = frozenset(
-            {"when", "verify", "depends_on", "return_result", "window_ref", "element_ref"}
+            {
+                "when",
+                "verify",
+                "depends_on",
+                "return_result",
+                "window_ref",
+                "element_ref",
+            }
         )
         evidence_fields = frozenset(
             {
@@ -1257,8 +1264,12 @@ class Desktop:
                 self._validate_window_locator(row)
             elif row["action"] == "find_control":
                 allowed = {
-                    "action", "window_id", "text", "name",
-                    "automation_id", "control_type",
+                    "action",
+                    "window_id",
+                    "text",
+                    "name",
+                    "automation_id",
+                    "control_type",
                 }
                 if (
                     not fastpath
@@ -1270,9 +1281,8 @@ class Desktop:
                     or len(row.get("name", "")) > 300
                     or type(row.get("automation_id", "")) is not str
                     or len(row.get("automation_id", "")) > 128
-                    or row.get("control_type") not in (
-                        "Hyperlink", "Button", "ListItem", "MenuItem"
-                    )
+                    or row.get("control_type")
+                    not in ("Hyperlink", "Button", "ListItem", "MenuItem")
                 ):
                     raise PolicyError("Invalid bounded semantic control discovery")
             else:
@@ -1319,7 +1329,9 @@ class Desktop:
                     or type(ref) is not int
                     or not 0 <= ref < index
                     or steps[ref]["action"] != "find_control"
-                    or any(key in row for key in ("name", "automation_id", "control_type"))
+                    or any(
+                        key in row for key in ("name", "automation_id", "control_type")
+                    )
                     or row.get("window_ref") != steps[ref].get("window_ref")
                     or row.get("window_id") != steps[ref].get("window_id")
                 ):
@@ -1379,7 +1391,14 @@ class Desktop:
         from .windows_actions import READ_ACTIONS
 
         metadata = frozenset(
-            {"when", "verify", "depends_on", "return_result", "window_ref", "element_ref"}
+            {
+                "when",
+                "verify",
+                "depends_on",
+                "return_result",
+                "window_ref",
+                "element_ref",
+            }
         )
         deadline = time.monotonic() + 20
         results = []

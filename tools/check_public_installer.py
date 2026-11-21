@@ -74,6 +74,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--report", type=Path)
     parser.add_argument("--release-tag")
+    parser.add_argument("--expected-revision")
+    parser.add_argument("--expected-assets-dir", type=Path)
     args = parser.parse_args()
     if os.name != "nt":
         raise ValueError("Published Windows acceptance requires Windows")
@@ -90,12 +92,22 @@ def main():
         else FEED.removesuffix("/latest/download") + "/download/" + args.release_tag
     )
     release = json.loads(fetch(api, 1024 * 1024))
+    if args.expected_revision and release["target_commitish"] != args.expected_revision:
+        raise ValueError("Published release target differs from the approved revision")
     if release["draft"] or release["prerelease"]:
         raise ValueError("Expected a published stable release")
     assets = {item["name"]: item for item in release["assets"]}
     required = {"install.ps1", "SHA256SUMS", "udb-windows-x64.zip"}
     if not required <= assets.keys():
         raise ValueError("The public release is incomplete")
+    if args.expected_assets_dir:
+        for name in sorted(required):
+            with (args.expected_assets_dir / name).open("rb") as stream:
+                digest = "sha256:" + hashlib.file_digest(stream, "sha256").hexdigest()
+            if assets[name].get("digest") != digest:
+                raise ValueError(
+                    "Public release differs from the attested asset: " + name
+                )
 
     def verified_asset(name, limit):
         data = fetch(feed + "/" + name, limit)
@@ -165,6 +177,8 @@ def main():
                 "Bypass",
                 "-File",
                 installer,
+                "-FeedUrl",
+                feed,
                 "-InstallRoot",
                 install,
                 "-DataHome",

@@ -1,25 +1,21 @@
-# UDB 0.13.0 — Windows release candidate (2026-11-17)
+# UDB 0.14.0 Windows release notes
 
-> These notes describe the proposed **v0.13.0** Windows build from GitHub `main` after commit `d17f4f931663fd38aa9a4cbb05e1902103a32fa0`. The version is a **candidate until CI, the release gate, publication and installation verification pass**. The already published v0.12.0 artifacts are immutable.
+Changes from v0.13.0 in the integrated source for this release.
 
-## Changes since v0.12.0
+- **Windows background access.** The `udb background` CLI lets the owner enable, inspect and revoke access for UDB-owned browser and workspace sessions. Reauthorization and revocation are local owner operations. Existing computer-access and background grants are separate. (#263)
+- **Browser and desktop operations.** Faster tab startup and bounded DOM reads, Windows notification-based host mailbox wakes, and fewer RPCs for guarded browser actions. Guarded desktop batches can verify the identity of observed windows and their visual frames before sending input. (#260, #261, #242, #249, #230, #229, #232)
+- **MCP and reliability.** Structured tool result contracts, sanitized backend errors, cleaner frozen stdio proxy shutdown, and better diagnostics for expiring computer-access grants. Opt-in shared status proxies and Cloud RPC worker limits are available for staging characterization. (#240, #250, #259, #236, #257, #258)
+- **Security.** Browser URL validation, stricter Access identity and tool-grant handling, and additional approval and backup checks. The Windows archive carries a SHA-256 file inventory. (#224, #252, #234, #237)
 
-- **ChatGPT and Cloudflare connection:** hardened account/device tool routing, fleet support work, owner-scoped tool catalogs, and safer handling of unexpectedly failed proxy requests. These source changes do **not** deploy Cloudflare Worker, grant account/device access or change OAuth settings.
-- **Computer and browser workflows:** one-call guarded browser FastPath foundation (steps 11–20) and an **opt-in** persistent STA PowerShell UI Automation worker (steps 21–30). These paths remain under their explicit local controls; measured rejected-HWND process/IPC improvements are not claims about complete ChatGPT workflows.
-- **Safety and regression work:** stricter Windows protected-path checks (including 8.3 aliases), backend outcome validation, no automatic replay of uncertain writes, plus Windows/Linux CI and Windows standalone installer/rollback tests.
-- **Maintenance:** simplified current source and packaging paths. Existing local user data, device identity, pairings and approval settings should be preserved through managed update.
+- **Opt-in FastPath DOM postconditions.** Owned-browser FastPath can advance after each supported click when the expected visible text appears in the same document. The sequence stops on uncertain outcomes and uses the existing no-replay receipt. (#262)
 
-## Additional merged changes and compatibility notes
+The FastPath benchmark measures a warm Windows host and Chrome. Full-route ChatGPT → Cloudflare → Windows acceptance is pending. The staging fixture and scorer are documented in [FastPath end-to-end acceptance](fastpath-e2e-acceptance.md). (#265)
 
-- **#215 — Time-bound computer grants:** the current-user DPAPI authorization now expires after **8 hours by default (maximum 24 hours)**. Previously saved computer-access receipts without an expiry are intentionally rejected. After upgrading, the Windows owner must run `udb --access computer` **locally in an attended terminal** and approve access again. The new package neither grants nor renews permission remotely.
-- **#216 — Experimental UIA snapshot cache:** the read-only UIA CacheRequest snapshot is present but **off by default** (`UDB_UIA_SNAPSHOT_CACHE=1` is a developer-only local opt-in). Real GUI semantic parity and performance acceptance remain incomplete; do not enable this on user applications until that work is verified.
+Optional prewarm, proxy reuse, RPC worker limits, and the Windows UIA snapshot cache are experimental.
 
+## Install, update and rollback
 
-## Install and rollback
-
-Publish only after the **exact current v0.13.0 main commit** passes all CI and release acceptance checks. The workflow is **manual-only** and requires explicit owner confirmation if `main` is unprotected. Once the genuine GitHub release exists, use the published HTTPS installer from `https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases/tag/v0.13.0`. Run the managed installer **outside any active UDB remote-control job**; retain the previous working installation until the new Cloud Agent and ChatGPT tool catalog are verified.
-
-On an attended Windows terminal, after publication:
+Windows x64 builds include the Python runtime. Verify the published release assets before running the installer. Use an attended Windows terminal outside the active UDB remote-control session.
 
 ```powershell
 udb update --check
@@ -29,8 +25,6 @@ udb doctor --json
 udb status --json
 ```
 
-Use `udb rollback` if the managed update fails. Do not delete the prior executable or owner state before end-to-end validation.
+Confirm the intended device still appears in ChatGPT and validate a permitted read-only tool call. Keep the previous managed installation available for `udb rollback`. Managed updates use the existing data home. Owner grants still apply and time-limited grants can expire during an update.
 
-## Security and release status
-
-The Windows ZIP and executable are built and checked by CI. SHA-256 integrity checks do **not** establish publisher authentication; this candidate is **not Authenticode-signed**. Automatic publication is disabled. An explicit owner-triggered workflow dispatch on `main` may approve publication without Branch Protection, but only when the exact `main` revision has passed complete push CI and the installer/release acceptance checks. A successful candidate build is not itself a published stable release or an installed upgrade.
+GitHub build provenance and SHA-256 verification cover the ZIP, installer script and checksum file via the release workflow. The Windows executable is unsigned. See [release verification](release-security.md) for the verification policy and [v0.13.0 on GitHub](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases/tag/v0.13.0) for the previous published release.

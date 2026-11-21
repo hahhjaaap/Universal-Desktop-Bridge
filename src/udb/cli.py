@@ -897,7 +897,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             str(getattr(args, "wait", 30)),
         ]
         if action == "status" and args.cloud_agent_lease:
-            if not args.json or args.watch or args.access or args.offline or args.online:
+            if (
+                not args.json
+                or args.watch
+                or args.access
+                or args.offline
+                or args.online
+            ):
                 raise ValueError("Use --cloud-agent-lease with status --json only")
             print(
                 json.dumps(

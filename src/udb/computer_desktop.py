@@ -237,11 +237,17 @@ class Desktop:
         """
         if type(wait_ms) is not int or not 0 <= wait_ms <= 10000:
             raise PolicyError("wait_window requires wait_ms 0..10000")
-        self._validate_window_locator({
-            "pid": pid,
-            "class_name": class_name,
-            **({"title": title} if title is not None else {"title_prefix": title_prefix}),
-        })
+        self._validate_window_locator(
+            {
+                "pid": pid,
+                "class_name": class_name,
+                **(
+                    {"title": title}
+                    if title is not None
+                    else {"title_prefix": title_prefix}
+                ),
+            }
+        )
         deadline = time.monotonic() + wait_ms / 1000
         while True:
             result = self.find_window(
@@ -1344,9 +1350,9 @@ class Desktop:
         completed = 0
         mutations_attempted = False
         for index, row in enumerate(steps):
-            mutating = (
-                row["action"] not in READ_ACTIONS
-                and row["action"] not in ("find_window", "wait_window")
+            mutating = row["action"] not in READ_ACTIONS and row["action"] not in (
+                "find_window",
+                "wait_window",
             )
             attempted = False
             try:

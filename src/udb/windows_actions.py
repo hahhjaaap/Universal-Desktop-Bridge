@@ -30,6 +30,7 @@ DESKTOP_ACTIONS = (
     "window_state",
     "close_window",
     "batch",
+    "fastpath",
     "displays",
     "open_chrome_tab",
     "open_chatgpt",

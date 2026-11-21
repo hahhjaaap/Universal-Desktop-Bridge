@@ -1,36 +1,20 @@
-# UDB 0.13.0 — source candidate versus released Windows build
+# Current UDB source and Windows release
 
-**As of 2026-11-17**, the canonical source version on the v0.13.0 release-candidate branch is `0.13.0`. The latest **published** Windows release verified on GitHub is still **v0.12.0 (2026-11-11)** until a genuine v0.13.0 GitHub Release is published. The installed `udb.exe`, source branch, CI artifacts, and deployed Cloudflare Worker are independent and can be at different revisions.
-
-## Current source changes
-
-The v0.13.0 candidate includes the changes already merged into `main` through PR #216:
-
-- Cloudflare account/device routing and tool-catalog improvements; Windows, Linux and Cloudflare regression tests.
-- Browser guarded FastPath foundation and the opt-in persistent Windows UI Automation worker.
-- Windows protected-path, proxy outcome and uncertain-write hardening.
-- **PR #215:** the DPAPI local computer-access grant expires after **8 hours** (maximum 24 hours). Legacy grants without expiration are rejected and must be reapproved through an **attended local** `udb --access computer`; remote tools cannot reauthorize them.
-- **PR #216:** experimental snapshot property cache is merged but **disabled by default**. Real UIA-tree correctness and speedup testing remain open; no end-to-end 5–6 second guarantee.
-
-Do not infer that a source merge enables owner grants, updates Cloudflare or installs a new Windows executable.
-
-## Release gate and current blocker
-
-`tools/release_gate.py` requires the **exact current `main` SHA**, a successful complete **push CI** run for that revision, and a previously unpublished version. The publication workflow is now **manual-only**: the owner must run `one-command-windows-release` on `main` and explicitly confirm publication without Branch Protection. Automatic publication remains disabled. The previous default protection guard is retained unless the manual-only confirmation and trusted GitHub Actions event/ref checks both succeed. This optional route does not add code signing or independent security review.
-
-The PR's Windows EXE build and CI artifact can be used for **candidate acceptance**, but it is not a signed or official GitHub release. Current Windows builds are not Authenticode-signed; SHA-256 alone does not authenticate the publisher.
-
-## Check the four independent surfaces
-
-| Surface | Verify | Interpreting the result |
+| Surface | Status when preparing v0.14.0 | How to verify |
 | --- | --- | --- |
-| Source | `git rev-parse HEAD`, `src/udb/_version.py` | Selected code and declared version |
-| Windows executable | `udb version --json`, `udb doctor --json` | Installed binary revision and local health |
-| Cloudflare Worker | Independent Worker/Access deployment audit | Actual deployed relay and grants |
-| ChatGPT connector | Live tool list and a permitted read-only call | End-to-end tool discovery and authorization |
+| Candidate source | 0.14.0 on `release/0.14.0` | `git rev-parse HEAD` and `src/udb/_version.py` |
+| Published Windows release | v0.13.0 | [GitHub Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases) |
+| Installed Windows executable | Per device | `udb version --json` and `udb doctor --json` |
+| Cloudflare relay and ChatGPT | Per deployment and grant | Worker deployment identity, MCP discovery, and an authorized read-only call |
 
-## Update and rollback
+The Windows CI job for 0.14.0 downloads and checks the pinned v0.13.0 installer and ZIP, installs into disposable directories, then exercises a real version upgrade and rollback against the built candidate. Its offline pairing fixtures cover file preservation. A separate paired Windows test is required to prove that device identity, authorization and ChatGPT connectivity survive the update.
 
-Run `udb update --check` only after an approved v0.13.0 public release exists. The managed installer should retain the previous known-good image and the user state in `%LOCALAPPDATA%\\UniversalDesktopBridge`. Validate `udb --version`, `udb doctor --json`, and the ChatGPT tool catalog before removing older managed releases. Use `udb rollback` on failure. Do not stop or replace the active UDB executable from inside its own remote job, as this can sever the only management connection.
+## Release approval
 
-Use [v0.13.0 release notes](release-notes.md), [Windows release security](release-security.md), [pairing instructions](pairing-checklist-vi.md), and [repository README](../README.md) for operational details. Historical claims about v0.12.0 still refer only to that immutable published artifact.
+The repository owner dispatches `one-command-windows-release` from `main` after reviewing the external acceptance evidence. The workflow requires successful push runs of package/regression CI, CodeQL and the runtime dependency audit for the exact current `main` SHA. It rejects an existing release or a conflicting tag. Frozen and installer checks run before creating and verifying provenance for the assets. See [release verification](release-security.md).
+
+Before dispatch, record Windows 10/11 acceptance, including 0.13.0 → 0.14.0 → 0.13.0 on an isolated paired device. Check the device identity, access scope, a permitted MCP call, and restoration of the previous EXE after rollback. Keep the test identity and data home separate from production.
+
+For the latency gate, use an isolated Windows x64 staging machine, the same Chrome version, and one authorized fixture and network path for both exact builds. Time 50 or more trials per build from ChatGPT tool submission until it receives the final verified outcome. Use unique request IDs for each trial, interleave baseline and candidate samples, record errors and timeouts, and report nearest-rank p50/p95/p99 and error rates. Capture cold startup separately. The release requires an end-to-end candidate p95 of at most 6 seconds. The FastPath PR also requires at least a 40% p95 reduction plus permission, navigation and no-replay parity. The 50-sample Windows mailbox benchmark excludes ChatGPT and Cloudflare.
+
+See [v0.14.0 candidate changes](release-notes.md) and [v0.13.0 release history](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases/tag/v0.13.0).

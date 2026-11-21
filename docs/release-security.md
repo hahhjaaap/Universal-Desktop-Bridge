@@ -1,15 +1,6 @@
 # Windows release trust and signing
 
-> **UDB 0.12.0 docs review (2026-11-13):** **Current UDB 0.12.0 source guidance.** Verify the installed executable, Cloudflare Worker, OAuth and owner grants separately; source changes do not update them. See [version/status](current-version.md).
-
-**Published v0.12.0 release status (2026-11-13):** UDB's latest published v0.12.0 standalone installer is
-SHA-256 checked, but **not Authenticode-signed**, as confirmed by its release notes. A SHA256SUMS file generated
-by the same release workflow detects accidental corruption but does not, on
-its own, authenticate the publisher against a compromised release workflow.
-
-This document describes what is implemented, what is required for a
-signature-enforced release, and what remains unverified. It does **not**
-claim a completed security audit or signed Windows release.
+The v0.14.0 workflow verifies SHA-256 checksums and GitHub build provenance. Authenticode signing infrastructure is still required for a signed Windows edition. See the [source and published version matrix](current-version.md).
 
 ## Implemented verification capability
 
@@ -119,11 +110,15 @@ and hashes using a trusted publisher identity, read the security advisories,
 and keep a safe rollback path. A successful CI matrix alone does not
 establish a signed or independently audited product.
 
-## Manual-only unprotected-main release option (2026-11-17)
+## Owner-triggered release
 
-For the **v0.13.0 owner-requested release path**, `one-command-windows-release` is `workflow_dispatch` **only**, never a push/workflow-run auto-publish. The workflow requires an explicit `confirm_unprotected_release=true` boolean on `main` and passes `--manual-unprotected` to `tools/release_gate.py`. The gate verifies `GITHUB_EVENT_NAME=workflow_dispatch` and `GITHUB_REF=refs/heads/main` **and** that both `GITHUB_ACTOR` (original dispatcher) and `GITHUB_TRIGGERING_ACTOR` (current re-run initiator) equal `GITHUB_REPOSITORY_OWNER`, which must match the owner segment of the selected repository. The GitHub Actions job-level condition repeats the owner checks. Missing or conflicting identity fields fail closed. This mitigates accidental release execution by non-owner collaborators with Actions write permission; it does not substitute for Branch Protection against collaborators who can edit unprotected `main`. It still requires the *exact current main commit* to have completed successful **push CI** from this repository, an unpublished version, and a second independent gate immediately before publishing. A user cannot authorize a failed CI run, different SHA, pull request or existing tag by checking the box.
+`one-command-windows-release` accepts a manual dispatch on `main` from the repository owner. The owner also confirms review of the external release acceptance results. The existing `confirm_unprotected_release` input and checks on the original dispatcher and rerun initiator remain in place. GitHub's [main ruleset](https://github.com/hahhjaaap/Universal-Desktop-Bridge/rules/27626286) requires PRs and CI.
 
-This is a consciously lower-assurance alternative to enforcing Branch Protection, not a claim that Branch Protection exists or that the resulting unsigned ZIP is authenticated. Build/installer acceptance, checksum inventory, and public HTTPS installer verification remain required; no publisher certificate has been issued. Repository administrators should still consider branch protection, release environment approvals, immutable tags, independent provenance, and Authenticode signatures.
+The read-only build job checks exact-commit push CI, builds the Windows EXE and exercises the installer. Its output is handed to the publication job, which has the write and OIDC permissions. Before upload it verifies build provenance for the ZIP, installer script, and checksum file against this workflow and the exact `main` SHA. A failed attestation or verification stops publication. The job rechecks `main`, CI and version availability immediately before creating the release.
+
+After publication the workflow verifies the tag SHA, compares the published asset digests with the attested files, and runs the versioned HTTPS installer in a disposable profile. A red public installer smoke test means the release is already visible and needs investigation before installation.
+
+Download the exact release assets and use [GitHub CLI provenance verification](https://cli.github.com/manual/gh_attestation_verify) for each asset. Pin the repository, workflow, `refs/heads/main`, and the exact source digest. GitHub attestations identify the build and are separate from Authenticode verification of Windows executable code.
 
 ## Historical: fail-closed automatic publication before the manual option (2026-11-13)
 

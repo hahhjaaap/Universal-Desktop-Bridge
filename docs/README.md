@@ -1,8 +1,6 @@
-# UDB documentation index — source 0.13.0
+# UDB documentation index
 
-> **Reviewed 2026-11-14:** This index organizes the current source docs.
-> The published v0.12.0 Windows installer, source commits and live Cloudflare
-> Worker are not automatically synchronized. See [version/status](current-version.md).
+See the [current version matrix](current-version.md) for the release candidate, published Windows build, and acceptance requirements.
 
 ## Setup and opt-in multi-device candidate
 
@@ -15,7 +13,7 @@
 - [Legacy private enrollment command](private-device-enrollment-vi.md) —
   compatibility-only `udb connect --enroll` procedure.
 
-## Start here (supported UDB 0.12.0 user procedures)
+## Windows installation and setup
 
 - [Version and support matrix](current-version.md) — source versus published EXE,
   open migration/security work and release gating
@@ -25,13 +23,12 @@
 - [Remote troubleshooting](remote-device-troubleshooting.md)
 - [Windows control tools](windows-control-tools.md), [Windows workflows](windows-workflows.md)
 - [Accounting XLSX review](accounting-worktools.md), [build identity](build-identity.md)
-- [Security policy](../SECURITY.md) and [published v0.12 release notes](release-notes.md)
+- [Security policy](../SECURITY.md) and [release notes](release-notes.md)
 
 ## Current maintenance boundaries
 
 - [Branch protection / release safety issue #147](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/147):
-  release publication fails closed, but GitHub branch rules still require
-  administrator enforcement.
+  historical release safety investigation. See [current release verification](release-security.md).
 - [Tunnel migration / rollback issue #162](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/162):
   public Tunnel onboarding is retired; referenced internal compatibility paths
   and previously installed Windows releases have not been bulk-deleted.

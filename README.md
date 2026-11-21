@@ -1,6 +1,6 @@
 # Universal Desktop Bridge (UDB)
 
-> **Release candidate (2026-11-17):** Source targets **UDB 0.13.0**, but the latest verified published Windows release remains **v0.12.0** until a vetted, manually triggered release workflow succeeds. Source commits and CI artifacts do not update the installed EXE or Cloudflare deployment. See [version matrix](docs/current-version.md).
+> **Windows release status:** The source candidate is **UDB 0.14.0**. The latest published Windows release at candidate preparation is **v0.13.0**. See the [version and acceptance matrix](docs/current-version.md).
 
 **Windows-first MCP bridge for ChatGPT and other supported MCP clients.** UDB provides one Python package, one `udb` CLI and a derived public tool catalog (`udb tools` reports the actual count) for guarded local computer work. Its source of truth is `src/udb/`; the root-level `bridge.py` and `udb_*.py` files are compatibility launchers, not separate implementations.
 
@@ -8,15 +8,7 @@
 
 > **UDB 0.12.0 (2026-11-11):** Cloudflare is the remote MCP transport for paired Windows devices, and UDB Live adds terminal and read-only GUI activity views (`udb live`, `udb live --gui`). The public MCP connection no longer supports local stdio or OpenAI Tunnel; pair with `udb setup`. `udb mcp-config` remains the per-device endpoint for compatibility. When account Fleet is enabled, `udb setup` shows the shared `/v1/account/mcp` URL to add once for all linked devices. Historical compatibility readers may still exist internally for older installations. Check [GitHub Releases](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases), [release notes](docs/release-notes.md), and your installed `udb --version` separately. Worker deployment, Access/OAuth, device grants, and ChatGPT catalog discovery are still configured and verified separately.
 
-**Current source maintenance (2026-11-13):** The `main` source also contains the
-PySide6-Essentials 6.12.0 dependency, Chrome Aura retirement, retired Tunnel
-onboarding wizard, and a Windows CI-only Qt teardown safeguard. These
-post-release commits do **not** change the v0.12.0 installer published on
-2026-11-11. GitHub `main` is not yet branch-protected; automatic release is
-disabled, and a manual unprotected release requires explicit owner confirmation and green CI. See
-[version/status](docs/current-version.md), [release security](docs/release-security.md),
-[issue #147](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/147)
-and [issue #162](https://github.com/hahhjaaap/Universal-Desktop-Bridge/issues/162).
+The owner reviews release acceptance and starts publication on protected `main`. See [release verification](docs/release-security.md).
 
 ## What UDB does
 
@@ -117,7 +109,7 @@ Use `udb gui` for on-device permission approvals.
 
 ## Windows x64: install and start
 
-Review the installer and [published release](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases/latest) before executing downloaded code. The latest verified published Windows tag on 2026-11-13 is **v0.12.0**, which may not contain the newer `main` cleanup and Windows CI changes; a source merge does not trigger an owner installation. In your own PowerShell terminal:
+Review the installer and [published release](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases/latest) before executing downloaded code. For the current release and candidate versions, see the [version matrix](docs/current-version.md). In your own PowerShell terminal:
 
 ```powershell
 irm https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases/latest/download/install.ps1 | iex
@@ -249,9 +241,7 @@ Managed updates and rollback must be started **outside UDB's own running tool jo
 They preserve owner state but do not provide an independent backup; inspect
 `udb --version` and `udb status` before retrying a timed-out update.
 
-This simplified help applies to the updated source until it is included in
-a separately reviewed and published release. The existing v0.12.0 download
-does not change merely because source documentation or CLI code changed.
+Use `udb help` to check the commands available in the installed build.
 
 ### Terminal-first quality-of-life additions
 

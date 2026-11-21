@@ -128,7 +128,19 @@ def make_server(agent: Agent):
                         guard=lambda expected=grant: require(agent) == expected,
                         control=InputControl(agent),
                     )
-                return live_desktop.dispatch(**(arguments or {}))
+                call_args = dict(arguments or {})
+                if call_args.get("action") == "fastpath":
+                    from .desktop_fastpath_receipts import run_once
+
+                    request_id = call_args.pop("request_id", "")
+                    return run_once(
+                        agent.state,
+                        grant,
+                        request_id,
+                        call_args.get("steps"),
+                        lambda: live_desktop.dispatch(**call_args),
+                    )
+                return live_desktop.dispatch(**call_args)
         return command(agent, "computer", mode=mode, arguments=arguments or {})
 
     register_computer_tools(mcp, computer_call, read)

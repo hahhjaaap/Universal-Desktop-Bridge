@@ -12,15 +12,42 @@ import subprocess
 import tempfile
 import threading
 import time
+import urllib.request
 import zipfile
 from pathlib import Path
+
+
+def fetch_013_baseline(folder):
+    base = "https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases/download/v0.13.0/"
+    assets = {
+        "udb-windows-x64.zip": "39e62e3c0fafe6a8f5a7bb1a77a7efd7053d6f7020c287ac2efd69e3fc18fbde",
+        "install.ps1": "ac32c43e5cc8d8194b9ade9a14efa4fa9ece35d4883ba4e838dc6748d934cc1a",
+    }
+    for name, expected in assets.items():
+        request = urllib.request.Request(
+            base + name, headers={"User-Agent": "UDB-upgrade-acceptance"}
+        )
+        asset = folder / name
+        with (
+            urllib.request.urlopen(request, timeout=60) as src,
+            asset.open("wb") as out,
+        ):
+            shutil.copyfileobj(src, out)
+        with asset.open("rb") as stream:
+            if hashlib.file_digest(stream, "sha256").hexdigest() != expected:
+                raise ValueError(
+                    f"Published v0.13.0 {name} does not match its pinned SHA-256"
+                )
+    return folder / "install.ps1", folder / "udb-windows-x64.zip"
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("installer", type=Path)
     parser.add_argument("archive", type=Path)
-    parser.add_argument("--upgrade-archive", type=Path)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--upgrade-archive", type=Path)
+    mode.add_argument("--from-v013", action="store_true")
     parser.add_argument("--report", type=Path)
     args = parser.parse_args()
     installer = args.installer.resolve()
@@ -61,7 +88,12 @@ def main():
         feed = root / "feed"
         feed.mkdir()
         archive = feed / "udb-windows-x64.zip"
-        shutil.copyfile(args.archive, archive)
+        baseline_installer, baseline_archive = installer, args.archive
+        if args.from_v013:
+            baseline = root / "v0.13.0"
+            baseline.mkdir()
+            baseline_installer, baseline_archive = fetch_013_baseline(baseline)
+        shutil.copyfile(baseline_archive, archive)
         sha = hashlib.sha256(archive.read_bytes()).hexdigest()
         sums = feed / "SHA256SUMS"
         sums.write_text(sha + "  udb-windows-x64.zip\n", encoding="ascii")
@@ -103,7 +135,12 @@ def main():
                 p50_ms=round(statistics.median(durations), 3),
             )
 
-        def run_install(target=install, expect_success=True, signer_thumbprint=None):
+        def run_install(
+            target=install,
+            expect_success=True,
+            signer_thumbprint=None,
+            script=installer,
+        ):
             command = [
                 str(powershell),
                 "-NoLogo",
@@ -112,7 +149,7 @@ def main():
                 "-ExecutionPolicy",
                 "Bypass",
                 "-File",
-                str(installer),
+                str(script),
                 "-FeedUrl",
                 url,
                 "-InstallRoot",
@@ -197,12 +234,14 @@ def main():
             assert not (unsigned_target / "install.json").exists()
             assert not (unsigned_target / "bin/udb.cmd").exists()
             assert sentinel.read_text() == "existing owner data"
-            run_install()
+            run_install(script=baseline_installer)
             assert transient_downloads == ["/SHA256SUMS"]
             record_path = install / "install.json"
             first = json.loads(record_path.read_text(encoding="utf-8"))
             exe = Path(first["exe"])
             assert exe.is_file() and first["home"] == str(home)
+            if args.from_v013:
+                assert first["version"] == "0.13.0"
             link = (
                 root
                 / "test roaming profile"
@@ -343,17 +382,42 @@ def main():
             preference.write_text('{"schema":1,"mode":"offline"}')
             app("start", "--detach", "--json", "--wait", "60")
             before_mode = preference.read_bytes()
+            pairing_fixture = {}
+            if args.from_v013:
+                pairing_fixture = {
+                    home / "cloud-pairing.json": json.dumps(
+                        {"relay": "https://fixture.invalid", "device_id": "0" * 32}
+                    ).encode("ascii"),
+                    home / "cloud-device-token": b"offline-test-fixture",
+                }
+                for path, content in pairing_fixture.items():
+                    path.write_bytes(content)
             initial_identity = (
                 app("version", "--json") if args.upgrade_archive else None
             )
             if args.upgrade_archive:
                 measure_managed("onefile", first["version"])
-            publish_variant(
-                "Synthetic update test", source_archive=args.upgrade_archive
-            )
+            if args.from_v013:
+                shutil.copyfile(args.archive, archive)
+                with archive.open("rb") as stream:
+                    candidate_sha = hashlib.file_digest(stream, "sha256").hexdigest()
+                sums.write_text(
+                    candidate_sha + "  udb-windows-x64.zip\n", encoding="ascii"
+                )
+            else:
+                publish_variant(
+                    "Synthetic update test", source_archive=args.upgrade_archive
+                )
             run_install()
             second = json.loads(record_path.read_text(encoding="utf-8"))
             assert second["exe"] != first["exe"] and second["previous"] == first
+            if args.from_v013:
+                assert second["version"] == "0.14.0"
+                assert second["archive_sha256"] == candidate_sha
+                assert all(
+                    path.read_bytes() == content
+                    for path, content in pairing_fixture.items()
+                )
             assert_shortcut_uses_managed_launcher()
             if args.upgrade_archive:
                 updated_identity = app("version", "--json", image=second["exe"])
@@ -376,6 +440,12 @@ def main():
             assert rollback["home_preserved"]
             restored = json.loads(record_path.read_text(encoding="utf-8"))
             assert restored["exe"] == first["exe"]
+            if args.from_v013:
+                assert restored["version"] == "0.13.0"
+                assert all(
+                    path.read_bytes() == content
+                    for path, content in pairing_fixture.items()
+                )
             if args.upgrade_archive:
                 assert app("version", "--json") == initial_identity
             assert_shortcut_uses_managed_launcher()
@@ -434,7 +504,11 @@ public class FailedStart {
             assert compiled.returncode == 0, compiled.stdout + compiled.stderr
             old_record_bytes = record_path.read_bytes()
             old_mcp_bytes = (install / "mcp.json").read_bytes()
-            publish_variant("Synthetic startup failure", shim.read_bytes())
+            publish_variant(
+                "Synthetic startup failure",
+                shim.read_bytes(),
+                source_archive=baseline_archive,
+            )
             run_install(expect_success=False)
             assert json.loads(record_path.read_text(encoding="utf-8")) == json.loads(
                 old_record_bytes
@@ -497,6 +571,14 @@ public class FailedStart {
                 owner_access_not_granted=True,
                 user_path_not_changed_by_test=True,
             )
+            if args.from_v013:
+                report["upgrade"] = {
+                    "baseline": first["version"],
+                    "candidate": second["version"],
+                    "candidate_sha256": candidate_sha,
+                    "rollback_version": restored["version"],
+                    "offline_pairing_files_preserved": True,
+                }
             if managed_timings:
                 report["managed_startup"] = dict(
                     scope="Fresh managed cmd launcher processes on the same runner; OS/AV caches uncontrolled",

@@ -10,15 +10,21 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+REQUIRED_PUSH_WORKFLOWS = (
+    ".github/workflows/ci.yml",
+    ".github/workflows/codeql.yml",
+    ".github/workflows/runtime-audit.yml",
+)
 
-def qualifying_run(run, repository, sha):
+
+def qualifying_run(run, repository, sha, workflow):
     return (
         run.get("head_sha") == sha
         and run.get("head_branch") == "main"
         and run.get("event") == "push"
         and run.get("status") == "completed"
         and run.get("conclusion") == "success"
-        and run.get("path", "").split("@")[0] == ".github/workflows/ci.yml"
+        and run.get("path", "").split("@")[0] == workflow
         and run.get("head_repository", {}).get("full_name") == repository
     )
 
@@ -60,9 +66,15 @@ def decide(
             "publish": False,
             "reason": "Main branch is not protected; release publication blocked",
         }
-    if not any(qualifying_run(run, repository, sha) for run in runs):
+    missing = [
+        workflow
+        for workflow in REQUIRED_PUSH_WORKFLOWS
+        if not any(qualifying_run(run, repository, sha, workflow) for run in runs)
+    ]
+    if missing:
         raise ValueError(
-            "The exact main revision has no successful complete push CI run"
+            "The exact main revision has no successful complete push CI run for "
+            + ", ".join(missing)
         )
     if release_exists:
         return {"publish": False, "reason": "This version is already published"}
@@ -73,7 +85,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository", required=True)
     parser.add_argument("--sha", required=True)
-    parser.add_argument("--run-id", type=int)
     parser.add_argument(
         "--manual-unprotected",
         action="store_true",
@@ -131,13 +142,15 @@ def main():
         branch.get("protected") is True
         and branch.get("commit", {}).get("sha") == main_sha
     )
-    if args.run_id:
-        runs = [api(f"actions/runs/{args.run_id}")]
-    else:
-        runs = api(
-            f"actions/workflows/ci.yml/runs?head_sha={args.sha}&branch=main&event=push&per_page=100"
-        )["workflow_runs"]
-    release = api("releases/tags/v" + version, missing_ok=True)
+    runs = api(f"actions/runs?head_sha={args.sha}&branch=main&event=push&per_page=100")[
+        "workflow_runs"
+    ]
+    tag = "v" + version
+    release = api("releases/tags/" + tag, missing_ok=True)
+    if api("git/ref/tags/" + tag, missing_ok=True) and release is None:
+        raise ValueError(
+            f"Release tag {tag} already exists without a published release"
+        )
     result = decide(
         args.repository,
         args.sha,

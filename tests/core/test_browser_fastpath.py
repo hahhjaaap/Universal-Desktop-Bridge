@@ -11,6 +11,7 @@ import pytest
 from udb import browser_batch as batches
 from udb import browser_capture as capture
 from udb import host_client
+from udb.browser_click_postcondition import GuardedClickPhaseError
 from udb.core import Agent, PolicyError
 from udb.host_service import HostService
 from udb.resources import Governor
@@ -415,3 +416,33 @@ def test_terminal_short_click_failed_observation_is_uncertain_no_replay(
     assert "private site detail" not in json.dumps(first)
     assert runner.run(engine, browser, payload)["cached_result"]
     assert dispatch.call_count == 1
+
+
+def test_guarded_click_phase_is_returned_only_as_bounded_metadata_without_replay(
+    engine, monkeypatch
+):
+    call = Mock(side_effect=GuardedClickPhaseError("input_dispatch"))
+    monkeypatch.setattr(batches, "click_with_postcondition", call)
+    steps = [
+        {
+            "action": "click",
+            "step_id": "next",
+            "selector": "#next",
+            "click_postcondition": {
+                "selector": "#page",
+                "text": "Page 2",
+                "timeout_ms": 1500,
+            },
+        }
+    ]
+    payload = dict(args(steps, rid="guarded-phase-275"), action="fastpath")
+    runner = batches.BatchRunner()
+    first = runner.run(engine, engine.sessions[SID]["object"], payload)
+    assert not first["ok"] and first["state"] == "outcome_unknown"
+    assert first["failed_index"] == 0 and first["completed_steps"] == 0
+    assert first["results"][0]["error_phase"] == "input_dispatch"
+    assert "secret" not in json.dumps(first)
+    cached = runner.run(engine, engine.sessions[SID]["object"], payload)
+    assert cached["replayed"] is False
+    assert cached["state"] == "outcome_unknown"
+    call.assert_called_once()

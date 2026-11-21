@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 import threading
+import time
 
 import pytest
 
@@ -200,7 +201,7 @@ def live_browser(tmp_path, monkeypatch):
 
 
 def test_real_browser_click_postcondition_requires_fresh_same_document_evidence(
-    live_browser,
+    live_browser, monkeypatch
 ):
     browser, tab, fixture_url, _ = live_browser
     browser.navigate(tab, fixture_url + "postcondition")
@@ -209,10 +210,22 @@ def test_real_browser_click_postcondition_requires_fresh_same_document_evidence(
         browser, tab, "#submit", condition, None
     )
     assert not result["ok"]
-    result, document = click_with_postcondition(browser, tab, "#next", condition, None)
+    call = browser.call
+
+    def delayed_release(method, params=None, session=None, timeout=10):
+        if method == "Input.dispatchMouseEvent" and params["type"] == "mouseReleased":
+            # Native dispatch can consume time before the browser sees a click.
+            time.sleep(0.35)
+        return call(method, params, session, timeout)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(browser, "call", delayed_release)
+        result, document = click_with_postcondition(
+            browser, tab, "#next", condition, None
+        )
     assert result.get("postcondition_met") and result.get(
         "navigation_observation_limited"
-    ), result
+    ), (result, browser.evaluate(tab, "window.clicks"))
     result, _ = click_with_postcondition(browser, tab, "#next", condition, document)
     assert not result["ok"]  # Matching before input does not count as fresh evidence.
     condition["text"] = "3"

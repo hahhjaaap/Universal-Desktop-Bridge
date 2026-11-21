@@ -8,7 +8,10 @@ import secrets
 from .core import PolicyError
 
 _WORLD = "UDBClickPostcondition"
-_WATCH = """(({selector, expected, buttonSelector, url, x, y, timeout, token}) => {
+# Bound cleanup when native input never produces a trusted click. CDP calls
+# and the enclosing browser action retain their own deadlines.
+_ARM_TIMEOUT_MS = 8_000
+_WATCH = """(({selector, expected, buttonSelector, url, x, y, timeout, armTimeout, token}) => {
   const button = one(buttonSelector);
   let resolve, observer, timer, pressed = false, finished = false;
   const promise = new Promise(done => { resolve = done; });
@@ -40,8 +43,10 @@ _WATCH = """(({selector, expected, buttonSelector, url, x, y, timeout, token}) =
     if (pressed && matches()) finish(location.href === url);
   }
   function onClick(event) {
-    if (event.isTrusted && event.button === 0 && button.contains(event.target)) {
+    if (!pressed && event.isTrusted && event.button === 0 && button.contains(event.target)) {
       pressed = true;
+      clearTimeout(timer);
+      timer = setTimeout(() => finish(false), timeout);
       check();
     }
   }
@@ -52,7 +57,7 @@ _WATCH = """(({selector, expected, buttonSelector, url, x, y, timeout, token}) =
     attributes: true, characterData: true, childList: true, subtree: true
   });
   document.addEventListener('click', onClick, true);
-  timer = setTimeout(() => finish(false), timeout);
+  timer = setTimeout(() => finish(false), armTimeout);
   globalThis.udbClickWatch = {
     token, promise, cancel: () => finish(false),
     canPress: () => !finished && stillActionable() && !matches(),
@@ -130,6 +135,7 @@ def click_with_postcondition(browser, tab, selector, condition, expected_documen
             x=x,
             y=y,
             timeout=timeout,
+            armTimeout=_ARM_TIMEOUT_MS,
             token=token,
         )
     )
@@ -146,17 +152,26 @@ def click_with_postcondition(browser, tab, selector, condition, expected_documen
             f"{watch_matches} && {watch}.canPress()"
         ) is True and not channel.has_pending_navigation(session, frame_id)
 
-    if not browser._mouse_click(tab, x, y, before_press=before_press):
-        return {"ok": False, "error": "postcondition_target_changed"}, document
+    confirmed = False
     try:
-        confirmed = (
-            evaluate(f"{watch_matches} && {watch}.promise", wait=True) is True
-            and evaluate(f"{watch_matches} && {watch}.confirmed()") is True
-            and _document(browser, session) == (frame_id, loader_id)
-            and not channel.has_pending_navigation(session, frame_id)
-        )
-    except PolicyError:
-        confirmed = False
+        if not browser._mouse_click(tab, x, y, before_press=before_press):
+            return {"ok": False, "error": "postcondition_target_changed"}, document
+        try:
+            confirmed = (
+                evaluate(f"{watch_matches} && {watch}.promise", wait=True) is True
+                and evaluate(f"{watch_matches} && {watch}.confirmed()") is True
+                and _document(browser, session) == (frame_id, loader_id)
+                and not channel.has_pending_navigation(session, frame_id)
+            )
+        except PolicyError:
+            confirmed = False
+    finally:
+        if not confirmed:
+            try:
+                evaluate(f"{watch_matches} && {watch}.cancel()")
+            except PolicyError:
+                # Navigation or the action deadline can invalidate the context.
+                pass
     if confirmed:
         return dict(
             ok=True,

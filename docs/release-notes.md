@@ -27,4 +27,6 @@ udb status --json
 
 Confirm the intended device still appears in ChatGPT and validate a permitted read-only tool call. Keep the previous managed installation available for `udb rollback`. Managed updates use the existing data home. Owner grants still apply and time-limited grants can expire during an update.
 
+If the installer reports that a separate Cloud Agent still uses the data home, finish any active work, close that agent from the Windows owner session, and retry locally. After updating, reconnect with the existing data home and check the reported build from ChatGPT. Avoid rerunning any operation with an unknown outcome.
+
 GitHub build provenance and SHA-256 verification cover the ZIP, installer script and checksum file via the release workflow. The Windows executable is unsigned. See [release verification](release-security.md) for the verification policy and [v0.13.0 on GitHub](https://github.com/hahhjaaap/Universal-Desktop-Bridge/releases/tag/v0.13.0) for the previous published release.

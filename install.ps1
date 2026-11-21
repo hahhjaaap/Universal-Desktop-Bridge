@@ -103,6 +103,19 @@ function Get-AgentState([string]$Image) {
     if ($state.PSObject.Properties.Name -notcontains 'manager_running') { throw 'Cannot inspect the existing agent.' }
     return $state
 }
+function Assert-CloudAgentQuiescent([string]$Image) {
+    try {
+        $text = @(& $Image --home $DataHome status --cloud-agent-lease --json 2>$null)
+        if ($LASTEXITCODE -ne 0) { throw 'Probe failed.' }
+        $lease = ($text -join "`n") | ConvertFrom-Json
+        if ($lease.cloud_agent_lease_held -isnot [bool]) { throw 'Missing lease state.' }
+    } catch {
+        throw 'Cannot verify the Cloud Agent stopped for this data home. The active release was preserved.'
+    }
+    if ($lease.cloud_agent_lease_held) {
+        throw 'A separate Cloud Agent is still using this data home. Close that Cloud Agent on Windows before retrying the update or rollback.'
+    }
+}
 function Test-CloudflareOnlyHelp([string]$HelpText) {
     # v0.12.0 advertised live inside argparse command choices; subsequent
     # releases advertise a small set of indented "udb live" commands.
@@ -135,6 +148,19 @@ function Set-ActiveRelease($Record,$Old) {
     if ((Test-Path -LiteralPath $mcpPath) -and (Get-Item -LiteralPath $mcpPath).Length -gt 65536) { throw 'Existing MCP configuration exceeds limits.' }
     $oldMcp = if (Test-Path -LiteralPath $mcpPath) { [IO.File]::ReadAllText($mcpPath) } else { $null }
     $oldState = $null
+    $leaseProbe = $null
+    if ($Old -and $Old.exe -ne $Record.exe) {
+        Assert-Release $Old
+        $oldState = Get-AgentState $Old.exe
+        $pairingPath = Assert-LocalPath (Join-Path $DataHome 'cloud-pairing.json')
+        if (Test-Path -LiteralPath $pairingPath) {
+            # The current candidate provides the lease probe in either direction.
+            $leaseProbe = if ($Rollback) { $Old.exe } else { $Record.exe }
+            if (!$oldState.manager_running -or $oldState.connection_mode -ne 'cloudflare') {
+                Assert-CloudAgentQuiescent $leaseProbe
+            }
+        }
+    }
     $switched = $false
     $stopped = $false
     try {
@@ -142,15 +168,12 @@ function Set-ActiveRelease($Record,$Old) {
         $mcp = @(& $Record.exe --home $DataHome mcp-config)
         if ($LASTEXITCODE -ne 0) { throw 'Cannot generate MCP configuration.' }
         [void](($mcp -join "`n") | ConvertFrom-Json)
-        if ($Old -and $Old.exe -ne $Record.exe) {
-            Assert-Release $Old
-            $oldState = Get-AgentState $Old.exe
-            if ($oldState.manager_running) {
-                $stopState = (@(& $Old.exe --home $DataHome stop --wait 60 --json) -join "`n") | ConvertFrom-Json
-                if ($stopState.manager_running -or $LASTEXITCODE -ne 0) { throw 'The previous agent did not stop.' }
-                $stopped = $true
-            }
+        if ($oldState -and $oldState.manager_running) {
+            $stopState = (@(& $Old.exe --home $DataHome stop --wait 60 --json) -join "`n") | ConvertFrom-Json
+            if ($stopState.manager_running -or $LASTEXITCODE -ne 0) { throw 'The previous agent did not stop.' }
+            $stopped = $true
         }
+        if ($leaseProbe) { Assert-CloudAgentQuiescent $leaseProbe }
         Write-AtomicText $mcpPath ($mcp -join "`n")
         Write-AtomicText $recordPath ($Record | ConvertTo-Json -Depth 5 -Compress)
         $switched = $true

@@ -121,15 +121,18 @@ def test_invalid_request_id_rejected_before_any_action(tmp_path, bad):
 def test_missing_or_non_json_steps_rejected_before_any_action(tmp_path):
     for steps in (None, [], [{"action": "type", "text": object()}]):
         with pytest.raises(PolicyError):
-            run_once(tmp_path, GRANT, "bad-plan", steps, lambda: pytest.fail("no input"))
+            run_once(
+                tmp_path, GRANT, "bad-plan", steps, lambda: pytest.fail("no input")
+            )
 
 
 def test_existing_running_receipt_is_never_reexecuted(tmp_path):
     path = tmp_path / "desktop-fastpath-receipts" / GRANT
     path.mkdir(parents=True)
     digest = hashlib.sha256(
-        json.dumps(PLAN, sort_keys=True, ensure_ascii=True, separators=(",", ":"))
-        .encode("ascii")
+        json.dumps(
+            PLAN, sort_keys=True, ensure_ascii=True, separators=(",", ":")
+        ).encode("ascii")
     ).hexdigest()
     file = path / (hashlib.sha256(b"running-job").hexdigest() + ".json")
     file.write_text(

@@ -16,7 +16,9 @@ from udb.core import PolicyError
 class FakeGui:
     def __init__(self):
         self.rows = {
-            111: dict(pid=101, class_name="Chrome_WidgetWin_1", title="Chat - Google Chrome"),
+            111: dict(
+                pid=101, class_name="Chrome_WidgetWin_1", title="Chat - Google Chrome"
+            ),
             222: dict(pid=202, class_name="XLMAIN", title="Book1 - Excel"),
         }
         self.foreground = 111

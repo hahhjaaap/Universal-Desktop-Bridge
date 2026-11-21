@@ -2,6 +2,7 @@
 
 import argparse
 import io
+import json
 import subprocess
 import sys
 import time
@@ -9,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from udb import cli, host_client, onboarding, owner_command
+from udb import cli, connection, host_client, onboarding, owner_command
 
 
 def test_installer_probe_observes_only_the_selected_cloud_agent(tmp_path, capsys):
@@ -23,6 +24,47 @@ def test_installer_probe_observes_only_the_selected_cloud_agent(tmp_path, capsys
         assert cli.main(args) == 0
     assert capsys.readouterr().out == '{"cloud_agent_lease_held": true}\n'
     assert not (home / "state").exists()
+
+
+def test_old_installer_cannot_switch_a_paired_profile_with_a_separate_agent(
+    tmp_path, monkeypatch, capsys
+):
+    root = tmp_path / "program"
+    active = root / "releases" / ("a" * 24) / "udb.exe"
+    candidate = root / "releases" / ("b" * 24) / "udb.exe"
+    for image in (active, candidate):
+        image.parent.mkdir(parents=True)
+        image.touch()
+    home = tmp_path.resolve() / "data"
+    (root / "install.json").write_text(
+        json.dumps(
+            {
+                "product": "UniversalDesktopBridge",
+                "schema": 1,
+                "version": "0.13.0",
+                "archive_sha256": "a" * 64,
+                "home": str(home),
+                "exe": str(active),
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(candidate))
+    monkeypatch.setattr(onboarding, "paired_cloud", lambda _: True)
+    monkeypatch.setattr(
+        connection, "cloud_mcp_url", lambda _: "https://relay.example/mcp"
+    )
+    args = ["--home", str(home), "mcp-config"]
+    with owner_command.launch_gate(home / "cloud-agent"):
+        assert cli.main(args) == 2
+        assert "A separate Cloud Agent" in capsys.readouterr().err
+        monkeypatch.setattr(sys, "executable", str(active))
+        assert cli.main(args) == 0
+        capsys.readouterr()
+    monkeypatch.setattr(sys, "executable", str(candidate))
+    assert cli.main(args) == 0
+    assert json.loads(capsys.readouterr().out)["mcpServers"]
 
 
 class TTY(io.StringIO):

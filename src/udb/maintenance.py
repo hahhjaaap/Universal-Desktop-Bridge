@@ -61,6 +61,37 @@ def validate_record(root, record):
     regular(Path(record["home"]))
 
 
+def require_quiescent_inactive_release(home):
+    """Protect upgrades initiated by an older embedded installer via mcp-config."""
+    from .owner_command import cloud_agent_lease_held, inspect
+
+    image = Path(sys.executable).absolute()
+    if (
+        image.name != "udb.exe"
+        or not re.fullmatch(r"[a-f0-9]{24}", image.parent.name)
+        or image.parent.parent.name != "releases"
+    ):
+        return
+    root = regular(image.parent.parent.parent)
+    try:
+        record = read_object(root / "install.json", 8192)
+    except FileNotFoundError:
+        return  # The first install has no active record.
+    validate_record(root, record)
+    active = Path(record["exe"])
+    if active == image or Path(record["home"]) != home:
+        return
+
+    state = inspect(home, active)
+    if state["manager_running"] and state["connection_mode"] == "cloudflare":
+        return  # The installer stops that Manager and its owned Cloud Agent.
+    if cloud_agent_lease_held(home):
+        raise CommandError(
+            "A separate Cloud Agent is still using this data home. Close that "
+            "Cloud Agent on Windows before retrying the update."
+        )
+
+
 def latest_release():
     # Fixed public GitHub endpoint; no auth, local key, user feed or raw server errors.
     req = urllib.request.Request(

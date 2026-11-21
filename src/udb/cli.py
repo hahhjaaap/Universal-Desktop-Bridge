@@ -582,6 +582,14 @@ def _print_mcp_config(args: argparse.Namespace, settings: Settings) -> int:
 
     servers = {}
     if paired_cloud(settings.home):
+        if getattr(sys, "frozen", False):
+            from .maintenance import require_quiescent_inactive_release
+            from .owner_command import CommandError
+
+            try:
+                require_quiescent_inactive_release(settings.home)
+            except CommandError as exc:
+                raise ValueError(str(exc)) from None
         servers["universal-desktop-bridge"] = {
             "type": "streamable-http",
             "url": cloud_mcp_url(settings.home),

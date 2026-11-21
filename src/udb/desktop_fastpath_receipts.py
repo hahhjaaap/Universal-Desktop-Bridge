@@ -110,7 +110,9 @@ def run_once(state, grant_id, request_id, steps, execute):
     except FileExistsError:
         old = _read_json(path, 4096)
         if not isinstance(old, dict) or old.get("digest") != digest:
-            raise PolicyError("Desktop FastPath request_id reused for different actions")
+            raise PolicyError(
+                "Desktop FastPath request_id reused for different actions"
+            ) from None
         return _summary(old, request_id)
     try:
         with os.fdopen(handle, "w", encoding="ascii") as stream:

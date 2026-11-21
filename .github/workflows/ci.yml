@@ -154,7 +154,19 @@ jobs:
           path: ${{ runner.temp }}/udb-quick-ui/*.png
           retention-days: 3
       - name: Exercise managed update and rollback on Windows
-        run: python tools/check_installer.py install.ps1 (Get-ChildItem dist/udb-*-windows-standalone.zip | Select-Object -First 1).FullName
+        run: |
+          $archive = (Get-ChildItem dist/udb-*-windows-standalone.zip | Select-Object -First 1).FullName
+          $arguments = @('tools/check_installer.py', 'install.ps1', $archive, '--report', 'reports/installer-acceptance.json')
+          if ($archive -like '*udb-0.14.0-windows-standalone.zip') { $arguments += '--from-v013' }
+          python @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'Managed installer acceptance failed.' }
+      - name: Store managed installer acceptance report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: managed-installer-acceptance
+          path: reports/installer-acceptance.json
+          if-no-files-found: error
+          retention-days: 7
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         id: artifact_upload
         continue-on-error: true

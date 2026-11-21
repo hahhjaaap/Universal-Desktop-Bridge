@@ -2,7 +2,11 @@
 
 import pytest
 
-from tools.release_gate import authorized_manual_dispatch, decide
+from tools.release_gate import (
+    REQUIRED_PUSH_WORKFLOWS,
+    authorized_manual_dispatch,
+    decide,
+)
 
 REPOSITORY = "owner/bridge"
 SHA = "a" * 40
@@ -23,14 +27,30 @@ def run(**overrides):
     )
 
 
+def green_runs(**changes):
+    return [
+        run(**{"path": workflow, **changes}) for workflow in REQUIRED_PUSH_WORKFLOWS
+    ]
+
+
+def test_release_gate_requires_green_codeql_and_runtime_audit():
+    for workflow in REQUIRED_PUSH_WORKFLOWS:
+        runs = [r for r in green_runs() if r["path"] != workflow]
+        runs.append(run(path=workflow, conclusion="failure"))
+        with pytest.raises(ValueError, match=workflow):
+            decide(REPOSITORY, SHA, SHA, runs, False, main_protected=True)
+
+
 def test_release_gate_skips_existing_version_and_superseded_commit():
-    assert decide(REPOSITORY, SHA, SHA, [run()], False, main_protected=True)["publish"]
-    assert not decide(REPOSITORY, SHA, SHA, [run()], True, main_protected=True)[
+    assert decide(REPOSITORY, SHA, SHA, green_runs(), False, main_protected=True)[
         "publish"
     ]
-    assert not decide(REPOSITORY, SHA, "b" * 40, [run()], False, main_protected=True)[
+    assert not decide(REPOSITORY, SHA, SHA, green_runs(), True, main_protected=True)[
         "publish"
     ]
+    assert not decide(
+        REPOSITORY, SHA, "b" * 40, green_runs(), False, main_protected=True
+    )["publish"]
 
 
 @pytest.mark.parametrize(
@@ -47,19 +67,21 @@ def test_release_gate_skips_existing_version_and_superseded_commit():
 )
 def test_release_gate_rejects_incomplete_failed_or_unrelated_ci(changes):
     with pytest.raises(ValueError, match="no successful"):
-        decide(REPOSITORY, SHA, SHA, [run(**changes)], False, main_protected=True)
+        decide(REPOSITORY, SHA, SHA, green_runs(**changes), False, main_protected=True)
 
 
 def test_release_gate_blocks_automatic_publication_on_unprotected_main():
-    result = decide(REPOSITORY, SHA, SHA, [run()], False, main_protected=False)
+    result = decide(REPOSITORY, SHA, SHA, green_runs(), False, main_protected=False)
     assert result["publish"] is False
     assert "not protected" in result["reason"]
 
 
 def test_release_gate_requires_explicit_protection_before_publication():
-    assert decide(REPOSITORY, SHA, SHA, [run()], False)["publish"] is False
+    assert decide(REPOSITORY, SHA, SHA, green_runs(), False)["publish"] is False
     assert (
-        decide(REPOSITORY, SHA, SHA, [run()], False, main_protected=True)["publish"]
+        decide(REPOSITORY, SHA, SHA, green_runs(), False, main_protected=True)[
+            "publish"
+        ]
         is True
     )
 
@@ -70,7 +92,7 @@ def test_manual_unprotected_release_accepts_only_exact_green_main():
         REPOSITORY,
         SHA,
         SHA,
-        [run()],
+        green_runs(),
         False,
         main_protected=False,
         allow_unprotected_manual=True,
@@ -79,7 +101,7 @@ def test_manual_unprotected_release_accepts_only_exact_green_main():
         REPOSITORY,
         SHA,
         "b" * 40,
-        [run()],
+        green_runs(),
         False,
         main_protected=False,
         allow_unprotected_manual=True,
@@ -88,7 +110,7 @@ def test_manual_unprotected_release_accepts_only_exact_green_main():
         REPOSITORY,
         SHA,
         SHA,
-        [run()],
+        green_runs(),
         True,
         main_protected=False,
         allow_unprotected_manual=True,
@@ -113,7 +135,7 @@ def test_manual_unprotected_cannot_skip_ci(changes):
             REPOSITORY,
             SHA,
             SHA,
-            [run(**changes)],
+            green_runs(**changes),
             False,
             allow_unprotected_manual=True,
         )
@@ -139,6 +161,14 @@ def test_release_workflow_requires_explicit_manual_confirmation():
     assert "tools/check_frozen.py" in workflow
     assert "tools/check_installer.py" in workflow
     assert "tools/check_public_installer.py" in workflow
+    assert "inputs.confirm_release_acceptance == true" in workflow
+    assert "needs: build" in workflow
+    assert (
+        workflow.index("actions/attest-build-provenance@")
+        < workflow.index("gh attestation verify")
+        < workflow.index("gh release create")
+        < workflow.index("tools/check_public_installer.py")
+    )
 
 
 def test_owner_initiated_manual_dispatch_on_main_is_allowed():

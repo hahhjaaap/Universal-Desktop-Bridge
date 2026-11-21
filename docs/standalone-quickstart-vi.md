@@ -1,13 +1,6 @@
 # Khởi động UDB qua Cloudflare
 
-> **UDB 0.12.0 documentation review (2026-11-13):** Current source targets UDB 0.12.0; installed Windows releases and deployed Cloudflare services must be verified independently. See [version/status](current-version.md).
-
-**Lưu ý bản cài:** Mã nguồn `main` ngày 13/11/2026 đã có các thay đổi dọn
-Tunnel/Aura và sửa bước kiểm thử Qt trên Windows, nhưng bản Windows phát hành
-`v0.12.0` ngày 11/11/2026 không tự cập nhật theo các commit đó. Xác minh
-`udb --version`, `udb version --json` và [trạng thái phát hành](release-security.md)
-trước khi cài hoặc nâng cấp. Quy trình phát hành mới đang bị chặn an toàn
-khi nhánh GitHub `main` chưa được bật bảo vệ.
+Trước khi cài hoặc nâng cấp, xem [phiên bản Windows đang phát hành](current-version.md) và [cách xác minh tệp cài](release-security.md). Sau khi cài, chạy `udb version --json` để kiểm tra phiên bản và mã bản dựng trên máy.
 
 Chạy trong PowerShell trên **chính máy Windows** với tài khoản chủ máy (chỉ
 thực hiện ghép nối khi người dùng có mặt):

@@ -7,23 +7,30 @@ on:
         required: true
         type: boolean
         default: false
+      confirm_release_acceptance:
+        description: "I reviewed the Windows upgrade, pairing, rollback and end-to-end acceptance evidence"
+        required: true
+        type: boolean
+        default: false
 permissions: {}
 concurrency:
   group: one-command-windows-release
   cancel-in-progress: false
 jobs:
-  release:
+  build:
     permissions:
-      contents: write
+      contents: read
       actions: read
-      id-token: write
-      attestations: write
+    outputs:
+      publish: ${{ steps.gate.outputs.publish }}
+      version: ${{ steps.gate.outputs.version }}
     if: >-
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main' &&
       github.actor == github.repository_owner &&
       github.triggering_actor == github.repository_owner &&
-      inputs.confirm_unprotected_release == true
+      inputs.confirm_unprotected_release == true &&
+      inputs.confirm_release_acceptance == true
     runs-on: windows-latest
     timeout-minutes: 40
     env:
@@ -32,8 +39,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ env.UDB_RELEASE_SHA }}
-          # No long-lived write-scoped GITHUB_TOKEN in .git/config while pip
-          # resolves/builds third-party Python dependencies.
           persist-credentials: false
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
@@ -61,7 +66,10 @@ jobs:
         run: |
           python tools/check_frozen.py dist/udb.exe --expected-revision "$env:UDB_RELEASE_SHA"
           if ($LASTEXITCODE -ne 0) { throw 'Frozen acceptance failed.' }
-          python tools/check_installer.py install.ps1 dist/udb-${{ steps.gate.outputs.version }}-windows-standalone.zip
+          $version = '${{ steps.gate.outputs.version }}'
+          $arguments = @('tools/check_installer.py', 'install.ps1', "dist/udb-$version-windows-standalone.zip")
+          if ($version -eq '0.14.0') { $arguments += '--from-v013' }
+          python @arguments
           if ($LASTEXITCODE -ne 0) { throw 'Installer acceptance failed.' }
       - name: Prepare download assets
         if: steps.gate.outputs.publish == 'true'
@@ -73,35 +81,101 @@ jobs:
           $hash = (Get-FileHash dist/udb-windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
           [IO.File]::WriteAllText((Join-Path $PWD 'dist/SHA256SUMS'),$hash + '  udb-windows-x64.zip' + "`n",[Text.Encoding]::ASCII)
           Copy-Item install.ps1 dist/install.ps1 -Force
-      - name: Recheck main and publish immutable versioned assets
+      - name: Store only validated release assets
         if: steps.gate.outputs.publish == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: validated-release-assets
+          path: |
+            dist/udb-windows-x64.zip
+            dist/SHA256SUMS
+            dist/install.ps1
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: build
+    if: needs.build.outputs.publish == 'true'
+    permissions:
+      contents: write
+      actions: read
+      id-token: write
+      attestations: write
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      UDB_RELEASE_SHA: ${{ github.sha }}
+      UDB_RELEASE_VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.UDB_RELEASE_SHA }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: validated-release-assets
+          path: dist
+      - name: Check release ZIP checksum and installer source
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash dist/udb-windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ((Get-Content -Raw dist/SHA256SUMS).Trim() -cne "$hash  udb-windows-x64.zip") {
+            throw 'Release ZIP SHA-256 mismatch.'
+          }
+          if ((Get-FileHash dist/install.ps1).Hash -ne (Get-FileHash install.ps1).Hash) {
+            throw 'Release installer differs from checked-out source.'
+          }
+      - name: Attest the exact release assets before publication
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-path: |
+            dist/udb-windows-x64.zip
+            dist/SHA256SUMS
+            dist/install.ps1
+      - name: Verify provenance for the exact main revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          foreach ($asset in @('udb-windows-x64.zip', 'SHA256SUMS', 'install.ps1')) {
+            gh attestation verify "dist/$asset" --repo "$env:GITHUB_REPOSITORY" `
+              --signer-workflow "$env:GITHUB_REPOSITORY/.github/workflows/one-command-release.yml" `
+              --source-ref refs/heads/main --source-digest "$env:UDB_RELEASE_SHA"
+            if ($LASTEXITCODE -ne 0) { throw "Release provenance verification failed for $asset." }
+          }
+      - name: Recheck main and publish the verified release assets
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          UDB_RELEASE_VERSION: ${{ steps.gate.outputs.version }}
         run: |
           $arguments = @('tools/release_gate.py', '--repository', $env:GITHUB_REPOSITORY, '--sha', $env:UDB_RELEASE_SHA, '--manual-unprotected')
           $gateJson = python @arguments
           if ($LASTEXITCODE -ne 0) { throw 'Final release CI gate failed.' }
           $gate = $gateJson | ConvertFrom-Json
           if (-not $gate.publish) { throw $gate.reason }
+          if ($gate.version -cne $env:UDB_RELEASE_VERSION) { throw 'Release version changed.' }
           $tag = 'v' + $env:UDB_RELEASE_VERSION
           gh release create $tag dist/udb-windows-x64.zip dist/SHA256SUMS dist/install.ps1 --target "$env:UDB_RELEASE_SHA" --title "UDB $env:UDB_RELEASE_VERSION" --notes-file docs/release-notes.md
           if ($LASTEXITCODE -ne 0) { throw 'Release publication failed.' }
-      - name: Verify the newly published HTTPS installer
-        if: steps.gate.outputs.publish == 'true'
-        run: python tools/check_public_installer.py --release-tag v${{ steps.gate.outputs.version }} --report reports/public-installer.json
+      - name: Verify the published tag and HTTPS installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tagCommit = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/v$env:UDB_RELEASE_VERSION" --jq '.object.sha'
+          if ($LASTEXITCODE -ne 0 -or $tagCommit -cne $env:UDB_RELEASE_SHA) {
+            throw 'Published tag does not point to the approved release commit.'
+          }
+          python tools/check_public_installer.py --release-tag "v$env:UDB_RELEASE_VERSION" --expected-revision "$env:UDB_RELEASE_SHA" --expected-assets-dir dist --report reports/public-installer.json
+          if ($LASTEXITCODE -ne 0) { throw 'Release is public, but HTTPS installer verification failed. See the release run before installing.' }
       - name: Retain public installer acceptance report
-        if: always() && steps.gate.outputs.publish == 'true'
+        if: always()
         continue-on-error: true
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-installer-acceptance
           path: reports/public-installer.json
           retention-days: 7
-      - name: Attest the exact Windows release ZIP
-        if: steps.gate.outputs.publish == 'true'
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
-        with:
-          subject-path: dist/udb-windows-x64.zip

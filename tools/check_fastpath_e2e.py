@@ -21,10 +21,11 @@ TOP_FIELDS = {
     "environment",
     "revisions",
     "fixture_sha256",
+    "worker_revision",
     "safety_checks",
     "trials",
 }
-TRIAL_FIELDS = {"variant", "request_id", "elapsed_ms", "outcome"}
+TRIAL_FIELDS = {"sequence", "variant", "request_id", "elapsed_ms", "outcome"}
 
 
 def _is_hex(value: object, length: int) -> bool:
@@ -72,12 +73,13 @@ def evaluate(report, *, baseline_sha, candidate_sha, profile):
         not isinstance(report, dict)
         or set(report) != TOP_FIELDS
         or type(report["schema_version"]) is not int
-        or report["schema_version"] != 1
+        or report["schema_version"] != 2
         or report["scope"] != "chatgpt-cloudflare-windows"
         or report["environment"] != "isolated-staging"
         or not _is_hex(report["fixture_sha256"], 64)
+        or not _is_hex(report["worker_revision"], 8)
     ):
-        raise ValueError("Expected a version 1 isolated end-to-end evidence report.")
+        raise ValueError("Expected a version 2 isolated end-to-end evidence report with a pinned Worker revision.")
     if report["revisions"] != {"baseline": baseline_sha, "candidate": candidate_sha}:
         raise ValueError("Evidence revisions do not match the expected builds.")
 
@@ -93,10 +95,12 @@ def evaluate(report, *, baseline_sha, candidate_sha, profile):
 
     seen = set()
     groups = {variant: [] for variant in VARIANTS}
-    for trial in report["trials"]:
+    for index, trial in enumerate(report["trials"]):
         if (
             not isinstance(trial, dict)
             or set(trial) != TRIAL_FIELDS
+            or type(trial["sequence"]) is not int
+            or trial["sequence"] != index
             or trial["variant"] not in VARIANTS
             or trial["outcome"] not in OUTCOMES
             or not isinstance(trial["request_id"], str)
@@ -111,12 +115,23 @@ def evaluate(report, *, baseline_sha, candidate_sha, profile):
         groups[trial["variant"]].append(trial)
 
     metrics = {variant: _metrics(groups[variant]) for variant in VARIANTS}
+    pair_orders = []
+    interleaved = len(report["trials"]) >= 2 and len(report["trials"]) % 2 == 0
+    for offset in range(0, len(report["trials"]), 2):
+        pair = report["trials"][offset : offset + 2]
+        if len(pair) != 2 or pair[0]["variant"] == pair[1]["variant"]:
+            interleaved = False
+            continue
+        pair_orders.append("{}-{}".format(pair[0]["variant"], pair[1]["variant"]))
     baseline = metrics["baseline"]["p95_ms"]
     candidate = metrics["candidate"]["p95_ms"]
     checks = {
         "minimum_samples_per_build": all(
             row["attempts"] >= MIN_TRIALS for row in metrics.values()
         ),
+        "interleaved_order": interleaved,
+        "both_ab_and_ba_order": set(pair_orders)
+        == {"baseline-candidate", "candidate-baseline"},
         "candidate_p95_at_most_6_seconds": (
             candidate is not None and candidate <= TARGET_P95_MS
         ),

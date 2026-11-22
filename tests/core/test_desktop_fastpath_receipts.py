@@ -153,8 +153,6 @@ def test_existing_running_receipt_is_never_reexecuted(tmp_path):
     assert report["outcome_unknown"] and report["state"] == "running"
     assert report["replayed"] is False
 
-
-
 def test_concurrent_duplicate_request_never_enters_input_lane_twice(tmp_path):
     entered = threading.Event()
     release = threading.Event()
@@ -172,7 +170,9 @@ def test_concurrent_duplicate_request_never_enters_input_lane_twice(tmp_path):
 
     def first_call():
         try:
-            first_result.append(run_once(tmp_path, GRANT, "concurrent-job", PLAN, execute))
+            first_result.append(
+                run_once(tmp_path, GRANT, "concurrent-job", PLAN, execute)
+            )
         except Exception as exc:  # pragma: no cover - asserted below
             first_error.append(exc)
 

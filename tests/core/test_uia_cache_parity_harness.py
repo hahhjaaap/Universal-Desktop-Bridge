@@ -83,3 +83,55 @@ def test_dynamic_transition_rejects_a_stale_persistent_worker_snapshot():
 def test_dynamic_warm_validates_fixture_size_before_windows_access():
     with pytest.raises(ValueError, match="Allowed fixture sizes"):
         canary.compare_dynamic_warm(49, 1)
+
+
+
+def test_dynamic_replacement_requires_old_child_and_automation_id_to_disappear():
+    before = {
+        "ok": True,
+        "elements": [
+            {
+                "name": "UDB_DYNAMIC_BEFORE",
+                "automation_id": "FixtureDynamicTarget",
+            }
+        ],
+    }
+    after = {
+        "ok": True,
+        "elements": [
+            {
+                "name": "UDB_DYNAMIC_REPLACED",
+                "automation_id": "FixtureDynamicReplacement",
+            }
+        ],
+    }
+    canary._check_dynamic_replacement(before, after)
+    with pytest.raises(AssertionError, match="removed control value"):
+        canary._check_dynamic_replacement(before, before)
+    stale_identity = {
+        "ok": True,
+        "elements": [
+            {
+                "name": "UDB_DYNAMIC_REPLACED",
+                "automation_id": "FixtureDynamicTarget",
+            }
+        ],
+    }
+    with pytest.raises(AssertionError, match="removed automation ID"):
+        canary._check_dynamic_replacement(before, stale_identity)
+
+
+def test_dynamic_replacement_rejects_invalid_mutation_before_fixture_access():
+    with pytest.raises(ValueError, match="Dynamic mutation"):
+        canary.compare_dynamic_warm(50, 1, mutation="delete")
+
+
+def test_dynamic_fixture_replacement_disposes_old_control_before_adding_new_one():
+    fixture = (
+        canary.FIXTURE.read_text(encoding="utf-8")
+    )
+    assert "[ValidateSet('rename','replace')]" in fixture
+    assert "$panel.Controls.Remove($target)" in fixture
+    assert "$target.Dispose()" in fixture
+    assert "$replacement.Name='FixtureDynamicReplacement'" in fixture
+    assert "$replacement.AccessibleName='UDB_DYNAMIC_REPLACED'" in fixture

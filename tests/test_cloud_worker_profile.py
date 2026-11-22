@@ -164,9 +164,9 @@ def test_admission_limit_follows_memory_pressure_without_cancelling_inflight(
     values = [2, 1, 4]
     samples = []
     monkeypatch.setattr(
-        remote_task_scheduler.time,
-        "monotonic",
-        lambda: clock["now"],
+        remote_task_scheduler,
+        "time",
+        SimpleNamespace(monotonic=lambda: clock["now"]),
     )
 
     def sample():
@@ -215,7 +215,9 @@ def test_failed_adaptive_sampling_fails_small_and_never_expands_above_max(
         return 99
 
     monkeypatch.setattr(
-        remote_task_scheduler.time, "monotonic", lambda: clock["now"]
+        remote_task_scheduler,
+        "time",
+        SimpleNamespace(monotonic=lambda: clock["now"]),
     )
     scheduler = remote_task_scheduler.DeviceTaskScheduler(
         max_tasks=2, adaptive_limit=sample

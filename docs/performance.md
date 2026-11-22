@@ -2,6 +2,47 @@
 
 > **Historical evidence:** Earlier run counts/benchmarks are not current UDB 0.12.0 CI results. The UDB Aura extension is retired from source. See [version/status](current-version.md).
 
+## Low-memory Cloud RPC admission profile (opt-in)
+
+For 4-core/4-thread Intel i5-6500 Windows customers with approximately 8 GiB
+RAM, start with **two** concurrent Cloud RPC workers rather than assuming the
+10-worker ceiling is desirable. The correct count is workload-dependent:
+compare 1, 2 and 3 read-only workers on an actual target PC before calling
+any setting optimal. CPU and RAM alone cannot predict network, Windows
+Defender, Excel/browser memory, or downstream UDB worker costs.
+
+Set `UDB_CLOUD_WORKER_PROFILE=auto` in the **Cloud Agent process
+environment** to choose a bounded value once per WebSocket connection.
+The Windows-only startup snapshot uses total/available physical memory
+and logical CPU count; missing/invalid measurements fall back conservatively
+to at most two workers. The policy starts 8 GiB hosts at two workers and
+reduces to one if available RAM is below 2 GiB. It reserves one logical CPU
+for other work, caps 16 GiB hosts at four workers, and never exceeds the
+existing hard ceiling of ten. The chosen count bounds **both** ThreadPoolExecutor
+threads and DeviceTaskScheduler admission.
+
+An explicit `UDB_CLOUD_MAX_RPC_WORKERS=1..10` always takes precedence over
+the auto profile, allowing controlled 1/2/3-worker benchmark runs. Without
+either setting, the original ten-worker upper bound remains unchanged.
+Invalid profile values fail during initialization rather than falling back
+silently. This controls Cloud RPC dispatch only; it is **not** a global memory
+limit on subprocesses, background jobs, browser tabs or Excel workloads,
+nor does it alter owner permissions or the exclusive desktop lane.
+
+On an 8 GiB device, keep `UDB_CLOUD_PREWARM` disabled initially; optionally
+test `UDB_SHARED_STATUS_PROXY=1` when repeated `bridge_status` requests
+would otherwise launch separate stdio workers. Shared status trades some
+status-request concurrency for lower process startup/memory pressure.
+Do not enable all optimizations at once before testing separately.
+
+**Acceptance on an actual customer-equivalent 8 GiB Windows machine:** test
+1/2/3 RPC budgets on identical read-only fixtures with the same build and
+Cloudflare path, 30–50 measured trials for each, randomized or interleaved.
+Compare verified p50/p95, RSS/commit peak, available RAM minimum, CPU load,
+rejected/busy responses and failures. Choose the fastest **safe** count that
+leaves the desktop responsive and avoids paging, not the largest count.
+No live 8 GiB result or 5–6 second speed claim is implied by the unit tests.
+
 ## Optional Cloud Agent prewarm (experimental)
 
 On `HAHHJAAAP` (2026-11-15), an isolated MCP sidecar took **2,960 ms**

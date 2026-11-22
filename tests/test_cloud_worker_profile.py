@@ -95,12 +95,12 @@ def test_auto_detect_uses_local_ram_and_cpu_snapshot_only(monkeypatch):
 def test_invalid_profile_fails_closed_before_startup(monkeypatch):
     monkeypatch.setenv("UDB_CLOUD_WORKER_PROFILE", "full")
     monkeypatch.delenv("UDB_CLOUD_MAX_RPC_WORKERS", raising=False)
-    with pytest.raises(ValueError, match="must be auto or unset"):
+    with pytest.raises(ValueError, match="must be auto or legacy"):
         cloud_agent.ParallelLocalProxies(SimpleNamespace())
 
 
-def test_existing_default_is_unchanged_when_profile_not_selected(monkeypatch):
-    monkeypatch.delenv("UDB_CLOUD_WORKER_PROFILE", raising=False)
+def test_explicit_legacy_profile_restores_previous_worker_budget(monkeypatch):
+    monkeypatch.setenv("UDB_CLOUD_WORKER_PROFILE", "legacy")
     monkeypatch.delenv("UDB_CLOUD_MAX_RPC_WORKERS", raising=False)
     pool = cloud_agent.ParallelLocalProxies(SimpleNamespace())
     try:
@@ -120,3 +120,113 @@ def test_windows_physical_memory_probe_smoke():
     assert type(total) is int and type(available) is int
     assert 0 <= available <= total
     assert total >= GIB
+
+def test_windows_default_selects_automatic_budget(monkeypatch):
+    monkeypatch.delenv("UDB_CLOUD_WORKER_PROFILE", raising=False)
+    monkeypatch.delenv("UDB_CLOUD_MAX_RPC_WORKERS", raising=False)
+    monkeypatch.setattr(
+        cloud_agent, "os", SimpleNamespace(name="nt", environ=cloud_worker_profile.os.environ)
+    )
+    monkeypatch.setattr(cloud_agent, "local_worker_budget", lambda: 2)
+    assert cloud_agent.worker_profile() == "auto"
+    assert cloud_agent.cloud_rpc_worker_limit() == 2
+
+
+def test_non_windows_default_keeps_legacy_behavior(monkeypatch):
+    monkeypatch.delenv("UDB_CLOUD_WORKER_PROFILE", raising=False)
+    monkeypatch.delenv("UDB_CLOUD_MAX_RPC_WORKERS", raising=False)
+    monkeypatch.setattr(
+        cloud_agent, "os", SimpleNamespace(name="posix", environ=cloud_worker_profile.os.environ)
+    )
+    assert cloud_agent.worker_profile() == "legacy"
+    assert cloud_agent.cloud_rpc_worker_limit() == 10
+
+
+def test_manual_worker_override_suspends_auto_resampling(monkeypatch):
+    monkeypatch.setenv("UDB_CLOUD_WORKER_PROFILE", "auto")
+    monkeypatch.setenv("UDB_CLOUD_MAX_RPC_WORKERS", "3")
+    monkeypatch.setattr(cloud_agent, "local_worker_budget", lambda: 1)
+    pool = cloud_agent.ParallelLocalProxies(SimpleNamespace())
+    try:
+        assert pool.max_rpc_workers == 3
+        assert pool.auto_worker_budget is False
+        assert pool.scheduler.adaptive_limit is None
+    finally:
+        pool.close()
+
+
+def test_admission_limit_follows_memory_pressure_without_cancelling_inflight(
+    monkeypatch,
+):
+    from udb import remote_task_scheduler
+
+    clock = {"now": 100.0}
+    values = [2, 1, 4]
+    samples = []
+    monkeypatch.setattr(
+        remote_task_scheduler.time,
+        "monotonic",
+        lambda: clock["now"],
+    )
+
+    def sample():
+        result = values[len(samples)]
+        samples.append(result)
+        return result
+
+    scheduler = remote_task_scheduler.DeviceTaskScheduler(
+        max_tasks=4, adaptive_limit=sample
+    )
+    assert scheduler.admit("read")
+    assert scheduler.admit("read")
+    assert not scheduler.admit("read")
+    assert len(samples) == 1
+    clock["now"] += 5.1
+    assert not scheduler.admit("read")
+    assert scheduler.admission_limit == 1
+    assert scheduler.inflight == 2, "Active RPCs must not be cancelled or replayed"
+    scheduler.release("read")
+    assert not scheduler.admit("read"), "Still one running over the new limit"
+    scheduler.release("read")
+    assert scheduler.admit("read")
+    clock["now"] += 5.1
+    assert scheduler.admit("read")
+    assert scheduler.admit("read")
+    assert scheduler.admit("read")
+    assert not scheduler.admit("read")
+    for _ in range(4):
+        scheduler.release("read")
+    assert scheduler.inflight == 0
+    assert samples == [2, 1, 4]
+
+
+def test_failed_adaptive_sampling_fails_small_and_never_expands_above_max(
+    monkeypatch,
+):
+    from udb import remote_task_scheduler
+
+    clock = {"now": 100.0}
+    count = {"n": 0}
+
+    def sample():
+        count["n"] += 1
+        if count["n"] == 1:
+            raise OSError("Memory sample unavailable")
+        return 99
+
+    monkeypatch.setattr(
+        remote_task_scheduler.time, "monotonic", lambda: clock["now"]
+    )
+    scheduler = remote_task_scheduler.DeviceTaskScheduler(
+        max_tasks=2, adaptive_limit=sample
+    )
+    assert scheduler.admit("read")
+    assert not scheduler.admit("read")
+    scheduler.release("read")
+    clock["now"] += 5.1
+    assert scheduler.admit("read")
+    assert scheduler.admit("read")
+    assert not scheduler.admit("read")
+    scheduler.release("read")
+    scheduler.release("read")
+    assert count["n"] == 2

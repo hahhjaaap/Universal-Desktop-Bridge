@@ -358,10 +358,21 @@ def test_browser_semantic_click_uses_accessible_role_and_name():
     assert "locator_not_unique" in captured["expression"]
     assert "scrollIntoView" in captured["expression"]
     assert "elementFromPoint" in captured["expression"]
+    activation = next(call for call in calls if call[0] == "Target.activateTarget")
+    assert activation[1] == {"targetId": "owned-tab"} and activation[2] is None
+    assert calls.index(activation) < next(
+        index
+        for index, call in enumerate(calls)
+        if call[0] == "Input.dispatchMouseEvent"
+    )
     assert [
         call[1]["type"] for call in calls if call[0] == "Input.dispatchMouseEvent"
     ] == ["mouseMoved", "mousePressed", "mouseReleased"]
-    assert all(call[2] == "owned-session" for call in calls)
+    assert all(
+        call[2] == "owned-session"
+        for call in calls
+        if call[0] != "Target.activateTarget"
+    )
 
 
 def test_browser_snapshot_is_bounded_and_redacts_secret_controls():
@@ -550,16 +561,19 @@ def test_browser_press_focuses_owned_element_then_dispatches_cdp_key():
     result = browser.press("owned-tab", "Enter", role="button", name="Continue")
     assert result["ok"]
     assert [item[0] for item in calls] == [
+        "Target.activateTarget",
         "Input.dispatchKeyEvent",
         "Input.dispatchKeyEvent",
     ]
-    assert calls[0][1]["type"] == "keyDown" and calls[1][1]["type"] == "keyUp"
-    assert all(item[2] == "owned-session" for item in calls)
+    assert calls[0][1] == {"targetId": "owned-tab"} and calls[0][2] is None
+    assert calls[1][1]["type"] == "keyDown" and calls[2][1]["type"] == "keyUp"
+    assert all(item[2] == "owned-session" for item in calls[1:])
     calls.clear()
     result = browser.press("owned-tab", "a", role="textbox", name="Search")
     assert result["ok"]
-    assert calls[0][1]["text"] == "a"
-    assert "text" not in calls[1][1] and "unmodifiedText" not in calls[1][1]
+    assert calls[0][0] == "Target.activateTarget"
+    assert calls[1][1]["text"] == "a"
+    assert "text" not in calls[2][1] and "unmodifiedText" not in calls[2][1]
 
 
 def test_browser_select_option_requires_native_select_and_verifies_selection():

@@ -83,7 +83,13 @@ def parse_key(value):
 class BrowserInputMixin:
     """Input methods shared by the UDB-owned browser; no OS cursor takeover."""
 
+    def _activate_target(self, tab):
+        """Activate only a tab already attached to this UDB-owned browser."""
+        self.sid(tab)
+        self.call("Target.activateTarget", dict(targetId=tab), timeout=2)
+
     def _mouse_click(self, tab, x, y, *, before_press=None):
+        self._activate_target(tab)
         self._show_identity(tab, x, y)
         session = self.sid(tab)
         point = dict(x=float(x), y=float(y))
@@ -122,6 +128,7 @@ class BrowserInputMixin:
 
     def press(self, tab, key, selector="", role="", name="", exact=True):
         info = parse_key(key)
+        self._activate_target(tab)
         body = """if(e.matches(':disabled')||e.getAttribute('aria-disabled')==='true'||isInert(e))return {ok:false,error:'disabled'};
           if(typeof e.focus!=='function')return {ok:false,error:'not_focusable'};e.focus();
           return {ok:document.activeElement===e||e.contains(document.activeElement),error:'not_focusable'};"""
@@ -174,6 +181,7 @@ class BrowserInputMixin:
             or not -2000 <= y <= 2000
         ):
             raise PolicyError("Browser scroll deltas must be integers in -2000..2000")
+        self._activate_target(tab)
         session = self.sid(tab)
         metrics = self.call("Page.getLayoutMetrics", session=session, timeout=2)
         viewport = (

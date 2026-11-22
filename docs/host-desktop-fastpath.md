@@ -158,6 +158,10 @@ silently when deriving an app-specific workflow.
   to re-run the input.
 - open_chrome_tab success means a tab was requested, not that a page finished
   loading. Verify through wait_window and UIA observations.
+- Before CDP mouse, keyboard, or wheel input, the owned browser activates the
+  exact already-attached target inside its private headless profile. If target
+  activation fails, input is not dispatched. This never activates or attaches
+  to personal Chrome and does not move the operating-system cursor.
 - Ranked UIA selection chooses the topmost eligible control inside a unique
   observed accessible container, and invoke still demands a unique exact
   control identity. It is not equivalent to arbitrary personal-Chrome DOM

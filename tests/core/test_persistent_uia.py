@@ -398,7 +398,7 @@ def test_33_wait_for_revalidates_hwnd_pid_and_runtime_identity():
         Path(__file__).parents[2] / "src" / "udb" / "computer_uia.ps1"
     ).read_text(encoding="utf-8-sig")
     start = script.index("        if($r.mode -eq 'wait_for')")
-    end = script.index("        if($r.mode -eq 'snapshot')", start)
+    end = script.index("        $matches=$root.FindAll", start)
     wait_block = script[start:end]
     assert "FromHandle([IntPtr]$r.hwnd)" in wait_block
     assert "$liveRoot.Current.ProcessId -ne [int]$r.pid" in wait_block

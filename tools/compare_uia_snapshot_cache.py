@@ -276,9 +276,12 @@ def compare_dynamic_warm(size: int, samples: int = 10, *, worker_factory=None) -
     with tempfile.TemporaryDirectory(prefix="udb-uia-dynamic-") as folder:
         signal = Path(folder) / "changed.json"
         trigger = Path(folder) / "trigger"
-        with _fixture(
-            size, dynamic_signal_path=signal, dynamic_trigger_path=trigger
-        ) as form, ExitStack() as cleanup:
+        with (
+            _fixture(
+                size, dynamic_signal_path=signal, dynamic_trigger_path=trigger
+            ) as form,
+            ExitStack() as cleanup,
+        ):
             request = {"mode": "snapshot", "hwnd": form["hwnd"], "pid": form["pid"]}
             workers = {}
             executable = _powershell()

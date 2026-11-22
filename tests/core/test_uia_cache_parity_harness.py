@@ -70,3 +70,16 @@ def test_warm_comparison_reuses_private_workers_and_checks_parity(
         assert [worker.calls for worker in workers] == [3, 3]
     assert all(worker.closed for worker in workers)
     assert os.environ.get("UDB_UIA_SNAPSHOT_CACHE") == original
+
+
+def test_dynamic_transition_rejects_a_stale_persistent_worker_snapshot():
+    before = {"ok": True, "elements": [{"name": "UDB_DYNAMIC_BEFORE"}]}
+    after = {"ok": True, "elements": [{"name": "UDB_DYNAMIC_AFTER"}]}
+    canary._check_dynamic_transition(before, after)
+    with pytest.raises(AssertionError, match="stale control value"):
+        canary._check_dynamic_transition(before, before)
+
+
+def test_dynamic_warm_validates_fixture_size_before_windows_access():
+    with pytest.raises(ValueError, match="Allowed fixture sizes"):
+        canary.compare_dynamic_warm(49, 1)

@@ -24,10 +24,12 @@ computer-access grant. The runner persists a payload-free `running` receipt
 - Reissuing the **same request_id and same plan** returns receipt metadata
   (completed/failed/unknown), **never runs input a second time**.
 - Reusing a request_id with a different plan is rejected.
+- Concurrent callers with the same request ID cannot enter the input lane twice: the first caller creates the exclusive `running` receipt before dispatch; a concurrent duplicate only observes that receipt and is reported as uncertain until the first caller finalizes it.
 - The receipt stores plan digests and bounded status only — never UI text,
   screenshots, typed content or URLs.
 - A crash, lost reply or uncertain mutation leaves an outcome-unknown receipt
   until independently inspected. Do not invent a fresh ID to replay writes.
+- A subprocess-crash regression now terminates immediately after the fixture enters its input callback, then starts a new process with the same request ID and proves the durable `running` receipt prevents a second dispatch.
 - This protects against the dangerous replay case but is **not transaction
   rollback** and cannot itself determine whether an external app committed.
 - Each grant has a bounded count of receipts; a new grant does not confer
@@ -181,3 +183,16 @@ Track host-internal batch execution, MCP/Cloudflare round-trip wall time,
 and verified end-to-end completion separately. Test multiple runs under
 known machine load. Target p95 <= 6 seconds is a benchmark goal, not a
 claim about this experimental feature.
+
+## Native semantic UIA canary
+
+Windows regression CI also starts a test-owned WinForms window with one exact
+results container and two similarly named buttons. The native UIA helper must
+select the topmost eligible result and invoke only that button. The test
+performs 30 separate selection/invocation/readback cycles against the fixture,
+then checks an overlapping-control case is rejected before any click. The
+fixture is terminated in a `finally` block; no real user window or owner
+grant is accessed.
+
+This proves a bounded native UIA fixture path, not MISA readiness or an
+end-to-end Cloudflare latency target.

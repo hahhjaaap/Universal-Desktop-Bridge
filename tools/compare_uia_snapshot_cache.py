@@ -12,6 +12,7 @@ import os
 import queue
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from contextlib import ExitStack, contextmanager
@@ -60,7 +61,12 @@ def _read_ready(proc: subprocess.Popen[bytes], timeout: float) -> dict:
 
 
 @contextmanager
-def _fixture(size: int):
+def _fixture(
+    size: int,
+    *,
+    dynamic_signal_path: Path | None = None,
+    dynamic_trigger_path: Path | None = None,
+):
     proc = subprocess.Popen(
         [
             str(_powershell()),
@@ -74,6 +80,16 @@ def _fixture(size: int):
             str(FIXTURE),
             "-Controls",
             str(size),
+            *(
+                [
+                    "-DynamicSignalPath",
+                    str(dynamic_signal_path),
+                    "-DynamicTriggerPath",
+                    str(dynamic_trigger_path),
+                ]
+                if dynamic_signal_path is not None and dynamic_trigger_path is not None
+                else []
+            ),
         ],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
@@ -228,19 +244,133 @@ def compare_warm(size: int, samples: int, *, worker_factory=None) -> dict:
     }
 
 
+def _check_dynamic_transition(before: dict, after: dict) -> None:
+    """Require a persistent worker to observe a changed UIA Name on its next request."""
+    before_text = json.dumps(before, ensure_ascii=True)
+    after_text = json.dumps(after, ensure_ascii=True)
+    if "UDB_DYNAMIC_BEFORE" not in before_text:
+        raise AssertionError("Initial dynamic UIA control was not observed")
+    if "UDB_DYNAMIC_BEFORE" in after_text:
+        raise AssertionError("Persistent UIA worker returned a stale control value")
+    if "UDB_DYNAMIC_AFTER" not in after_text:
+        raise AssertionError("Updated dynamic UIA control was not observed")
+    if before == after:
+        raise AssertionError("Dynamic UIA snapshot did not change")
+
+
+def compare_dynamic_warm(size: int, samples: int = 10, *, worker_factory=None) -> dict:
+    """Verify cached/live parity after a control changes in a test-owned
+    WinForms window."""
+    _validate(size, samples)
+    if worker_factory is None:
+        from udb.uia_worker import PersistentUIA
+
+        worker_factory = PersistentUIA
+
+    modes = ("uncached", "cached")
+    timings: dict[str, list[float]] = {mode: [] for mode in modes}
+    cold = {}
+    processes = {}
+    truncated_samples = 0
+
+    with tempfile.TemporaryDirectory(prefix="udb-uia-dynamic-") as folder:
+        signal = Path(folder) / "changed.json"
+        trigger = Path(folder) / "trigger"
+        with (
+            _fixture(
+                size, dynamic_signal_path=signal, dynamic_trigger_path=trigger
+            ) as form,
+            ExitStack() as cleanup,
+        ):
+            request = {"mode": "snapshot", "hwnd": form["hwnd"], "pid": form["pid"]}
+            workers = {}
+            executable = _powershell()
+            for mode in modes:
+                worker = worker_factory(executable, HELPER)
+                cleanup.callback(worker.close)
+                workers[mode] = worker
+
+            before = {}
+            for mode in modes:
+                worker = workers[mode]
+                with patch.dict(
+                    os.environ,
+                    UDB_UIA_SNAPSHOT_CACHE="1" if mode == "cached" else "0",
+                ):
+                    started = time.perf_counter()
+                    before[mode] = worker.call(request, timeout=18)
+                    cold[mode] = round((time.perf_counter() - started) * 1000, 2)
+                processes[mode] = worker._process
+            _check_pair(before["uncached"], before["cached"])
+            if "UDB_DYNAMIC_BEFORE" not in json.dumps(
+                before["uncached"], ensure_ascii=True
+            ):
+                raise AssertionError("Initial dynamic UIA control was not observed")
+
+            trigger.write_text("change", encoding="utf-8")
+            deadline = time.monotonic() + 12
+            while not signal.is_file() and time.monotonic() < deadline:
+                time.sleep(0.05)
+            if not signal.is_file():
+                raise RuntimeError("Dynamic WinForms fixture did not signal its change")
+
+            for index in range(samples):
+                current = {}
+                order = modes if index % 2 == 0 else tuple(reversed(modes))
+                for mode in order:
+                    worker = workers[mode]
+                    with patch.dict(
+                        os.environ,
+                        UDB_UIA_SNAPSHOT_CACHE="1" if mode == "cached" else "0",
+                    ):
+                        started = time.perf_counter()
+                        current[mode] = worker.call(request, timeout=18)
+                        timings[mode].append((time.perf_counter() - started) * 1000)
+                    if worker._process is not processes[mode]:
+                        raise AssertionError(
+                            "UIA worker restarted during dynamic warm samples"
+                        )
+                _check_pair(current["uncached"], current["cached"])
+                _check_dynamic_transition(before["uncached"], current["uncached"])
+                if current["uncached"].get("truncated") is True:
+                    truncated_samples += 1
+
+    return {
+        "controls": size,
+        "samples": samples,
+        "same_output": True,
+        "dynamic_change_observed": True,
+        "workers_reused": True,
+        "cold_ms": cold,
+        "truncated_samples": truncated_samples,
+        **{mode: _summary(timings[mode]) for mode in modes},
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", type=int, default=1)
     parser.add_argument("--sizes", type=int, nargs="+", default=list(SIZES))
     parser.add_argument("--warm", action="store_true")
+    parser.add_argument("--dynamic-warm", action="store_true")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
     if sys.platform != "win32":
         parser.error("Windows UI Automation is required")
-    run = compare_warm if args.warm else compare
+    run = (
+        compare_dynamic_warm
+        if args.dynamic_warm
+        else compare_warm
+        if args.warm
+        else compare
+    )
     result = {
         "scope": "owned synthetic WinForms fixture only; no production activation",
-        "measurement": "warm worker" if args.warm else "one-shot",
+        "measurement": "dynamic warm worker"
+        if args.dynamic_warm
+        else "warm worker"
+        if args.warm
+        else "one-shot",
         "results": [run(size, args.samples) for size in args.sizes],
     }
     report = json.dumps(result, indent=2)

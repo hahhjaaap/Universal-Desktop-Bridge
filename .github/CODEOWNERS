@@ -11,3 +11,7 @@ src/udb/computer_access.py @hahhjaaap
 src/udb/desktop_fastpath_receipts.py @hahhjaaap
 src/udb/host_service.py @hahhjaaap
 cloudflare/ @hahhjaaap
+src/udb/computer_desktop.py @hahhjaaap
+src/udb/computer_uia.ps1 @hahhjaaap
+tools/check_fastpath_e2e.py @hahhjaaap
+tools/compare_uia_snapshot_cache.py @hahhjaaap

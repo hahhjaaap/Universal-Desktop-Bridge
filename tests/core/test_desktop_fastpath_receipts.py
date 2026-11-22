@@ -2,6 +2,9 @@
 
 import hashlib
 import json
+import subprocess
+import sys
+import threading
 
 import pytest
 
@@ -151,3 +154,116 @@ def test_existing_running_receipt_is_never_reexecuted(tmp_path):
     )
     assert report["outcome_unknown"] and report["state"] == "running"
     assert report["replayed"] is False
+
+
+def test_concurrent_duplicate_request_never_enters_input_lane_twice(tmp_path):
+    entered = threading.Event()
+    release = threading.Event()
+    invoked = []
+
+    def execute():
+        invoked.append(True)
+        entered.set()
+        if not release.wait(timeout=3):
+            raise AssertionError("fixture did not release the first request")
+        return {"ok": True, "completed_steps": 1}
+
+    first_result = []
+    first_error = []
+
+    def first_call():
+        try:
+            first_result.append(
+                run_once(tmp_path, GRANT, "concurrent-job", PLAN, execute)
+            )
+        except Exception as exc:  # pragma: no cover - asserted below
+            first_error.append(exc)
+
+    worker = threading.Thread(target=first_call, daemon=True)
+    worker.start()
+    try:
+        assert entered.wait(timeout=2), "first request did not enter its executor"
+
+        duplicate = run_once(
+            tmp_path,
+            GRANT,
+            "concurrent-job",
+            PLAN,
+            lambda: pytest.fail("concurrent duplicate must never dispatch input"),
+        )
+        assert duplicate["state"] == "running"
+        assert duplicate["outcome_unknown"] is True
+        assert duplicate["replayed"] is False
+        assert duplicate["replay_safe"] is False
+    finally:
+        release.set()
+        worker.join(timeout=3)
+
+    assert not worker.is_alive(), "first request did not finish"
+    assert first_error == []
+    assert len(first_result) == 1
+    assert first_result[0]["state"] == "completed"
+    assert invoked == [True]
+
+    completed = run_once(
+        tmp_path,
+        GRANT,
+        "concurrent-job",
+        PLAN,
+        lambda: pytest.fail("completed duplicate must not dispatch input"),
+    )
+    assert completed["state"] == "completed"
+    assert completed["replayed"] is False
+    assert invoked == [True]
+
+
+def test_process_crash_after_dispatch_leaves_durable_unknown_receipt(tmp_path):
+    entered = tmp_path / "input-entered"
+    replayed = tmp_path / "input-replayed"
+    crash_code = "\n".join(
+        [
+            "import os, sys",
+            "from pathlib import Path",
+            "from udb.desktop_fastpath_receipts import run_once",
+            "def crash():",
+            "    Path(sys.argv[2]).write_text('entered', encoding='utf-8')",
+            "    os._exit(23)",
+            "run_once(sys.argv[1], 'a' * 32, 'crash-job',",
+            "         [{'action': 'type', 'text': 'sensitive user content'}], crash)",
+        ]
+    )
+    crashed = subprocess.run(
+        [sys.executable, "-c", crash_code, str(tmp_path), str(entered)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert crashed.returncode == 23
+    assert entered.read_text(encoding="utf-8") == "entered"
+
+    retry_code = "\n".join(
+        [
+            "import json, sys",
+            "from pathlib import Path",
+            "from udb.desktop_fastpath_receipts import run_once",
+            "def must_not_replay():",
+            "    Path(sys.argv[2]).write_text('replayed', encoding='utf-8')",
+            "    raise AssertionError('input must not be replayed after restart')",
+            "result = run_once(sys.argv[1], 'a' * 32, 'crash-job',",
+            "                  [{'action': 'type', 'text': 'sensitive user content'}],",
+            "                  must_not_replay)",
+            "print(json.dumps(result))",
+        ]
+    )
+    restarted = subprocess.run(
+        [sys.executable, "-c", retry_code, str(tmp_path), str(replayed)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=True,
+    )
+    report = json.loads(restarted.stdout.strip())
+    assert report["state"] == "running"
+    assert report["outcome_unknown"] is True
+    assert report["replayed"] is False
+    assert not replayed.exists()

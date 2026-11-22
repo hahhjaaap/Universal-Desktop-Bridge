@@ -54,14 +54,14 @@ marking each safety field true.
 
 ## Score the redacted report
 
-The report contains source revisions, the fixture hash, per-attempt timings,
+The version 2 report contains source revisions, the exact pinned Cloudflare Worker version identifier, the fixture hash, per-attempt sequence numbers and timings,
 outcome labels, and reviewed safety booleans. Device IDs, endpoints,
 credentials, and raw production tool results belong outside this report. The
 example shows the shape with one trial. It is intentionally incomplete.
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "scope": "chatgpt-cloudflare-windows",
   "environment": "isolated-staging",
   "revisions": {
@@ -69,6 +69,7 @@ example shows the shape with one trial. It is intentionally incomplete.
     "candidate": "<full candidate SHA>"
   },
   "fixture_sha256": "<64 lowercase hex characters>",
+  "worker_revision": "<8-64 safe version characters>",
   "safety_checks": {
     "permission_parity": false,
     "navigation_parity": false,
@@ -76,6 +77,7 @@ example shows the shape with one trial. It is intentionally incomplete.
   },
   "trials": [
     {
+      "sequence": 0,
       "variant": "baseline",
       "request_id": "ab-base-0001",
       "elapsed_ms": 5100,
@@ -89,7 +91,7 @@ example shows the shape with one trial. It is intentionally incomplete.
 python tools/check_fastpath_e2e.py evidence.json --baseline-sha $baselineSha --candidate-sha $candidateSha --profile fastpath
 ```
 
-The scorer requires the intended revisions and unique trial IDs, reports
+The scorer requires the intended source and Worker revisions, contiguous chronological sequence numbers and unique request IDs, at least 50 attempts per build, and interleaved AB/BA pairs. Grouped baseline-then-candidate runs are rejected. It reports
 nearest-rank p50/p95/p99, outcome counts and an error rate, and checks all safety
 fields. A non-verified attempt ranks after every verified one. A percentile
 that lands on a non-verified attempt is reported as `null`; fast failures

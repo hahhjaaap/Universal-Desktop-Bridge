@@ -33,7 +33,7 @@ for($i=0;$i -lt $Controls;$i++){
             $item.Text='UDB_PRIVATE_CANARY_MUST_NOT_APPEAR'
         }
     }else{$item.Text=('Fixture item '+$i.ToString('D4'))}
-    if($i -eq 0){
+    if($i -eq 0 -and $DynamicSignalPath){
         $item.Name='FixtureDynamicTarget'
         $item.AccessibleName='UDB_DYNAMIC_BEFORE'
         $item.Text='UDB_DYNAMIC_BEFORE'

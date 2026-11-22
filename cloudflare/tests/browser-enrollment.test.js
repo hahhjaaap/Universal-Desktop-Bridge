@@ -832,7 +832,13 @@ test("enrolled bridge_status overlaps live catalog verification without widening
   const diagnostics = JSON.parse(blocks.at(-1).text);
   assert.equal(diagnostics.tools_listed, 41);
   assert.equal(diagnostics.gateway_catalog_grants.total, 1); // Status-only enrollment grant
-  assert.deepEqual(f.calls.filter(x => x.method === "tools/list")
-    .map(x => x.id), ["udb-catalog-verification"]);
+  const firstProbe = f.calls.filter(x => x.method === "tools/list").map(x => x.id);
+  assert.equal(firstProbe.length, 1);
+  assert.match(firstProbe[0], /^udb-catalog-[0-9a-f-]{36}$/);
+  assert.equal((await syncedCall(f, p, "bridge_status")).status, 200);
+  const probes = f.calls.filter(x => x.method === "tools/list").map(x => x.id);
+  assert.equal(probes.length, 2);
+  assert.match(probes[1], /^udb-catalog-[0-9a-f-]{36}$/);
+  assert.notEqual(probes[0], probes[1], "independent status calls must not collide");
   assert.equal(targetCalls(f).length, 0);
 });

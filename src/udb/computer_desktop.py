@@ -701,17 +701,25 @@ class Desktop:
         )
         from .uia_worker import PersistentUIA, enabled
 
-        if enabled() or getattr(self, "_batch_uia", False):
+        persistent = enabled() or getattr(self, "_batch_uia", False)
+        request["event_observer"] = bool(
+            mode == "wait_for"
+            and persistent
+            and os.environ.get("UDB_UIA_EVENT_OBSERVER", "0") == "1"
+        )
+        if persistent:
             if getattr(self, "_uia_worker", None) is None:
                 self._uia_worker = PersistentUIA(exe, helper)
             # A rejected, missing or late response never falls back to legacy
             # subprocess.run; that could replay a successful mutation.
+            cancel_check = self.interactive if mode == "wait_for" else None
             data = perf.timed_call(
                 "desktop.uia",
                 "execution",
                 self._uia_worker.call,
                 request,
                 deadline,
+                cancel_check=cancel_check,
             )
             if not data.get("ok"):
                 raise PolicyError(

@@ -451,7 +451,10 @@ class ParallelLocalProxies:
             if self.failed.is_set():
                 raise RuntimeError("Cloud RPC pool is unavailable")
             return self.executor.submit(
-                self._invoke, rpc, time.perf_counter_ns(), resource_kind,
+                self._invoke,
+                rpc,
+                time.perf_counter_ns(),
+                resource_kind,
                 prewarm_status,
             )
 
@@ -471,9 +474,9 @@ class ParallelLocalProxies:
         # When status sharing is enabled, warm that exact serial worker
         # rather than a throwaway thread-local worker that cannot serve the
         # first bridge_status call. This ping is read-only and is not a grant.
-        reply = self.submit(
-            rpc, prewarm_status=self.shared_status_enabled
-        ).result(timeout=timeout)
+        reply = self.submit(rpc, prewarm_status=self.shared_status_enabled).result(
+            timeout=timeout
+        )
         if (
             not isinstance(reply, dict)
             or reply.get("error") is not None

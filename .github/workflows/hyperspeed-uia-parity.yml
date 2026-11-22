@@ -4,6 +4,11 @@ on:
   pull_request:
     paths:
       - "src/udb/computer_uia.ps1"
+      - "src/udb/computer_desktop.py"
+      - "src/udb/uia_worker.py"
+      - "tests/core/test_persistent_uia.py"
+      - "tests/core/test_uia_event_observer_harness.py"
+      - "tools/compare_uia_event_observer.py"
       - "tests/fixtures/uia_snapshot_form.ps1"
       - "tests/core/test_uia_cache_parity_harness.py"
       - "tools/compare_uia_snapshot_cache.py"
@@ -12,6 +17,11 @@ on:
     branches: [main]
     paths:
       - "src/udb/computer_uia.ps1"
+      - "src/udb/computer_desktop.py"
+      - "src/udb/uia_worker.py"
+      - "tests/core/test_persistent_uia.py"
+      - "tests/core/test_uia_event_observer_harness.py"
+      - "tools/compare_uia_event_observer.py"
       - "tests/fixtures/uia_snapshot_form.ps1"
       - "tests/core/test_uia_cache_parity_harness.py"
       - "tools/compare_uia_snapshot_cache.py"
@@ -32,7 +42,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Check Python parity harness syntax
-        run: python -m compileall -q tools/compare_uia_snapshot_cache.py
+        run: python -m compileall -q tools/compare_uia_snapshot_cache.py tools/compare_uia_event_observer.py
       - name: Compare snapshot cache on/off in test-owned Windows Forms
         run: python tools/compare_uia_snapshot_cache.py --samples 1 --sizes 50 500 1000 --output reports/uia-snapshot-parity.json
       - run: python -m pip install .
@@ -42,11 +52,15 @@ jobs:
         run: python -m tools.compare_uia_snapshot_cache --dynamic-warm --samples 10 --sizes 50 500 1000 --output reports/uia-snapshot-dynamic-parity.json
       - name: Verify removed UIA children are not reused after recreation
         run: python -m tools.compare_uia_snapshot_cache --dynamic-recreate --samples 10 --sizes 50 500 1000 --output reports/uia-snapshot-recreate-parity.json
+      - name: Verify event-driven wait, timeout cleanup and polling fallback
+        run: python -m tools.compare_uia_event_observer --samples 3 --output reports/uia-event-observer.json
       - name: Attach isolated fixture parity report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: hyperspeed-uia-parity
-          path: reports/uia-snapshot*-parity.json
+          path: |
+            reports/uia-snapshot*-parity.json
+            reports/uia-event-observer.json
           if-no-files-found: ignore
           retention-days: 7

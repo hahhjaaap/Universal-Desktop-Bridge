@@ -121,11 +121,14 @@ def test_windows_physical_memory_probe_smoke():
     assert 0 <= available <= total
     assert total >= GIB
 
+
 def test_windows_default_selects_automatic_budget(monkeypatch):
     monkeypatch.delenv("UDB_CLOUD_WORKER_PROFILE", raising=False)
     monkeypatch.delenv("UDB_CLOUD_MAX_RPC_WORKERS", raising=False)
     monkeypatch.setattr(
-        cloud_agent, "os", SimpleNamespace(name="nt", environ=cloud_worker_profile.os.environ)
+        cloud_agent,
+        "os",
+        SimpleNamespace(name="nt", environ=cloud_worker_profile.os.environ),
     )
     monkeypatch.setattr(cloud_agent, "local_worker_budget", lambda: 2)
     assert cloud_agent.worker_profile() == "auto"
@@ -136,7 +139,9 @@ def test_non_windows_default_keeps_legacy_behavior(monkeypatch):
     monkeypatch.delenv("UDB_CLOUD_WORKER_PROFILE", raising=False)
     monkeypatch.delenv("UDB_CLOUD_MAX_RPC_WORKERS", raising=False)
     monkeypatch.setattr(
-        cloud_agent, "os", SimpleNamespace(name="posix", environ=cloud_worker_profile.os.environ)
+        cloud_agent,
+        "os",
+        SimpleNamespace(name="posix", environ=cloud_worker_profile.os.environ),
     )
     assert cloud_agent.worker_profile() == "legacy"
     assert cloud_agent.cloud_rpc_worker_limit() == 10

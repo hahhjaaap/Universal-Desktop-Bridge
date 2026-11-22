@@ -2,6 +2,9 @@
 
 import hashlib
 import json
+import os
+import subprocess
+import sys
 import threading
 
 import pytest
@@ -213,3 +216,56 @@ def test_concurrent_duplicate_request_never_enters_input_lane_twice(tmp_path):
     assert completed["state"] == "completed"
     assert completed["replayed"] is False
     assert invoked == [True]
+
+
+
+def test_process_crash_after_dispatch_leaves_durable_unknown_receipt(tmp_path):
+    entered = tmp_path / "input-entered"
+    replayed = tmp_path / "input-replayed"
+    crash_code = "\n".join(
+        [
+            "import os, sys",
+            "from pathlib import Path",
+            "from udb.desktop_fastpath_receipts import run_once",
+            "def crash():",
+            "    Path(sys.argv[2]).write_text('entered', encoding='utf-8')",
+            "    os._exit(23)",
+            "run_once(sys.argv[1], 'a' * 32, 'crash-job',",
+            "         [{'action': 'type', 'text': 'sensitive user content'}], crash)",
+        ]
+    )
+    crashed = subprocess.run(
+        [sys.executable, "-c", crash_code, str(tmp_path), str(entered)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert crashed.returncode == 23
+    assert entered.read_text(encoding="utf-8") == "entered"
+
+    retry_code = "\n".join(
+        [
+            "import json, sys",
+            "from pathlib import Path",
+            "from udb.desktop_fastpath_receipts import run_once",
+            "def must_not_replay():",
+            "    Path(sys.argv[2]).write_text('replayed', encoding='utf-8')",
+            "    raise AssertionError('input must not be replayed after restart')",
+            "result = run_once(sys.argv[1], 'a' * 32, 'crash-job',",
+            "                  [{'action': 'type', 'text': 'sensitive user content'}],",
+            "                  must_not_replay)",
+            "print(json.dumps(result))",
+        ]
+    )
+    restarted = subprocess.run(
+        [sys.executable, "-c", retry_code, str(tmp_path), str(replayed)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=True,
+    )
+    report = json.loads(restarted.stdout.strip())
+    assert report["state"] == "running"
+    assert report["outcome_unknown"] is True
+    assert report["replayed"] is False
+    assert not replayed.exists()

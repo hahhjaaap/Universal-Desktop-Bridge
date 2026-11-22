@@ -240,10 +240,10 @@ def _check_dynamic_transition(before: dict, after: dict) -> None:
     after_text = json.dumps(after, ensure_ascii=True)
     if "UDB_DYNAMIC_BEFORE" not in before_text:
         raise AssertionError("Initial dynamic UIA control was not observed")
-    if "UDB_DYNAMIC_AFTER" not in after_text:
-        raise AssertionError("Updated dynamic UIA control was not observed")
     if "UDB_DYNAMIC_BEFORE" in after_text:
         raise AssertionError("Persistent UIA worker returned a stale control value")
+    if "UDB_DYNAMIC_AFTER" not in after_text:
+        raise AssertionError("Updated dynamic UIA control was not observed")
     if before == after:
         raise AssertionError("Dynamic UIA snapshot did not change")
 

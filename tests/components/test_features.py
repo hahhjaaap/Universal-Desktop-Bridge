@@ -288,6 +288,7 @@ class Features(unittest.TestCase):
             self.assertFalse(
                 next(r for r in rows if r["pid"] == os.getpid())["can_terminate"]
             )
+
             # Windows can enumerate a child before its image, creation
             # time and user SID are queryable. A row without a token is
             # deliberately non-terminable; retry the safe observation.

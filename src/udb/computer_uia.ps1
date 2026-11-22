@@ -408,8 +408,10 @@ try {
                         $handlerBlock={
                             param($sender,$eventArgs)
                             if($eventArgs.Property -eq [Windows.Automation.AutomationElement]::IsEnabledProperty){
-                                [void]$signalQueue.Enqueue($true)
-                                [void]$signalRef.Set()
+                                try{
+                                    [void]$signalQueue.Enqueue($true)
+                                    [void]$signalRef.Set()
+                                }catch{}
                             }
                         }.GetNewClosure()
                         $observerHandler=[Windows.Automation.AutomationPropertyChangedEventHandler]$handlerBlock
@@ -425,8 +427,10 @@ try {
                     }else{
                         $handlerBlock={
                             param($sender,$eventArgs)
-                            [void]$signalQueue.Enqueue($true)
-                            [void]$signalRef.Set()
+                            try{
+                                [void]$signalQueue.Enqueue($true)
+                                [void]$signalRef.Set()
+                            }catch{}
                         }.GetNewClosure()
                         $observerHandler=[Windows.Automation.StructureChangedEventHandler]$handlerBlock
                         $observerKind='structure'

@@ -44,7 +44,8 @@ def _summary(values: list[float]) -> dict:
 def _validate_event(event: dict) -> None:
     if (
         not isinstance(event, dict)
-        or event.get("schema") != 1
+        or type(event.get("schema")) is not int
+        or event["schema"] != 1
         or not isinstance(event.get("operation"), str)
         or event["operation"] not in perf._OPERATIONS
         or not isinstance(event.get("phase"), str)

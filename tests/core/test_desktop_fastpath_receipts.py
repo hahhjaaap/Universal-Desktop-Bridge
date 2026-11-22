@@ -267,3 +267,62 @@ def test_process_crash_after_dispatch_leaves_durable_unknown_receipt(tmp_path):
     assert report["outcome_unknown"] is True
     assert report["replayed"] is False
     assert not replayed.exists()
+
+
+def test_completed_mutation_with_lost_reply_is_not_replayed_after_restart(tmp_path):
+    executed = tmp_path / "input-executed"
+    replayed = tmp_path / "input-replayed"
+    crash_code = "\\n".join(
+        [
+            "import os, sys",
+            "from pathlib import Path",
+            "from udb.desktop_fastpath_receipts import run_once",
+            "def execute():",
+            "    Path(sys.argv[2]).write_text('executed', encoding='utf-8')",
+            "    return {'ok': True, 'completed_steps': 1}",
+            "result = run_once(sys.argv[1], 'a' * 32, 'lost-reply-job',",
+            "                  [{'action': 'type', 'text': 'sensitive user content'}],",
+            "                  execute)",
+            "assert result['state'] == 'completed'",
+            "os._exit(23)",
+        ]
+    )
+    crashed = subprocess.run(
+        [sys.executable, "-c", crash_code, str(tmp_path), str(executed)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert crashed.returncode == 23
+    assert executed.read_text(encoding="utf-8") == "executed"
+
+    retry_code = "\\n".join(
+        [
+            "import json, sys",
+            "from pathlib import Path",
+            "from udb.desktop_fastpath_receipts import run_once",
+            "def must_not_replay():",
+            "    Path(sys.argv[2]).write_text('replayed', encoding='utf-8')",
+            "    raise AssertionError('completed input must not replay after lost reply')",
+            "result = run_once(sys.argv[1], 'a' * 32, 'lost-reply-job',",
+            "                  [{'action': 'type', 'text': 'sensitive user content'}],",
+            "                  must_not_replay)",
+            "print(json.dumps(result))",
+        ]
+    )
+    restarted = subprocess.run(
+        [sys.executable, "-c", retry_code, str(tmp_path), str(replayed)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=True,
+    )
+    report = json.loads(restarted.stdout.strip())
+    assert report["state"] == "completed"
+    assert report["ok"] is True
+    assert report["cached_result"] is True
+    assert report["result_available"] is False
+    assert report["replayed"] is False
+    assert report["replay_safe"] is False
+    assert executed.read_text(encoding="utf-8") == "executed"
+    assert not replayed.exists()

@@ -108,6 +108,7 @@ def test_existing_default_is_unchanged_when_profile_not_selected(monkeypatch):
     finally:
         pool.close()
 
+
 def test_windows_physical_memory_probe_smoke():
     """Validate the OS API shape on CI Windows; no private data is logged."""
     snapshot = cloud_worker_profile.windows_memory_bytes()

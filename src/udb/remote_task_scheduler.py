@@ -115,6 +115,9 @@ class DeviceTaskScheduler:
         self.exclusive = False
         self.active = set()
         self.waiting = {"desktop": [], "owned_browser": []}
+        # Reserve scarce 1–2 worker slots for different resource lanes.
+        # Same-lane requests return DeviceBusy before occupying a thread.
+        self.lane_inflight = {"desktop": 0, "owned_browser": 0}
         self.closed = False
 
     def admit(self, kind: str) -> bool:
@@ -138,11 +141,18 @@ class DeviceTaskScheduler:
             if (
                 self.closed
                 or self.inflight >= self.admission_limit
+                or (
+                    self.admission_limit <= 2
+                    and kind in self.lane_inflight
+                    and self.lane_inflight[kind] > 0
+                )
                 or self.exclusive
                 or (kind == "exclusive" and self.inflight != 0)
             ):
                 return False
             self.inflight += 1
+            if kind in self.lane_inflight:
+                self.lane_inflight[kind] += 1
             if kind == "exclusive":
                 self.exclusive = True
             return True
@@ -188,6 +198,10 @@ class DeviceTaskScheduler:
             if self.inflight <= 0:
                 raise RuntimeError("Unbalanced device task release")
             self.inflight -= 1
+            if kind in self.lane_inflight:
+                if self.lane_inflight[kind] <= 0:
+                    raise RuntimeError("Unbalanced resource lane release")
+                self.lane_inflight[kind] -= 1
             if kind == "exclusive":
                 self.exclusive = False
             self.condition.notify_all()

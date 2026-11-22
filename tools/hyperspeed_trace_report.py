@@ -12,6 +12,7 @@ import math
 from collections import defaultdict
 from pathlib import Path
 
+from udb import hyperspeed_perf as perf
 from udb.hyperspeed_perf import read_trace
 
 MAX_RPC_DETAILS = 1000
@@ -134,7 +135,7 @@ def analyze_trace_events(events: list[dict], *, max_rpcs: int = 200) -> dict:
             item["duration_ms"] += row["duration_ns"] / 1_000_000
         timelines.append(
             {
-                "started_ns": first,
+                "_sort_ns": first,
                 "observed_span_ms": round(envelope_ns / 1_000_000, 4),
                 "instrumented_union_ms": round(covered_ns / 1_000_000, 4),
                 "unattributed_gap_ms": round(
@@ -155,7 +156,10 @@ def analyze_trace_events(events: list[dict], *, max_rpcs: int = 200) -> dict:
                 },
             }
         )
-    timelines.sort(key=lambda row: row["started_ns"])
+    timelines.sort(key=lambda row: row["_sort_ns"])
+    for index, row in enumerate(timelines):
+        row.pop("_sort_ns")
+        row["rpc_index"] = index + 1
     observed = [row["observed_span_ms"] for row in timelines]
     gaps = [row["unattributed_gap_ms"] for row in timelines]
     covered = [row["instrumented_union_ms"] for row in timelines]

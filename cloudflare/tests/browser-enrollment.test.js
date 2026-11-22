@@ -792,3 +792,47 @@ test("fleet linking never steals a device already owned by a different identity"
   }), f.env, { access: { aud: MCP, getIdentity: async () => ({ user_uuid: OTHER }) } });
   assert.deepEqual((await other.json()).result.structuredContent.devices, []);
 });
+
+test("enrolled bridge_status overlaps live catalog verification without widening grants", async () => {
+  const f = syncFixture(), p = await begin(f);
+  await approve(f, p);
+  f.env.UDB_EDGE_READ_CATALOG = "false";
+
+  const originalGet = f.env.DEVICES.get.bind(f.env.DEVICES);
+  const observed = [];
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  f.env.DEVICES.get = id => {
+    const stub = originalGet(id);
+    return { fetch: async request => {
+      if (new URL(request.url).pathname === "/rpc") {
+        const rpc = await request.clone().json();
+        if (rpc.method === "tools/list" ||
+            (rpc.method === "tools/call" && rpc.params?.name === "bridge_status")) {
+          observed.push(rpc.method);
+          await held;
+        }
+      }
+      return stub.fetch(request);
+    } };
+  };
+
+  const pending = syncedCall(f, p, "bridge_status");
+  // No timer-based speed assertion: both outbound reads must be visible
+  // before either synthetic response is released. The previous serial path
+  // cannot satisfy this condition.
+  for (let i = 0; i < 100 && observed.length < 2; i++)
+    await new Promise(resolve => setImmediate(resolve));
+  const beforeRelease = [...observed];
+  release();
+  const response = await pending;
+  assert.deepEqual(beforeRelease, ["tools/call", "tools/list"]);
+  assert.equal(response.status, 200);
+  const blocks = (await response.json()).result.content;
+  const diagnostics = JSON.parse(blocks.at(-1).text);
+  assert.equal(diagnostics.tools_listed, 41);
+  assert.equal(diagnostics.gateway_catalog_grants.total, 41);
+  assert.deepEqual(f.calls.filter(x => x.method === "tools/list")
+    .map(x => x.id), ["udb-catalog-verification"]);
+  assert.equal(targetCalls(f).length, 0);
+});

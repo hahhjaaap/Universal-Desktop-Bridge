@@ -61,7 +61,12 @@ def _read_ready(proc: subprocess.Popen[bytes], timeout: float) -> dict:
 
 
 @contextmanager
-def _fixture(size: int, *, dynamic_signal_path: Path | None = None):
+def _fixture(
+    size: int,
+    *,
+    dynamic_signal_path: Path | None = None,
+    dynamic_trigger_path: Path | None = None,
+):
     proc = subprocess.Popen(
         [
             str(_powershell()),
@@ -76,8 +81,13 @@ def _fixture(size: int, *, dynamic_signal_path: Path | None = None):
             "-Controls",
             str(size),
             *(
-                ["-DynamicSignalPath", str(dynamic_signal_path)]
-                if dynamic_signal_path is not None
+                [
+                    "-DynamicSignalPath",
+                    str(dynamic_signal_path),
+                    "-DynamicTriggerPath",
+                    str(dynamic_trigger_path),
+                ]
+                if dynamic_signal_path is not None and dynamic_trigger_path is not None
                 else []
             ),
         ],
@@ -264,7 +274,10 @@ def compare_dynamic_warm(size: int, samples: int = 10, *, worker_factory=None) -
 
     with tempfile.TemporaryDirectory(prefix="udb-uia-dynamic-") as folder:
         signal = Path(folder) / "changed.json"
-        with _fixture(size, dynamic_signal_path=signal) as form, ExitStack() as cleanup:
+        trigger = Path(folder) / "trigger"
+        with _fixture(
+            size, dynamic_signal_path=signal, dynamic_trigger_path=trigger
+        ) as form, ExitStack() as cleanup:
             request = {"mode": "snapshot", "hwnd": form["hwnd"], "pid": form["pid"]}
             workers = {}
             executable = _powershell()
@@ -290,6 +303,7 @@ def compare_dynamic_warm(size: int, samples: int = 10, *, worker_factory=None) -
             ):
                 raise AssertionError("Initial dynamic UIA control was not observed")
 
+            trigger.write_text("change", encoding="utf-8")
             deadline = time.monotonic() + 12
             while not signal.is_file() and time.monotonic() < deadline:
                 time.sleep(0.05)

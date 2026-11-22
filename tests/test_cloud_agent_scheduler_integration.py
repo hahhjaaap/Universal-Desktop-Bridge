@@ -22,6 +22,8 @@ def rpc(name, action, ident):
 
 
 def test_pool_serializes_two_gui_batches_without_blocking_owned_browser(monkeypatch):
+    # This exercises the original queued-lane behavior above two worker slots.
+    monkeypatch.setenv("UDB_CLOUD_WORKER_PROFILE", "legacy")
     first_entered = threading.Event()
     unlock_first = threading.Event()
     second_entered = threading.Event()

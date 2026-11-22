@@ -27,7 +27,7 @@ $beta=[Windows.Forms.Button]::new()
 $beta.Name='UDB_RESULT_BETA'
 $beta.AccessibleName='UDB result item beta'
 $beta.Text='UDB result item beta'
-$beta.Location=if($Ambiguous){[Drawing.Point]::new(12,18)}else{[Drawing.Point]::new(12,78)}
+if($Ambiguous){$beta.Location=[Drawing.Point]::new(12,18)}else{$beta.Location=[Drawing.Point]::new(12,78)}
 $beta.Size=[Drawing.Size]::new(440,42)
 $script:clickCount=0
 $alpha.Add_Click({

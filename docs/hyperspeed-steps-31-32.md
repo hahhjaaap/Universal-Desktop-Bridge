@@ -78,3 +78,25 @@ separate measurements.
 - Keep `UDB_UIA_SNAPSHOT_CACHE` and `UDB_UIA_PERSISTENT` **off by default**.
   No permission grant, Cloudflare deployment, or user installation changes
   are part of this work.
+
+
+## Step 33: dynamic UIA observation on a persistent worker
+
+The Windows-only `--dynamic-warm` canary keeps the same two private UIA
+PowerShell workers alive while a test-owned WinForms control changes its
+accessible Name from `UDB_DYNAMIC_BEFORE` to `UDB_DYNAMIC_AFTER`. The
+fixture signals only after the mutation. Each worker must observe the new
+value on its next request; cached and uncached snapshots must remain
+field-for-field equal. The harness rejects a stale pre-change value and
+verifies that neither worker restarted during the post-change samples.
+
+Run on Windows:
+
+```powershell
+python -m tools.compare_uia_snapshot_cache --dynamic-warm --samples 10 --sizes 50 500 1000 --output reports/uia-snapshot-dynamic-parity.json
+```
+
+This extends the static parity canary; it does not prove HWND/PID recycling,
+real-application performance, or end-to-end Cloudflare latency. The cache
+and persistent worker remain opt-in and off by default pending those separate
+acceptance gates.

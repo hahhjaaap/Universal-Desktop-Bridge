@@ -795,6 +795,7 @@ test("fleet linking never steals a device already owned by a different identity"
 
 test("enrolled bridge_status overlaps live catalog verification without widening grants", async () => {
   const f = syncFixture(), p = await begin(f);
+  f.env.UDB_OWNER_STATUS_CATALOG_OVERLAP = "true";
   await approve(f, p);
   f.env.UDB_EDGE_READ_CATALOG = "false";
 
@@ -841,4 +842,40 @@ test("enrolled bridge_status overlaps live catalog verification without widening
   assert.match(probes[1], /^udb-catalog-[0-9a-f-]{36}$/);
   assert.notEqual(probes[0], probes[1], "independent status calls must not collide");
   assert.equal(targetCalls(f).length, 0);
+});
+
+test("status catalog overlap is disabled by default to protect 8 GiB clients", async () => {
+  const f = syncFixture(), p = await begin(f);
+  await approve(f, p);
+  f.env.UDB_EDGE_READ_CATALOG = "false";
+  delete f.env.UDB_OWNER_STATUS_CATALOG_OVERLAP;
+  const originalGet = f.env.DEVICES.get.bind(f.env.DEVICES);
+  const observed = [];
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  f.env.DEVICES.get = id => {
+    const stub = originalGet(id);
+    return { fetch: async request => {
+      if (new URL(request.url).pathname === "/rpc") {
+        const rpc = await request.clone().json();
+        if (rpc.method === "tools/list" ||
+            (rpc.method === "tools/call" && rpc.params?.name === "bridge_status")) {
+          observed.push(rpc.method);
+          if (rpc.method === "tools/call") await held;
+        }
+      }
+      return stub.fetch(request);
+    } };
+  };
+  const pending = syncedCall(f, p, "bridge_status");
+  for (let i = 0; i < 100 && observed.length === 0; i++)
+    await new Promise(resolve => setImmediate(resolve));
+  const beforeRelease = [...observed];
+  release();
+  const response = await pending;
+  assert.deepEqual(beforeRelease, ["tools/call"]);
+  assert.deepEqual(observed, ["tools/call", "tools/list"]);
+  assert.equal(response.status, 200);
+  const blocks = (await response.json()).result.content;
+  assert.equal(JSON.parse(blocks.at(-1).text).tools_listed, 41);
 });

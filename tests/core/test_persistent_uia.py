@@ -11,6 +11,7 @@ import os
 import queue
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -29,12 +30,18 @@ class FakeInput:
         self.results = results
         self.writes = []
         self.fail = False
+        self.block = False
+        self.written = threading.Event()
 
     def write(self, data):
         self.writes.append(data)
+        self.written.set()
         if self.fail:
             raise BrokenPipeError("fixture broken pipe")
-        self.results.put(self.replies.pop(0) if self.replies else None)
+        if self.replies:
+            self.results.put(self.replies.pop(0))
+        elif not self.block:
+            self.results.put(None)
 
     def flush(self):
         pass
@@ -288,3 +295,111 @@ def test_30_opt_in_worker_trace_redacts_payload(fake_worker, monkeypatch, tmp_pa
         assert "private" not in path.read_text(encoding="utf-8")
     finally:
         perf.disable()
+
+
+def test_31_worker_stops_inflight_wait_when_computer_access_is_revoked(fake_worker):
+    worker, fake, _ = fake_worker
+    fake.stdin.block = True
+    checked = threading.Event()
+
+    def revoked():
+        checked.set()
+        raise PolicyError("Computer access was revoked")
+
+    with pytest.raises(PolicyError, match="revoked"):
+        worker.call({"mode": "wait_for"}, 2, cancel_check=revoked)
+    assert checked.wait(1)
+    assert fake.killed
+    assert len(fake.stdin.writes) == 1
+
+
+def test_31_close_cancels_inflight_wait_without_replay(fake_worker):
+    worker, fake, _ = fake_worker
+    fake.stdin.block = True
+    errors = []
+
+    def invoke():
+        try:
+            worker.call({"mode": "wait_for"}, 5)
+        except PolicyError as exc:
+            errors.append(str(exc))
+
+    thread = threading.Thread(target=invoke, daemon=True)
+    thread.start()
+    assert fake.stdin.written.wait(1)
+    worker.close()
+    thread.join(2)
+    assert not thread.is_alive()
+    assert fake.killed
+    assert len(fake.stdin.writes) == 1
+    assert errors and "closed" in errors[0]
+
+
+def test_32_event_observer_is_opt_in_and_requires_persistent_worker(monkeypatch):
+    monkeypatch.setenv("UDB_UIA_PERSISTENT", "1")
+    monkeypatch.delenv("UDB_UIA_EVENT_OBSERVER", raising=False)
+    monkeypatch.setenv("SystemRoot", "C:/Windows")
+    desktop = Desktop.__new__(Desktop)
+    desktop.interactive = Mock()
+    desktop.process = SimpleNamespace(GetWindowThreadProcessId=lambda hwnd: (1, 123))
+    desktop._uia_worker = Mock()
+    desktop._uia_worker.call.return_value = {"ok": True}
+
+    desktop.uia(190, "wait_for", automation_id="fixture", wait_ms=100)
+    request = desktop._uia_worker.call.call_args.args[0]
+    assert request["event_observer"] is False
+    assert desktop._uia_worker.call.call_args.kwargs["cancel_check"] == desktop.interactive
+
+    monkeypatch.setenv("UDB_UIA_EVENT_OBSERVER", "1")
+    desktop._uia_worker.call.reset_mock()
+    desktop.uia(190, "wait_for", automation_id="fixture", wait_ms=100)
+    request = desktop._uia_worker.call.call_args.args[0]
+    assert request["event_observer"] is True
+    assert desktop._uia_worker.call.call_args.kwargs["cancel_check"] == desktop.interactive
+
+
+def test_32_one_shot_wait_never_enables_event_observer(monkeypatch):
+    monkeypatch.delenv("UDB_UIA_PERSISTENT", raising=False)
+    monkeypatch.setenv("UDB_UIA_EVENT_OBSERVER", "1")
+    monkeypatch.setenv("SystemRoot", "C:/Windows")
+    desktop = Desktop.__new__(Desktop)
+    desktop.interactive = Mock()
+    desktop.process = SimpleNamespace(GetWindowThreadProcessId=lambda hwnd: (1, 123))
+    captured = {}
+
+    def run(*args, **kwargs):
+        captured.update(json.loads(kwargs["input"]))
+        return SimpleNamespace(stdout='{"ok":true}', returncode=0)
+
+    monkeypatch.setattr("udb.computer_desktop.subprocess.run", run)
+    assert desktop.uia(190, "wait_for", automation_id="fixture", wait_ms=100)["ok"]
+    assert captured["event_observer"] is False
+
+
+def test_33_wait_for_event_handlers_are_bounded_and_removed_in_finally():
+    script = (
+        Path(__file__).parents[2] / "src" / "udb" / "computer_uia.ps1"
+    ).read_text(encoding="utf-8-sig")
+    start = script.index("        if($r.mode -eq 'wait_for')")
+    end = script.index("        if($r.mode -eq 'snapshot')", start)
+    wait_block = script[start:end]
+    assert "AddStructureChangedEventHandler" in wait_block
+    assert "RemoveStructureChangedEventHandler" in wait_block
+    assert "AddAutomationPropertyChangedEventHandler" in wait_block
+    assert "RemoveAutomationPropertyChangedEventHandler" in wait_block
+    assert "WaitOne($remaining)" in wait_block
+    assert "Start-Sleep -Milliseconds $remaining" in wait_block
+    assert "observer_cleanup=$observerCleanup" in wait_block
+    assert "finally{" in wait_block
+
+
+def test_33_wait_for_revalidates_hwnd_pid_and_runtime_identity():
+    script = (
+        Path(__file__).parents[2] / "src" / "udb" / "computer_uia.ps1"
+    ).read_text(encoding="utf-8-sig")
+    start = script.index("        if($r.mode -eq 'wait_for')")
+    end = script.index("        if($r.mode -eq 'snapshot')", start)
+    wait_block = script[start:end]
+    assert "FromHandle([IntPtr]$r.hwnd)" in wait_block
+    assert "$liveRoot.Current.ProcessId -ne [int]$r.pid" in wait_block
+    assert "$liveRuntimeId -ne $rootRuntimeId" in wait_block

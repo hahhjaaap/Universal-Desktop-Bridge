@@ -29,6 +29,7 @@ computer-access grant. The runner persists a payload-free `running` receipt
   screenshots, typed content or URLs.
 - A crash, lost reply or uncertain mutation leaves an outcome-unknown receipt
   until independently inspected. Do not invent a fresh ID to replay writes.
+- A subprocess-crash regression now terminates immediately after the fixture enters its input callback, then starts a new process with the same request ID and proves the durable `running` receipt prevents a second dispatch.
 - This protects against the dangerous replay case but is **not transaction
   rollback** and cannot itself determine whether an external app committed.
 - Each grant has a bounded count of receipts; a new grant does not confer

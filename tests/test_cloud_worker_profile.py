@@ -237,3 +237,55 @@ def test_failed_adaptive_sampling_fails_small_and_never_expands_above_max(
     scheduler.release("read")
     scheduler.release("read")
     assert count["n"] == 2
+
+
+def test_two_worker_mode_rejects_second_gui_without_starving_browser():
+    from udb.remote_task_scheduler import DeviceTaskScheduler
+
+    scheduler = DeviceTaskScheduler(max_tasks=2)
+    assert scheduler.admit("desktop")
+    # The second GUI request is not allowed to occupy the only remaining
+    # thread while waiting for the same physical desktop.
+    assert not scheduler.admit("desktop")
+    assert scheduler.admit("owned_browser")
+    assert not scheduler.admit("owned_browser")
+    assert scheduler.inflight == 2
+    scheduler.release("owned_browser")
+    scheduler.release("desktop")
+    assert scheduler.admit("desktop")
+    scheduler.release("desktop")
+
+
+def test_live_ram_downshift_disallows_new_same_lane_until_safe():
+    from udb.remote_task_scheduler import DeviceTaskScheduler
+
+    limits = [4, 2]
+    calls = 0
+
+    def sample():
+        nonlocal calls
+        value = limits[min(calls, len(limits) - 1)]
+        calls += 1
+        return value
+
+    from udb import remote_task_scheduler
+
+    clock = {"now": 100.0}
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(
+            remote_task_scheduler,
+            "time",
+            SimpleNamespace(monotonic=lambda: clock["now"]),
+        )
+        scheduler = DeviceTaskScheduler(max_tasks=4, adaptive_limit=sample)
+        assert scheduler.admit("desktop")
+        assert scheduler.admit("desktop"), "Ample-worker mode keeps FIFO queued GUI"
+        clock["now"] += 5.1
+        assert not scheduler.admit("desktop")
+        assert scheduler.admission_limit == 2
+        assert scheduler.lane_inflight["desktop"] == 2
+        scheduler.release("desktop")
+        assert not scheduler.admit("desktop")
+        scheduler.release("desktop")
+        assert scheduler.admit("desktop")
+        scheduler.release("desktop")

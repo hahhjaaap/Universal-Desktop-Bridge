@@ -221,7 +221,6 @@ def test_element_ref_rejects_forged_selector_or_other_window(desktop, invoke_arg
         )
 
 
-
 @contextmanager
 def _semantic_winforms_fixture(signal_path, *, ambiguous=False):
     from pathlib import Path

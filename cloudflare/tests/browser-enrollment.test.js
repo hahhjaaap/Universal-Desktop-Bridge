@@ -831,7 +831,7 @@ test("enrolled bridge_status overlaps live catalog verification without widening
   const blocks = (await response.json()).result.content;
   const diagnostics = JSON.parse(blocks.at(-1).text);
   assert.equal(diagnostics.tools_listed, 41);
-  assert.equal(diagnostics.gateway_catalog_grants.total, 41);
+  assert.equal(diagnostics.gateway_catalog_grants.total, 1); // Status-only enrollment grant
   assert.deepEqual(f.calls.filter(x => x.method === "tools/list")
     .map(x => x.id), ["udb-catalog-verification"]);
   assert.equal(targetCalls(f).length, 0);

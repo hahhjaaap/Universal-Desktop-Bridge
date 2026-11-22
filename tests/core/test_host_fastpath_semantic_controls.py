@@ -5,13 +5,13 @@ All tests use synthetic data; no user desktop, browser or physical input.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-from contextlib import contextmanager
 import json
 import os
 import subprocess
 import sys
 import time
+from contextlib import contextmanager
+from types import SimpleNamespace
 
 import pytest
 

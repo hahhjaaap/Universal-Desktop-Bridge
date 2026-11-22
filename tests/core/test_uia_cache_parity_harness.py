@@ -71,6 +71,7 @@ def test_warm_comparison_reuses_private_workers_and_checks_parity(
     assert all(worker.closed for worker in workers)
     assert os.environ.get("UDB_UIA_SNAPSHOT_CACHE") == original
 
+
 def test_dynamic_transition_rejects_a_stale_persistent_worker_snapshot():
     before = {"ok": True, "elements": [{"name": "UDB_DYNAMIC_BEFORE"}]}
     after = {"ok": True, "elements": [{"name": "UDB_DYNAMIC_AFTER"}]}

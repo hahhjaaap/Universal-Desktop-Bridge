@@ -197,10 +197,10 @@ class DeviceTaskScheduler:
         with self.condition:
             if self.inflight <= 0:
                 raise RuntimeError("Unbalanced device task release")
+            if kind in self.lane_inflight and self.lane_inflight[kind] <= 0:
+                raise RuntimeError("Unbalanced resource lane release")
             self.inflight -= 1
             if kind in self.lane_inflight:
-                if self.lane_inflight[kind] <= 0:
-                    raise RuntimeError("Unbalanced resource lane release")
                 self.lane_inflight[kind] -= 1
             if kind == "exclusive":
                 self.exclusive = False

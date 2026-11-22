@@ -66,6 +66,7 @@ def _fixture(
     *,
     dynamic_signal_path: Path | None = None,
     dynamic_trigger_path: Path | None = None,
+    dynamic_mutation: str = "rename",
 ):
     proc = subprocess.Popen(
         [
@@ -86,6 +87,8 @@ def _fixture(
                     str(dynamic_signal_path),
                     "-DynamicTriggerPath",
                     str(dynamic_trigger_path),
+                    "-DynamicMutation",
+                    dynamic_mutation,
                 ]
                 if dynamic_signal_path is not None and dynamic_trigger_path is not None
                 else []
@@ -258,10 +261,38 @@ def _check_dynamic_transition(before: dict, after: dict) -> None:
         raise AssertionError("Dynamic UIA snapshot did not change")
 
 
-def compare_dynamic_warm(size: int, samples: int = 10, *, worker_factory=None) -> dict:
+def _check_dynamic_replacement(before: dict, after: dict) -> None:
+    """Require a removed UIA child to disappear and its replacement to appear."""
+    before_text = json.dumps(before, ensure_ascii=True)
+    after_text = json.dumps(after, ensure_ascii=True)
+    if "UDB_DYNAMIC_BEFORE" not in before_text:
+        raise AssertionError("Initial dynamic UIA control was not observed")
+    if "FixtureDynamicTarget" not in before_text:
+        raise AssertionError("Initial dynamic UIA automation ID was not observed")
+    if "UDB_DYNAMIC_BEFORE" in after_text:
+        raise AssertionError("Persistent UIA worker returned the removed control value")
+    if "FixtureDynamicTarget" in after_text:
+        raise AssertionError("Persistent UIA worker returned the removed automation ID")
+    if "UDB_DYNAMIC_REPLACED" not in after_text:
+        raise AssertionError("Replacement UIA control was not observed")
+    if "FixtureDynamicReplacement" not in after_text:
+        raise AssertionError("Replacement UIA automation ID was not observed")
+    if before == after:
+        raise AssertionError("Dynamic UIA replacement did not change the snapshot")
+
+
+def compare_dynamic_warm(
+    size: int,
+    samples: int = 10,
+    *,
+    worker_factory=None,
+    mutation: str = "rename",
+) -> dict:
     """Verify cached/live parity after a control changes in a test-owned
-    WinForms window."""
+    WinForms window. The replace mode removes and disposes the old control."""
     _validate(size, samples)
+    if mutation not in ("rename", "replace"):
+        raise ValueError("Dynamic mutation must be rename or replace")
     if worker_factory is None:
         from udb.uia_worker import PersistentUIA
 
@@ -278,7 +309,10 @@ def compare_dynamic_warm(size: int, samples: int = 10, *, worker_factory=None) -
         trigger = Path(folder) / "trigger"
         with (
             _fixture(
-                size, dynamic_signal_path=signal, dynamic_trigger_path=trigger
+                size,
+                dynamic_signal_path=signal,
+                dynamic_trigger_path=trigger,
+                dynamic_mutation=mutation,
             ) as form,
             ExitStack() as cleanup,
         ):
@@ -331,7 +365,14 @@ def compare_dynamic_warm(size: int, samples: int = 10, *, worker_factory=None) -
                             "UIA worker restarted during dynamic warm samples"
                         )
                 _check_pair(current["uncached"], current["cached"])
-                _check_dynamic_transition(before["uncached"], current["uncached"])
+                if mutation == "replace":
+                    _check_dynamic_replacement(
+                        before["uncached"], current["uncached"]
+                    )
+                else:
+                    _check_dynamic_transition(
+                        before["uncached"], current["uncached"]
+                    )
                 if current["uncached"].get("truncated") is True:
                     truncated_samples += 1
 
@@ -340,6 +381,7 @@ def compare_dynamic_warm(size: int, samples: int = 10, *, worker_factory=None) -
         "samples": samples,
         "same_output": True,
         "dynamic_change_observed": True,
+        "dynamic_mutation": mutation,
         "workers_reused": True,
         "cold_ms": cold,
         "truncated_samples": truncated_samples,
@@ -353,25 +395,32 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--sizes", type=int, nargs="+", default=list(SIZES))
     parser.add_argument("--warm", action="store_true")
     parser.add_argument("--dynamic-warm", action="store_true")
+    parser.add_argument("--dynamic-recreate", action="store_true")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
     if sys.platform != "win32":
         parser.error("Windows UI Automation is required")
-    run = (
-        compare_dynamic_warm
-        if args.dynamic_warm
-        else compare_warm
-        if args.warm
-        else compare
-    )
+    if sum((args.warm, args.dynamic_warm, args.dynamic_recreate)) > 1:
+        parser.error("Select only one of --warm, --dynamic-warm or --dynamic-recreate")
+    if args.dynamic_recreate:
+        measurement = "dynamic child replacement warm worker"
+        results = [
+            compare_dynamic_warm(size, args.samples, mutation="replace")
+            for size in args.sizes
+        ]
+    elif args.dynamic_warm:
+        measurement = "dynamic rename warm worker"
+        results = [compare_dynamic_warm(size, args.samples) for size in args.sizes]
+    elif args.warm:
+        measurement = "warm worker"
+        results = [compare_warm(size, args.samples) for size in args.sizes]
+    else:
+        measurement = "one-shot"
+        results = [compare(size, args.samples) for size in args.sizes]
     result = {
         "scope": "owned synthetic WinForms fixture only; no production activation",
-        "measurement": "dynamic warm worker"
-        if args.dynamic_warm
-        else "warm worker"
-        if args.warm
-        else "one-shot",
-        "results": [run(size, args.samples) for size in args.sizes],
+        "measurement": measurement,
+        "results": results,
     }
     report = json.dumps(result, indent=2)
     if args.output:

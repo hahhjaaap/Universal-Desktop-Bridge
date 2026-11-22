@@ -267,7 +267,9 @@ def _semantic_winforms_fixture(signal_path, *, ambiguous=False):
             line = lines.get(timeout=20)
             ready = json.loads(line.decode("utf-8-sig"))
         except (queue.Empty, ValueError, UnicodeError) as exc:
-            raise RuntimeError("Semantic WinForms fixture did not report readiness") from exc
+            raise RuntimeError(
+                "Semantic WinForms fixture did not report readiness"
+            ) from exc
         if (
             ready.get("event") != "ready"
             or ready.get("pid") != proc.pid

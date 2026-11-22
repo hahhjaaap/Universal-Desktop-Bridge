@@ -2,6 +2,28 @@
 
 > **Historical evidence:** Earlier run counts/benchmarks are not current UDB 0.12.0 CI results. The UDB Aura extension is retired from source. See [version/status](current-version.md).
 
+## Enrolled-owner status/catalog overlap (2026-11-22)
+
+For a Cloudflare Access-enrolled owner with local-tool synchronization enabled,
+the `bridge_status` response includes two different facts: the authenticated
+grant inventory and the actual Windows MCP catalog count. Previously the relay
+awaited the Windows status RPC and then sent a separate `tools/list` RPC,
+putting two full relay waits on the successful status critical path.
+
+The relay now starts the **original authorized status request first** and
+overlaps a separate, read-only `tools/list` probe. It still waits for and
+validates the catalog response before reporting the tool count. No device grant,
+desktop permission, side-effecting RPC or retry policy changes. Legacy and
+tenant grant paths retain the existing sequential behavior, and a failed
+status request continues to fail without treating a catalog read as permission.
+
+The synthetic browser-enrollment regression holds both Windows reads
+unanswered until they have simultaneously arrived, then checks the same
+authorized catalog count. Run `node --test tests/*.test.js` from
+`cloudflare/`. Passing this test proves overlap, **not** any specific deployed
+latency reduction: confirm end-to-end p50/p95 under the same account, client,
+Windows version and network before reporting a speedup.
+
 ## Optional Cloud Agent prewarm (experimental)
 
 On `HAHHJAAAP` (2026-11-15), an isolated MCP sidecar took **2,960 ms**

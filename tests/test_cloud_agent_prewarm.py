@@ -112,7 +112,14 @@ def test_prewarm_rejects_bad_timeout_without_starting_child(monkeypatch):
         pool.close()
 
 
-def test_failed_read_only_ping_poison_pool_without_calling_tools(monkeypatch):
+@pytest.mark.parametrize("shared_status", [False, True])
+def test_failed_read_only_ping_poison_pool_without_calling_tools(
+    monkeypatch, shared_status
+):
+    if shared_status:
+        monkeypatch.setenv("UDB_SHARED_STATUS_PROXY", "1")
+    else:
+        monkeypatch.delenv("UDB_SHARED_STATUS_PROXY", raising=False)
     calls = []
 
     class FakeProxy:

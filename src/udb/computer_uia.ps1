@@ -392,17 +392,106 @@ try {
         if($r.mode -eq 'wait_for') {
             if(!$r.automation_id -and !$r.name){throw 'wait_for needs exact ID or name'}
             if([int]$r.wait_ms -lt 0 -or [int]$r.wait_ms -gt 10000 -or $r.condition -notin @('exists','absent','enabled')){throw 'Invalid wait options'}
-            $timer=[Diagnostics.Stopwatch]::StartNew();$matched=$false;$observed=$null
-            do {
-                $found=$root.FindAll([Windows.Automation.TreeScope]::Descendants,$condition)
-                if($found.Count -gt 1){throw 'Wait selector is ambiguous'}
-                if($found.Count -eq 1 -and $found[0].Current.IsPassword){throw 'Password controls are refused'}
-                $matched=if($r.condition -eq 'absent'){$found.Count -eq 0}elseif($r.condition -eq 'enabled'){$found.Count -eq 1 -and $found[0].Current.IsEnabled}else{$found.Count -eq 1}
-                if($matched -and $found.Count -eq 1){$observed=@{automation_id=$found[0].Current.AutomationId;name=$found[0].Current.Name;control_type=$found[0].Current.ControlType.ProgrammaticName}}
-                if($matched -or $timer.ElapsedMilliseconds -ge [int]$r.wait_ms){break}
-                Start-Sleep -Milliseconds 100
-            } while($true)
-            @{ok=$true;matched=$matched;timed_out=(!$matched);elapsed_ms=$timer.ElapsedMilliseconds;element=$observed}|ConvertTo-Json -Depth 4 -Compress
+            $timer=[Diagnostics.Stopwatch]::StartNew()
+            $matched=$false;$observed=$null
+            $observerRequested=($r.event_observer -eq $true -and [int]$r.wait_ms -gt 0)
+            $observerUsed=$false;$observerKind='';$observerHandler=$null
+            $observerSignal=$null;$observerCleanup=$true
+            $rootRuntimeId=@($root.GetRuntimeId()) -join '.'
+            if($observerRequested){
+                $observerSignal=[Threading.AutoResetEvent]::new($false)
+                $signalRef=$observerSignal
+                try {
+                    if($r.condition -eq 'enabled'){
+                        $observerHandler=[Windows.Automation.AutomationPropertyChangedEventHandler]{
+                            param($sender,$eventArgs)
+                            if($eventArgs.Property -eq [Windows.Automation.AutomationElement]::IsEnabledProperty){
+                                [void]$signalRef.Set()
+                            }
+                        }
+                        $observerKind='property'
+                        [Windows.Automation.Automation]::AddAutomationPropertyChangedEventHandler(
+                            $root,
+                            [Windows.Automation.TreeScope]::Subtree,
+                            $observerHandler,
+                            [Windows.Automation.AutomationProperty[]]@(
+                                [Windows.Automation.AutomationElement]::IsEnabledProperty
+                            )
+                        )
+                    }else{
+                        $observerHandler=[Windows.Automation.StructureChangedEventHandler]{
+                            param($sender,$eventArgs)
+                            [void]$signalRef.Set()
+                        }
+                        $observerKind='structure'
+                        [Windows.Automation.Automation]::AddStructureChangedEventHandler(
+                            $root,
+                            [Windows.Automation.TreeScope]::Subtree,
+                            $observerHandler
+                        )
+                    }
+                    $observerUsed=$true
+                }catch{
+                    if($observerKind -eq 'property' -and $observerHandler){
+                        try{
+                            [Windows.Automation.Automation]::RemoveAutomationPropertyChangedEventHandler(
+                                $root,$observerHandler
+                            )
+                        }catch{$observerCleanup=$false}
+                    }elseif($observerKind -eq 'structure' -and $observerHandler){
+                        try{
+                            [Windows.Automation.Automation]::RemoveStructureChangedEventHandler(
+                                $root,$observerHandler
+                            )
+                        }catch{$observerCleanup=$false}
+                    }
+                    $observerKind=''
+                    $observerUsed=$false
+                }
+            }
+            try{
+                do {
+                    $liveRoot=[Windows.Automation.AutomationElement]::FromHandle([IntPtr]$r.hwnd)
+                    if($null -eq $liveRoot -or $liveRoot.Current.ProcessId -ne [int]$r.pid){
+                        throw 'Observed window identity changed while waiting'
+                    }
+                    $liveRuntimeId=@($liveRoot.GetRuntimeId()) -join '.'
+                    if($liveRuntimeId -ne $rootRuntimeId){
+                        throw 'Observed window identity changed while waiting'
+                    }
+                    $found=$liveRoot.FindAll([Windows.Automation.TreeScope]::Descendants,$condition)
+                    if($found.Count -gt 1){throw 'Wait selector is ambiguous'}
+                    if($found.Count -eq 1 -and $found[0].Current.IsPassword){throw 'Password controls are refused'}
+                    $matched=if($r.condition -eq 'absent'){$found.Count -eq 0}elseif($r.condition -eq 'enabled'){$found.Count -eq 1 -and $found[0].Current.IsEnabled}else{$found.Count -eq 1}
+                    if($matched -and $found.Count -eq 1){$observed=@{automation_id=$found[0].Current.AutomationId;name=$found[0].Current.Name;control_type=$found[0].Current.ControlType.ProgrammaticName}}
+                    if($matched -or $timer.ElapsedMilliseconds -ge [int]$r.wait_ms){break}
+                    $remaining=[int][Math]::Min(100,[Math]::Max(1,([int]$r.wait_ms - [int]$timer.ElapsedMilliseconds)))
+                    if($observerUsed){
+                        [void]$observerSignal.WaitOne($remaining)
+                    }else{
+                        Start-Sleep -Milliseconds $remaining
+                    }
+                } while($true)
+            }finally{
+                if($observerKind -eq 'property' -and $observerHandler){
+                    try{
+                        [Windows.Automation.Automation]::RemoveAutomationPropertyChangedEventHandler(
+                            $root,$observerHandler
+                        )
+                        $observerCleanup=$true
+                    }catch{$observerCleanup=$false}
+                }elseif($observerKind -eq 'structure' -and $observerHandler){
+                    try{
+                        [Windows.Automation.Automation]::RemoveStructureChangedEventHandler(
+                            $root,$observerHandler
+                        )
+                        $observerCleanup=$true
+                    }catch{$observerCleanup=$false}
+                }
+                if($observerSignal){$observerSignal.Dispose()}
+            }
+            $observerMode=if($observerUsed){'event'}else{'polling'}
+            @{ok=$true;matched=$matched;timed_out=(!$matched);elapsed_ms=$timer.ElapsedMilliseconds;element=$observed;observer_mode=$observerMode;observer_cleanup=$observerCleanup}|ConvertTo-Json -Depth 4 -Compress
             return
         }
         $matches=$root.FindAll([Windows.Automation.TreeScope]::Descendants,$condition)

@@ -381,7 +381,7 @@ def test_33_wait_for_event_handlers_are_bounded_and_removed_in_finally():
         Path(__file__).parents[2] / "src" / "udb" / "computer_uia.ps1"
     ).read_text(encoding="utf-8-sig")
     start = script.index("        if($r.mode -eq 'wait_for')")
-    end = script.index("        if($r.mode -eq 'snapshot')", start)
+    end = script.index("        $matches=$root.FindAll", start)
     wait_block = script[start:end]
     assert "AddStructureChangedEventHandler" in wait_block
     assert "RemoveStructureChangedEventHandler" in wait_block

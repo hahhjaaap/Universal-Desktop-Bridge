@@ -458,12 +458,13 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   // dispatched first; neither request grants access or replays a mutation.
   // Legacy/tenant grants retain their existing sequential diagnostic path.
   const responsePending = relay(stub, rpc);
-  const catalogProbeId = user.enrolledOwner && !useEdgeCatalog &&
+  const catalogProbeId = env.UDB_OWNER_STATUS_CATALOG_OVERLAP === "true" &&
+    user.enrolledOwner && !useEdgeCatalog &&
     rpc.method === "tools/call" && rpc.params.name === "bridge_status"
     ? "udb-catalog-" + crypto.randomUUID() : null;
   const statusCatalogProbe = catalogProbeId
     ? relay(stub, { jsonrpc: "2.0", id: catalogProbeId,
-      method: "tools/list", params: {} })
+      method: "tools/list", params: {} }).catch(() => null)
     : null;
   const response = await responsePending;
   if (!response.ok) {
@@ -519,7 +520,7 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
       const listed = await (statusCatalogProbe || relay(stub, {
         jsonrpc: "2.0", id: catalogId, method: "tools/list", params: {},
       }));
-      if (listed.ok) {
+      if (listed?.ok) {
         try {
           const catalog = await listed.json();
           if (catalog.jsonrpc === "2.0" && catalog.id === catalogId &&

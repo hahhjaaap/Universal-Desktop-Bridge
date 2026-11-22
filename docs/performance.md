@@ -17,9 +17,13 @@ local free RAM at most once every five seconds and **reduce admission for new
 requests** if pressure increases (e.g., below 2 GiB free RAM -> 1 worker).
 It never cancels, interrupts or replays an in-flight RPC. Admission can return
 up to the connection's original thread cap as RAM recovers, but cannot launch
-more worker threads than were configured at startup. One WebSocket reconnection
-re-evaluates startup capacity. No background monitor, network telemetry or
-extra Cloudflare request is involved.
+more worker threads than were configured at startup. When admission is at
+one or two workers, additional calls targeting an already-admitted physical
+desktop or owned-browser lane return `DeviceBusy` **before dispatch** rather
+than occupying a scarce executor thread while waiting on the same lane.
+This leaves a slot for an independent read or a different resource lane.
+One WebSocket reconnection re-evaluates startup capacity. No background
+monitor, network telemetry or extra Cloudflare request is involved.
 
 On non-Windows development platforms the original ten-worker default remains.
 Set `UDB_CLOUD_WORKER_PROFILE=legacy` to restore ten-worker Windows admission

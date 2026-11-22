@@ -120,6 +120,8 @@ def test_stage_summaries_keep_cold_warm_and_failed_counts_separate():
         event("desktop.uia", "execution", 1, 1, trace_id="not-a-hash"),
         event("desktop.uia", "execution", 1, 1, startup="unknown"),
         event("desktop.uia", "execution", 1, 1, ok=1),
+        event("unknown.operation", "execution", 1, 1),
+        event("desktop.uia", "unknown.phase", 1, 1),
     ],
 )
 def test_invalid_event_is_rejected(bad):

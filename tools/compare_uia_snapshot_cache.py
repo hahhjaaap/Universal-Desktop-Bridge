@@ -233,8 +233,6 @@ def compare_warm(size: int, samples: int, *, worker_factory=None) -> dict:
         **{mode: _summary(timings[mode]) for mode in modes},
     }
 
-
-
 def _check_dynamic_transition(before: dict, after: dict) -> None:
     """Require a persistent worker to observe a changed UIA Name on its next request."""
     before_text = json.dumps(before, ensure_ascii=True)
@@ -286,7 +284,9 @@ def compare_dynamic_warm(size: int, samples: int = 10, *, worker_factory=None) -
                     cold[mode] = round((time.perf_counter() - started) * 1000, 2)
                 processes[mode] = worker._process
             _check_pair(before["uncached"], before["cached"])
-            if "UDB_DYNAMIC_BEFORE" not in json.dumps(before["uncached"], ensure_ascii=True):
+            if "UDB_DYNAMIC_BEFORE" not in json.dumps(
+                before["uncached"], ensure_ascii=True
+            ):
                 raise AssertionError("Initial dynamic UIA control was not observed")
 
             deadline = time.monotonic() + 12
@@ -308,7 +308,9 @@ def compare_dynamic_warm(size: int, samples: int = 10, *, worker_factory=None) -
                         current[mode] = worker.call(request, timeout=18)
                         timings[mode].append((time.perf_counter() - started) * 1000)
                     if worker._process is not processes[mode]:
-                        raise AssertionError("UIA worker restarted during dynamic warm samples")
+                        raise AssertionError(
+                            "UIA worker restarted during dynamic warm samples"
+                        )
                 _check_pair(current["uncached"], current["cached"])
                 _check_dynamic_transition(before["uncached"], current["uncached"])
                 if current["uncached"].get("truncated") is True:
@@ -336,10 +338,20 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if sys.platform != "win32":
         parser.error("Windows UI Automation is required")
-    run = compare_dynamic_warm if args.dynamic_warm else compare_warm if args.warm else compare
+    run = (
+        compare_dynamic_warm
+        if args.dynamic_warm
+        else compare_warm
+        if args.warm
+        else compare
+    )
     result = {
         "scope": "owned synthetic WinForms fixture only; no production activation",
-        "measurement": "dynamic warm worker" if args.dynamic_warm else "warm worker" if args.warm else "one-shot",
+        "measurement": "dynamic warm worker"
+        if args.dynamic_warm
+        else "warm worker"
+        if args.warm
+        else "one-shot",
         "results": [run(size, args.samples) for size in args.sizes],
     }
     report = json.dumps(result, indent=2)

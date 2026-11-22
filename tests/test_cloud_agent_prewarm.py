@@ -70,20 +70,27 @@ def test_opted_in_prewarm_warms_the_actual_shared_status_worker(monkeypatch):
         assert pool.status_proxy is created[0]
         assert calls == [(created[0], "ping", None)]
 
-        result = pool.submit({
-            "jsonrpc": "2.0", "id": 7, "method": "tools/call",
-            "params": {"name": "bridge_status", "arguments": {}},
-        }).result(timeout=5)
+        result = pool.submit(
+            {
+                "jsonrpc": "2.0",
+                "id": 7,
+                "method": "tools/call",
+                "params": {"name": "bridge_status", "arguments": {}},
+            }
+        ).result(timeout=5)
         assert result["id"] == 7
         assert len(created) == 1, "First status must reuse the prewarmed worker"
         assert calls[-1] == (created[0], "tools/call", "bridge_status")
 
         # Unmarked pings still use independent workers. The status lane is
         # selected by the local prewarm flag, not by an untrusted RPC ID.
-        pool.submit({
-            "jsonrpc": "2.0", "id": "udb-prewarm-test",
-            "method": "ping",
-        }).result(timeout=5)
+        pool.submit(
+            {
+                "jsonrpc": "2.0",
+                "id": "udb-prewarm-test",
+                "method": "ping",
+            }
+        ).result(timeout=5)
         assert len(created) == 2
         assert calls[-1][0] is not pool.status_proxy
     finally:

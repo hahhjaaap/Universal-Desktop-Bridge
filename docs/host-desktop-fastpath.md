@@ -181,3 +181,17 @@ Track host-internal batch execution, MCP/Cloudflare round-trip wall time,
 and verified end-to-end completion separately. Test multiple runs under
 known machine load. Target p95 <= 6 seconds is a benchmark goal, not a
 claim about this experimental feature.
+
+
+## Native semantic UIA canary
+
+Windows regression CI also starts a test-owned WinForms window with one exact
+results container and two similarly named buttons. The native UIA helper must
+select the topmost eligible result and invoke only that button. The test
+performs 30 separate selection/invocation/readback cycles against the fixture,
+then checks an overlapping-control case is rejected before any click. The
+fixture is terminated in a `finally` block; no real user window or owner
+grant is accessed.
+
+This proves a bounded native UIA fixture path, not MISA readiness or an
+end-to-end Cloudflare latency target.

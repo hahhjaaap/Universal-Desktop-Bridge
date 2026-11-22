@@ -2,6 +2,28 @@
 
 > **Historical evidence:** Earlier run counts/benchmarks are not current UDB 0.12.0 CI results. The UDB Aura extension is retired from source. See [version/status](current-version.md).
 
+## Enrolled-owner status/catalog overlap (experimental opt-in)
+
+`UDB_OWNER_STATUS_CATALOG_OVERLAP=true` in the **Cloudflare Worker
+environment** enables concurrent relay of an authenticated enrolled-owner
+`bridge_status` and a separate read-only `tools/list` count probe. The
+primary authorized status request is still sent first. The diagnostic probe
+gets a unique RPC ID, and failure to read the catalog cannot grant tools,
+change permissions, replay a mutation or turn a failed status into success.
+
+The feature is deliberately **off by default** because it can occupy two
+device RPC worker slots for a single status request. On a customer i5-6500
+with 8 GiB RAM and two Cloud RPC workers, enabling overlap can reduce
+available capacity for independent operations, even if one status request
+completes sooner. The original sequential path remains active when the
+environment variable is absent.
+
+Synthetic enrollment tests verify both disabled and opt-in behavior, with
+the same catalog grants and live tool count. Evaluate on a real target with
+the same transport/build: 30–50 trials, 1/2/3 worker settings, caller p50/p95,
+peak RAM and busy/error rates before staging deployment. Do not claim any
+latency improvement without real comparative measurements.
+
 ## Optional Cloud Agent prewarm (experimental)
 
 On `HAHHJAAAP` (2026-11-15), an isolated MCP sidecar took **2,960 ms**

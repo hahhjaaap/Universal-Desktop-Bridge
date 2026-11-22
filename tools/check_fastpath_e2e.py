@@ -36,6 +36,13 @@ def _is_hex(value: object, length: int) -> bool:
     )
 
 
+def _worker_revision(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{7,63}", value) is not None
+    )
+
+
 def _metrics(trials):
     counts = Counter(trial["outcome"] for trial in trials)
     verified = sorted(
@@ -77,7 +84,7 @@ def evaluate(report, *, baseline_sha, candidate_sha, profile):
         or report["scope"] != "chatgpt-cloudflare-windows"
         or report["environment"] != "isolated-staging"
         or not _is_hex(report["fixture_sha256"], 64)
-        or not _is_hex(report["worker_revision"], 8)
+        or not _worker_revision(report["worker_revision"])
     ):
         raise ValueError(
             "Expected a version 2 isolated end-to-end evidence report with a pinned "

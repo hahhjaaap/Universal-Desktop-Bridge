@@ -217,7 +217,6 @@ def test_concurrent_duplicate_request_never_enters_input_lane_twice(tmp_path):
     assert invoked == [True]
 
 
-
 def test_process_crash_after_dispatch_leaves_durable_unknown_receipt(tmp_path):
     entered = tmp_path / "input-entered"
     replayed = tmp_path / "input-replayed"

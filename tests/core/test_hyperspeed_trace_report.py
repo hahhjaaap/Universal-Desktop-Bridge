@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from tools.hyperspeed_trace_report import analyze_trace_events
+from tools.hyperspeed_trace_report import analyze_trace_events, main
 
 
 def event(
@@ -152,3 +152,24 @@ def test_rpc_detail_limit_is_bounded():
     assert len(report["rpc_timelines"]) == 2
     assert report["omitted_rpc_timeline_count"] == 3
     assert [row["rpc_index"] for row in report["rpc_timelines"]] == [1, 2]
+
+
+
+def test_cli_writes_a_pseudonymous_json_report(tmp_path, capsys):
+    trace_id = "c" * 24
+    trace_path = tmp_path / "traces.jsonl"
+    trace_path.write_text(
+        json.dumps(event("desktop.uia", "execution", 100, 1_000_000, trace_id=trace_id))
+        + "\\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "report.json"
+
+    assert main([str(trace_path), "--output", str(output)]) == 0
+
+    report_text = output.read_text(encoding="utf-8")
+    report = json.loads(report_text)
+    assert report["correlated_rpc_count"] == 1
+    assert trace_id not in report_text
+    assert report_text.endswith("\\n")
+    assert json.loads(capsys.readouterr().out)["schema"] == 1

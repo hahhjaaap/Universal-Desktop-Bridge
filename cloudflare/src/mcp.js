@@ -458,9 +458,10 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   // dispatched first; neither request grants access or replays a mutation.
   // Legacy/tenant grants retain their existing sequential diagnostic path.
   const responsePending = relay(stub, rpc);
-  const catalogProbeId = "udb-catalog-" + crypto.randomUUID();
-  const statusCatalogProbe = user.enrolledOwner && !useEdgeCatalog &&
+  const catalogProbeId = user.enrolledOwner && !useEdgeCatalog &&
     rpc.method === "tools/call" && rpc.params.name === "bridge_status"
+    ? "udb-catalog-" + crypto.randomUUID() : null;
+  const statusCatalogProbe = catalogProbeId
     ? relay(stub, { jsonrpc: "2.0", id: catalogProbeId,
       method: "tools/list", params: {} })
     : null;

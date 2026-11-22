@@ -6,6 +6,12 @@ All tests use synthetic data; no user desktop, browser or physical input.
 from __future__ import annotations
 
 from types import SimpleNamespace
+from contextlib import contextmanager
+import json
+import os
+import subprocess
+import sys
+import time
 
 import pytest
 
@@ -213,3 +219,142 @@ def test_element_ref_rejects_forged_selector_or_other_window(desktop, invoke_arg
             ],
             fastpath=True,
         )
+
+
+
+@contextmanager
+def _semantic_winforms_fixture(signal_path, *, ambiguous=False):
+    from pathlib import Path
+
+    powershell = (
+        Path(os.environ["SystemRoot"])
+        / "System32"
+        / "WindowsPowerShell"
+        / "v1.0"
+        / "powershell.exe"
+    )
+    fixture = Path(__file__).resolve().parents[1] / "fixtures" / "uia_semantic_form.ps1"
+    args = [
+        str(powershell),
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Sta",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        str(fixture),
+        "-SignalPath",
+        str(signal_path),
+    ]
+    if ambiguous:
+        args.append("-Ambiguous")
+    proc = subprocess.Popen(
+        args,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        shell=False,
+    )
+    try:
+        line = proc.stdout.readline()
+        ready = json.loads(line.decode("utf-8-sig"))
+        if (
+            ready.get("event") != "ready"
+            or ready.get("pid") != proc.pid
+            or type(ready.get("hwnd")) is not int
+            or ready["hwnd"] <= 0
+        ):
+            raise RuntimeError("Semantic WinForms fixture identity was not verified")
+        yield ready
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+        try:
+            proc.wait(timeout=8)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=8)
+        proc.stdout.close()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires native Windows UIA")
+def test_windows_semantic_selection_invokes_only_topmost_owned_fixture_30_times(
+    tmp_path, monkeypatch
+):
+    from udb.computer_desktop import Desktop
+
+    monkeypatch.setenv("UDB_UIA_PERSISTENT", "1")
+    signal = tmp_path / "semantic-click.json"
+    with _semantic_winforms_fixture(signal) as form:
+        desktop = Desktop.__new__(Desktop)
+        desktop.interactive = lambda: None
+        desktop.process = SimpleNamespace(
+            GetWindowThreadProcessId=lambda _hwnd: (0, form["pid"])
+        )
+        desktop._uia_worker = None
+        try:
+            for index in range(1, 31):
+                selected = desktop.uia(
+                    form["hwnd"],
+                    "ranked_control",
+                    text="UDB result item",
+                    name="UDB_RESULTS_CONTAINER",
+                    control_type="Button",
+                )
+                assert selected["found"] is True
+                assert selected["name"] == "UDB result item alpha"
+                assert selected["control_type"] == "ControlType.Button"
+                invoked = desktop.uia(
+                    form["hwnd"],
+                    "invoke",
+                    name=selected["name"],
+                    automation_id=selected["automation_id"],
+                    control_type=selected["control_type"],
+                )
+                assert invoked["invoked"] is True
+                deadline = time.monotonic() + 2
+                observed = None
+                while time.monotonic() < deadline:
+                    if signal.is_file():
+                        try:
+                            observed = json.loads(signal.read_text(encoding="utf-8"))
+                        except (OSError, json.JSONDecodeError):
+                            observed = None
+                        if observed and observed.get("count") == index:
+                            break
+                    time.sleep(0.02)
+                assert observed == {"count": index, "target": "alpha"}
+        finally:
+            desktop.close()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires native Windows UIA")
+def test_windows_semantic_selection_rejects_ambiguous_controls_before_invoke(
+    tmp_path, monkeypatch
+):
+    from udb.computer_desktop import Desktop
+    from udb.core import PolicyError
+
+    monkeypatch.setenv("UDB_UIA_PERSISTENT", "1")
+    signal = tmp_path / "semantic-ambiguous-click.json"
+    with _semantic_winforms_fixture(signal, ambiguous=True) as form:
+        desktop = Desktop.__new__(Desktop)
+        desktop.interactive = lambda: None
+        desktop.process = SimpleNamespace(
+            GetWindowThreadProcessId=lambda _hwnd: (0, form["pid"])
+        )
+        desktop._uia_worker = None
+        try:
+            with pytest.raises(PolicyError, match="refused"):
+                desktop.uia(
+                    form["hwnd"],
+                    "ranked_control",
+                    text="UDB result item",
+                    name="UDB_RESULTS_CONTAINER",
+                    control_type="Button",
+                )
+            assert not signal.exists()
+        finally:
+            desktop.close()

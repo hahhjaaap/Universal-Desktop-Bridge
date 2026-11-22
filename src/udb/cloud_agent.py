@@ -22,6 +22,7 @@ from urllib.parse import urlsplit
 from . import hyperspeed_perf as perf
 from ._version import VERSION
 from .cloud_secrets import load_device_token, read_token_file
+from .cloud_worker_profile import local_worker_budget
 from .config import serve_options
 from .launcher import child_environment, command
 from .remote_task_scheduler import (
@@ -39,6 +40,7 @@ _MIN_RETRY_SECONDS = 5
 _MAX_RETRY_SECONDS = 120
 _MAX_PARALLEL_CALLS = 10
 _RPC_WORKER_LIMIT_ENV = "UDB_CLOUD_MAX_RPC_WORKERS"
+_RPC_WORKER_PROFILE_ENV = "UDB_CLOUD_WORKER_PROFILE"
 _STATUS_LOCK_WAIT_SECONDS = 6.0
 # Detect half-open TCP / idle WebSocket connections without replaying RPCs.
 _HEARTBEAT_IDLE_SECONDS = 30
@@ -66,9 +68,12 @@ def cloud_rpc_worker_limit() -> int:
     DeviceTaskScheduler admission and executor capacity together. This is a
     concurrency bound, NOT a guarantee about retained/desktop proxy count.
     """
+    profile = os.environ.get(_RPC_WORKER_PROFILE_ENV)
+    if profile not in (None, "auto"):
+        raise ValueError("UDB_CLOUD_WORKER_PROFILE must be auto or unset")
     raw = os.environ.get(_RPC_WORKER_LIMIT_ENV)
     if raw is None:
-        return _MAX_PARALLEL_CALLS
+        return local_worker_budget() if profile == "auto" else _MAX_PARALLEL_CALLS
     if not raw.isascii() or not raw.isdecimal() or len(raw) > 2:
         raise ValueError("UDB_CLOUD_MAX_RPC_WORKERS must be 1..10")
     count = int(raw)

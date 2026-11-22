@@ -272,7 +272,7 @@ def test_process_crash_after_dispatch_leaves_durable_unknown_receipt(tmp_path):
 def test_completed_mutation_with_lost_reply_is_not_replayed_after_restart(tmp_path):
     executed = tmp_path / "input-executed"
     replayed = tmp_path / "input-replayed"
-    crash_code = "\\n".join(
+    crash_code = "\n".join(
         [
             "import os, sys",
             "from pathlib import Path",
@@ -296,7 +296,7 @@ def test_completed_mutation_with_lost_reply_is_not_replayed_after_restart(tmp_pa
     assert crashed.returncode == 23
     assert executed.read_text(encoding="utf-8") == "executed"
 
-    retry_code = "\\n".join(
+    retry_code = "\n".join(
         [
             "import json, sys",
             "from pathlib import Path",

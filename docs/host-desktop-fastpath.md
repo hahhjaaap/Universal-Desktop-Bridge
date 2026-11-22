@@ -24,6 +24,7 @@ computer-access grant. The runner persists a payload-free `running` receipt
 - Reissuing the **same request_id and same plan** returns receipt metadata
   (completed/failed/unknown), **never runs input a second time**.
 - Reusing a request_id with a different plan is rejected.
+- Concurrent callers with the same request ID cannot enter the input lane twice: the first caller creates the exclusive `running` receipt before dispatch; a concurrent duplicate only observes that receipt and is reported as uncertain until the first caller finalizes it.
 - The receipt stores plan digests and bounded status only — never UI text,
   screenshots, typed content or URLs.
 - A crash, lost reply or uncertain mutation leaves an outcome-unknown receipt

@@ -13,6 +13,7 @@ import os
 import queue
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 from . import hyperspeed_perf as perf
@@ -36,6 +37,7 @@ class PersistentUIA:
         self._sequence = 0
         self._idle = None
         self._idle_token = None
+        self._cancel_event = threading.Event()
 
     @staticmethod
     def _receive(process, replies):
@@ -87,6 +89,8 @@ class PersistentUIA:
             pass
 
     def close(self):
+        # Wake an in-flight bounded wait before acquiring its serialization lock.
+        self._cancel_event.set()
         with self._lock:
             self._stop_locked()
 
@@ -136,8 +140,8 @@ class PersistentUIA:
         )
         self._reader.start()
 
-    def call(self, request: dict, timeout: float) -> dict:
-        """Never resend after a write attempt, even on broken pipe or timeout."""
+    def call(self, request: dict, timeout: float, *, cancel_check=None) -> dict:
+        """Never resend after a write attempt, even on revoke, close or timeout."""
         if type(timeout) not in (int, float) or not 0 < timeout <= 22:
             raise PolicyError("Invalid UIA execution deadline")
         try:
@@ -148,6 +152,7 @@ class PersistentUIA:
             raise PolicyError("Invalid UIA request") from exc
         if len(wire.encode("utf-8")) > MAX_REQUEST_BYTES or "\n" in wire:
             raise PolicyError("UIA request too large or malformed")
+        self._cancel_event.clear()
         with self._lock:
             if self._idle is not None:
                 self._idle.cancel()
@@ -162,7 +167,32 @@ class PersistentUIA:
                     process.stdin.write(wire + "\n")
                     process.stdin.flush()
                 with perf.span("desktop.uia", "observation"):
-                    line = self._replies.get(timeout=timeout)
+                    deadline = time.monotonic() + timeout
+                    while True:
+                        if self._cancel_event.is_set():
+                            self._stop_locked()
+                            raise PolicyError(
+                                "UI Automation worker closed while a request was in flight; "
+                                "the result may be unknown and no replay was attempted."
+                            )
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise queue.Empty
+                        try:
+                            line = self._replies.get(timeout=min(0.1, remaining))
+                            break
+                        except queue.Empty:
+                            if cancel_check is not None:
+                                try:
+                                    cancel_check()
+                                except Exception:
+                                    self._cancel_event.set()
+                                    self._stop_locked()
+                                    raise PolicyError(
+                                        "Computer access was revoked or the interactive "
+                                        "desktop became unavailable during UIA wait; the "
+                                        "observer worker was stopped and no replay occurred."
+                                    ) from None
                 if (
                     type(line) is not str
                     or not line.endswith("\n")

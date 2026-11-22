@@ -127,7 +127,6 @@ def test_worker_revision_is_required_and_pinned():
         score(data)
 
 
-
 def test_worker_revision_rejects_unbounded_or_unsafe_identifiers():
     data = report()
     data["worker_revision"] = "worker version with spaces"

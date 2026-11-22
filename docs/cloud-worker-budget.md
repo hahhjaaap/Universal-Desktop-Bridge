@@ -1,4 +1,4 @@
-# Bounded Cloud RPC workers (experimental, default unchanged)
+# Bounded Cloud RPC workers (Windows Auto candidate)
 
 The installed onefile UDB v0.13.0 on the owner's Windows PC spawns
 independent, short-lived PyInstaller extraction trees for local MCP
@@ -8,11 +8,18 @@ roots held approximately 340 MiB of extracted files. This is an
 **observational process and disk footprint**, not evidence of a memory
 leak or a guaranteed performance improvement.
 
-## Opt-in limit
+## Automatic Windows sizing and manual override
 
-The Cloud Agent supports `UDB_CLOUD_MAX_RPC_WORKERS` to bound **admitted
-Cloud RPCs and executor threads together** on one authenticated device
-WebSocket. It defaults to **10**, the current historical behavior.
+On Windows the Cloud Agent now chooses worker capacity using local RAM and
+CPU when a WebSocket connects. It starts 8 GiB/4-thread hosts at **two**
+workers, and rechecks available RAM at most every five seconds on new RPC
+arrivals to reduce admission when needed. Linux/macOS development retains
+the previous 10-worker default. The configured worker ceiling never exceeds
+10. The local Windows profile does not require a user to configure anything.
+
+The Cloud Agent still supports `UDB_CLOUD_MAX_RPC_WORKERS` to override
+**admitted Cloud RPCs and executor threads together** on one authenticated
+device WebSocket, disabling adaptive pressure sampling for fixed benchmarks.
 For staging only, set an ASCII integer from **1 through 10**, e.g.:
 
 ```powershell
@@ -20,6 +27,13 @@ $env:UDB_CLOUD_MAX_RPC_WORKERS = '3'
 # Launch only a disposable, owner-approved staging Cloud Agent, not an
 # additional process against the actively paired production identity.
 ```
+
+Set `UDB_CLOUD_WORKER_PROFILE=legacy` for a reversible ten-worker
+Windows test, or `UDB_CLOUD_WORKER_PROFILE=auto` to force automatic sizing.
+A manual integer always overrides Auto. Auto only affects newly admitted
+calls; active RPCs are never interrupted. The executor's startup worker cap
+is fixed for the connection, so RAM recovery can increase admission only up
+to that original cap.
 
 Invalid values fail at Cloud Agent pool creation rather than silently
 increasing capacity. The existing resource scheduler's exclusive mutation,

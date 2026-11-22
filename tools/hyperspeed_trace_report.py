@@ -198,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
     wire = json.dumps(report, indent=2, sort_keys=True)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(wire + "\\n", encoding="utf-8")
+        args.output.write_text(wire + "\n", encoding="utf-8")
     print(wire)
     return 0
 

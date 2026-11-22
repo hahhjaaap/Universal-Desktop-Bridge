@@ -54,7 +54,7 @@ marking each safety field true.
 
 ## Score the redacted report
 
-The version 2 report contains source revisions, the pinned Cloudflare Worker revision, the fixture hash, per-attempt sequence numbers and timings,
+The version 2 report contains source revisions, the exact pinned Cloudflare Worker version identifier, the fixture hash, per-attempt sequence numbers and timings,
 outcome labels, and reviewed safety booleans. Device IDs, endpoints,
 credentials, and raw production tool results belong outside this report. The
 example shows the shape with one trial. It is intentionally incomplete.
@@ -69,7 +69,7 @@ example shows the shape with one trial. It is intentionally incomplete.
     "candidate": "<full candidate SHA>"
   },
   "fixture_sha256": "<64 lowercase hex characters>",
-  "worker_revision": "<8 lowercase hex characters>",
+  "worker_revision": "<8-64 safe version characters>",
   "safety_checks": {
     "permission_parity": false,
     "navigation_parity": false,

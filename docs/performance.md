@@ -22,11 +22,19 @@ after the existing reconnect backoff, rather than sending a mutation
 through an unverified child.
 
 The flag is **off by default** to avoid idle process and RAM overhead on
-resource-constrained machines. It can improve the first call after a
-connection is established, but does **not** reduce ChatGPT model
-generation time, guarantee 5–6 second answers or remove network/UI
-latency from later calls. Measure cold and warm p50/p95 under the
-same device, request and network conditions before claiming improvement.
+resource-constrained machines. When **both** `UDB_CLOUD_PREWARM=1` and
+`UDB_SHARED_STATUS_PROXY=1` are explicitly enabled, the read-only warmup
+ping now uses the same serial worker that handles later `bridge_status`
+requests. Previously it warmed an unrelated thread-local worker, leaving
+the first status RPC cold. Other RPCs continue using the original separate
+worker lanes. No new permission, relay auth, or automatic retry is introduced.
+
+It can improve the first call after a connection is established, but does
+**not** reduce ChatGPT model generation time, guarantee 5–6 second answers
+or remove network/UI latency from later calls. Run
+`pytest -q tests/test_cloud_agent_prewarm.py tests/test_cloud_shared_status_proxy.py`
+and measure cold and warm p50/p95 under the same device, request and network
+conditions before claiming improvement.
 
 ## Current optimization sweep (2026-11-14)
 

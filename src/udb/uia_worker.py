@@ -93,6 +93,7 @@ class PersistentUIA:
         self._cancel_event.set()
         with self._lock:
             self._stop_locked()
+            self._cancel_event.clear()
 
     def _expire(self, token):
         with self._lock:
@@ -152,8 +153,9 @@ class PersistentUIA:
             raise PolicyError("Invalid UIA request") from exc
         if len(wire.encode("utf-8")) > MAX_REQUEST_BYTES or "\n" in wire:
             raise PolicyError("UIA request too large or malformed")
-        self._cancel_event.clear()
         with self._lock:
+            if self._cancel_event.is_set():
+                raise PolicyError("UI Automation worker is closing; request was not dispatched")
             if self._idle is not None:
                 self._idle.cancel()
                 self._idle = None
@@ -188,6 +190,7 @@ class PersistentUIA:
                                 except Exception:
                                     self._cancel_event.set()
                                     self._stop_locked()
+                                    self._cancel_event.clear()
                                     raise PolicyError(
                                         "Computer access was revoked or the interactive "
                                         "desktop became unavailable during UIA wait; the "

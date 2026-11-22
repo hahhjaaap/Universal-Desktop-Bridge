@@ -102,7 +102,6 @@ def test_release_does_not_require_fastpath_relative_reduction():
     assert score(data, "fastpath")["result"] == "blocked"
 
 
-
 def test_grouped_build_runs_are_blocked_even_with_good_latency():
     data = report()
     data["trials"] = sorted(data["trials"], key=lambda row: row["variant"])

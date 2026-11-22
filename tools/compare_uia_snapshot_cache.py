@@ -233,6 +233,7 @@ def compare_warm(size: int, samples: int, *, worker_factory=None) -> dict:
         **{mode: _summary(timings[mode]) for mode in modes},
     }
 
+
 def _check_dynamic_transition(before: dict, after: dict) -> None:
     """Require a persistent worker to observe a changed UIA Name on its next request."""
     before_text = json.dumps(before, ensure_ascii=True)

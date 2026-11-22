@@ -126,6 +126,7 @@ def test_worker_revision_is_required_and_pinned():
     with pytest.raises(ValueError, match="version 2"):
         score(data)
 
+
 def test_worker_revision_rejects_unbounded_or_unsafe_identifiers():
     data = report()
     data["worker_revision"] = "worker version with spaces"

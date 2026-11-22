@@ -1,0 +1,13 @@
+# Review routing for security-sensitive repository controls.
+# Enforcement requires "Require review from Code Owners" in the main ruleset.
+# Add a second, independently authorized maintainer before requiring approvals
+# on owner-authored PRs; the PR author cannot approve their own changes.
+.github/workflows/ @hahhjaaap
+.github/CODEOWNERS @hahhjaaap
+tools/release_gate.py @hahhjaaap
+tools/verify_signed_release.py @hahhjaaap
+install.ps1 @hahhjaaap
+src/udb/computer_access.py @hahhjaaap
+src/udb/desktop_fastpath_receipts.py @hahhjaaap
+src/udb/host_service.py @hahhjaaap
+cloudflare/ @hahhjaaap

@@ -1,5 +1,6 @@
 """Cross-platform contract checks for the Windows-only UIA cache parity harness."""
 
+import json
 import os
 from contextlib import nullcontext
 
@@ -67,6 +68,15 @@ def test_warm_comparison_reuses_private_workers_and_checks_parity(
         assert report["samples"] == 2 and report["same_output"] is True
         assert report["truncated_samples"] == 0
         assert set(report["cold_ms"]) == {"cached", "uncached"}
+        assert set(report["payload_bytes"]) == {"cached", "uncached"}
+        expected = canary._payload_bytes(
+            {"ok": True, "elements": ["one", "two"], "truncated": False}
+        )
+        assert report["payload_bytes"]["cached"] == {
+            "p50_bytes": expected,
+            "p95_bytes": expected,
+            "max_bytes": expected,
+        }
         assert [worker.calls for worker in workers] == [3, 3]
     assert all(worker.closed for worker in workers)
     assert os.environ.get("UDB_UIA_SNAPSHOT_CACHE") == original
@@ -132,3 +142,31 @@ def test_dynamic_fixture_replacement_disposes_old_control_before_adding_new_one(
     assert "$target.Dispose()" in fixture
     assert "$replacement.Name='FixtureDynamicReplacement'" in fixture
     assert "$replacement.AccessibleName='UDB_DYNAMIC_REPLACED'" in fixture
+
+
+def test_payload_byte_summary_exposes_no_control_text():
+    payload = {"ok": True, "elements": [{"name": "Sensitive fixture text 🔐"}]}
+    expected = json.dumps(
+        payload, ensure_ascii=True, allow_nan=False, separators=(",", ":")
+    ).encode("utf-8")
+    assert canary._payload_bytes(payload) == len(expected)
+    summary = canary._payload_summary([len(expected), len(expected) + 2])
+    assert set(summary) == {"p50_bytes", "p95_bytes", "max_bytes"}
+    assert "Sensitive fixture" not in json.dumps(summary)
+
+
+def test_one_shot_snapshot_payload_report_contains_only_aggregates(monkeypatch):
+    payload = {"ok": True, "elements": ["control", "Secret fixture value"]}
+    monkeypatch.setattr(
+        canary, "_fixture", lambda _: nullcontext({"hwnd": 17, "pid": 18})
+    )
+    monkeypatch.setattr(
+        canary,
+        "_snapshot",
+        lambda hwnd, pid, cached: (payload.copy(), 1.0 if cached else 2.0),
+    )
+    report = canary.compare(50, 2)
+    expected = canary._payload_bytes(payload)
+    assert report["payload_bytes"]["cached"]["max_bytes"] == expected
+    assert report["payload_bytes"]["uncached"]["p95_bytes"] == expected
+    assert "Secret fixture value" not in json.dumps(report)

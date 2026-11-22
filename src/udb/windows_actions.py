@@ -2,6 +2,7 @@
 
 UIA_ACTIONS = (
     "snapshot",
+    "find_control",
     "set_value",
     "invoke",
     "uia_focus",
@@ -44,6 +45,7 @@ READ_ACTIONS = (
     "frame_state",
     "list",
     "snapshot",
+    "find_control",
     "displays",
     "wait_for",
     "read_text",

@@ -850,6 +850,7 @@ class Desktop:
             "list",
             "displays",
             "snapshot",
+            "find_control",
             "screenshot",
             "frame_state",
             "wait_for",
@@ -898,6 +899,7 @@ class Desktop:
                 "screenshot",
                 "frame_state",
                 "snapshot",
+                "find_control",
                 "set_value",
                 "invoke",
                 "uia_focus",
@@ -926,7 +928,7 @@ class Desktop:
         if action in UIA_ACTIONS:
             return self.uia(
                 hwnd,
-                action,
+                "ranked_control" if action == "find_control" else action,
                 text,
                 automation_id,
                 name,
@@ -1165,7 +1167,14 @@ class Desktop:
         import inspect
 
         metadata = frozenset(
-            {"when", "verify", "depends_on", "return_result", "window_ref"}
+            {
+                "when",
+                "verify",
+                "depends_on",
+                "return_result",
+                "window_ref",
+                "element_ref",
+            }
         )
         evidence_fields = frozenset(
             {
@@ -1253,6 +1262,29 @@ class Desktop:
                 if set(row) - metadata - allowed or "window_ref" in row:
                     raise PolicyError("Invalid window locator step")
                 self._validate_window_locator(row)
+            elif row["action"] == "find_control":
+                allowed = {
+                    "action",
+                    "window_id",
+                    "text",
+                    "name",
+                    "automation_id",
+                    "control_type",
+                }
+                if (
+                    not fastpath
+                    or set(row) - allowed - metadata
+                    or type(row.get("text")) is not str
+                    or not 4 <= len(row["text"]) <= 160
+                    or not (row.get("name") or row.get("automation_id"))
+                    or type(row.get("name", "")) is not str
+                    or len(row.get("name", "")) > 300
+                    or type(row.get("automation_id", "")) is not str
+                    or len(row.get("automation_id", "")) > 128
+                    or row.get("control_type")
+                    not in ("Hyperlink", "Button", "ListItem", "MenuItem")
+                ):
+                    raise PolicyError("Invalid bounded semantic control discovery")
             else:
                 if (
                     set(row) - fields - metadata
@@ -1288,6 +1320,23 @@ class Desktop:
                 ):
                     raise PolicyError(
                         "window_ref requires one earlier window locator step"
+                    )
+            if "element_ref" in row:
+                ref = row["element_ref"]
+                if (
+                    not fastpath
+                    or row["action"] != "invoke"
+                    or type(ref) is not int
+                    or not 0 <= ref < index
+                    or steps[ref]["action"] != "find_control"
+                    or any(
+                        key in row for key in ("name", "automation_id", "control_type")
+                    )
+                    or row.get("window_ref") != steps[ref].get("window_ref")
+                    or row.get("window_id") != steps[ref].get("window_id")
+                ):
+                    raise PolicyError(
+                        "element_ref must invoke one earlier same-window find_control"
                     )
             if "when" in row:
                 validate_predicate(row["when"], current=index, previous=True)
@@ -1342,7 +1391,14 @@ class Desktop:
         from .windows_actions import READ_ACTIONS
 
         metadata = frozenset(
-            {"when", "verify", "depends_on", "return_result", "window_ref"}
+            {
+                "when",
+                "verify",
+                "depends_on",
+                "return_result",
+                "window_ref",
+                "element_ref",
+            }
         )
         deadline = time.monotonic() + 20
         results = []
@@ -1402,6 +1458,17 @@ class Desktop:
                         args["window_id"] = located["window_id"]
                     else:
                         args.setdefault("window_id", window_id)
+                    if "element_ref" in row:
+                        selected = observations[row["element_ref"]]
+                        if selected is None or not selected.get("found"):
+                            observations[index] = None
+                            results.append({"index": index, "skipped": True})
+                            continue
+                        args.update(
+                            name=selected["name"],
+                            automation_id=selected["automation_id"],
+                            control_type=selected["control_type"],
+                        )
                     attempted = mutating
                     value = self._dispatch(**args)
                     mutations_attempted |= attempted

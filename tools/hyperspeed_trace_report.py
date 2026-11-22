@@ -124,8 +124,7 @@ def analyze_trace_events(events: list[dict], *, max_rpcs: int = 200) -> dict:
     timelines = []
     for rows in rpc_groups.values():
         intervals = [
-            (row["started_ns"], row["started_ns"] + row["duration_ns"])
-            for row in rows
+            (row["started_ns"], row["started_ns"] + row["duration_ns"]) for row in rows
         ]
         first = min(start for start, _ in intervals)
         last = max(end for _, end in intervals)

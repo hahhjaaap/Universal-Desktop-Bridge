@@ -458,9 +458,10 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
   // dispatched first; neither request grants access or replays a mutation.
   // Legacy/tenant grants retain their existing sequential diagnostic path.
   const responsePending = relay(stub, rpc);
+  const catalogProbeId = "udb-catalog-" + crypto.randomUUID();
   const statusCatalogProbe = user.enrolledOwner && !useEdgeCatalog &&
     rpc.method === "tools/call" && rpc.params.name === "bridge_status"
-    ? relay(stub, { jsonrpc: "2.0", id: "udb-catalog-verification",
+    ? relay(stub, { jsonrpc: "2.0", id: catalogProbeId,
       method: "tools/list", params: {} })
     : null;
   const response = await responsePending;
@@ -513,13 +514,14 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
     if (useEdgeCatalog) {
       toolsListed = edgeCatalog(user.allowTools).length;
     } else {
+      const catalogId = statusCatalogProbe ? catalogProbeId : "udb-catalog-verification";
       const listed = await (statusCatalogProbe || relay(stub, {
-        jsonrpc: "2.0", id: "udb-catalog-verification", method: "tools/list", params: {},
+        jsonrpc: "2.0", id: catalogId, method: "tools/list", params: {},
       }));
       if (listed.ok) {
         try {
           const catalog = await listed.json();
-          if (catalog.jsonrpc === "2.0" && catalog.id === "udb-catalog-verification" &&
+          if (catalog.jsonrpc === "2.0" && catalog.id === catalogId &&
               Array.isArray(catalog.result?.tools)) {
             toolsListed = authorizedToolCatalog(catalog.result.tools, user).length;
           }

@@ -314,3 +314,19 @@ def test_windows_test_owned_form_can_be_reobserved_by_real_native_identity():
         assert d.find_window(form["pid"], class_name, title + " changed") == {
             "found": False
         }
+
+
+def test_window_class_change_after_observation_is_rejected(desktop):
+    first = desktop.find_window(101, "App1Class", "App One")
+    assert first["found"] is True
+    desktop.gui.rows[111]["class_name"] = "RecycledWindowClass"
+    with pytest.raises(PolicyError, match="expired or changed"):
+        desktop.resolve(first["window_id"], focus=False)
+
+
+def test_destroyed_window_handle_after_observation_is_rejected(desktop):
+    first = desktop.find_window(101, "App1Class", "App One")
+    assert first["found"] is True
+    del desktop.gui.rows[111]
+    with pytest.raises(PolicyError, match="expired or changed"):
+        desktop.resolve(first["window_id"], focus=False)

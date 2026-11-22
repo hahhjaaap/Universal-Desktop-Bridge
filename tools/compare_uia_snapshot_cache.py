@@ -366,13 +366,9 @@ def compare_dynamic_warm(
                         )
                 _check_pair(current["uncached"], current["cached"])
                 if mutation == "replace":
-                    _check_dynamic_replacement(
-                        before["uncached"], current["uncached"]
-                    )
+                    _check_dynamic_replacement(before["uncached"], current["uncached"])
                 else:
-                    _check_dynamic_transition(
-                        before["uncached"], current["uncached"]
-                    )
+                    _check_dynamic_transition(before["uncached"], current["uncached"])
                 if current["uncached"].get("truncated") is True:
                     truncated_samples += 1
 

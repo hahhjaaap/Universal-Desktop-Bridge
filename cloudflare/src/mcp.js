@@ -452,7 +452,21 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
         Object.keys(args).length !== 2))
       return fixtureReadDenied();
   }
-  const response = await relay(stub, rpc);
+  // Enrolled-owner bridge_status includes a live tool count. Start its
+  // independent, read-only discovery while status executes instead of adding
+  // a second full relay round trip to the critical path. The primary RPC is
+  // dispatched first; neither request grants access or replays a mutation.
+  // Legacy/tenant grants retain their existing sequential diagnostic path.
+  const responsePending = relay(stub, rpc);
+  const catalogProbeId = env.UDB_OWNER_STATUS_CATALOG_OVERLAP === "true" &&
+    user.enrolledOwner && !useEdgeCatalog &&
+    rpc.method === "tools/call" && rpc.params.name === "bridge_status"
+    ? "udb-catalog-" + crypto.randomUUID() : null;
+  const statusCatalogProbe = catalogProbeId
+    ? relay(stub, { jsonrpc: "2.0", id: catalogProbeId,
+      method: "tools/list", params: {} }).catch(() => null)
+    : null;
+  const response = await responsePending;
   if (!response.ok) {
     // Only an explicit DO "no device socket" response may yield an offline
     // diagnostic. Never relabel 429/timeout/uncertain dispatched outcomes.
@@ -502,13 +516,14 @@ export async function handleMcp(request, env, id, stub, fetchImpl = fetch, acces
     if (useEdgeCatalog) {
       toolsListed = edgeCatalog(user.allowTools).length;
     } else {
-      const listed = await relay(stub, {
-        jsonrpc: "2.0", id: "udb-catalog-verification", method: "tools/list", params: {},
-      });
-      if (listed.ok) {
+      const catalogId = statusCatalogProbe ? catalogProbeId : "udb-catalog-verification";
+      const listed = await (statusCatalogProbe || relay(stub, {
+        jsonrpc: "2.0", id: catalogId, method: "tools/list", params: {},
+      }));
+      if (listed?.ok) {
         try {
           const catalog = await listed.json();
-          if (catalog.jsonrpc === "2.0" && catalog.id === "udb-catalog-verification" &&
+          if (catalog.jsonrpc === "2.0" && catalog.id === catalogId &&
               Array.isArray(catalog.result?.tools)) {
             toolsListed = authorizedToolCatalog(catalog.result.tools, user).length;
           }

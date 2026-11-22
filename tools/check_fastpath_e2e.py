@@ -80,7 +80,8 @@ def evaluate(report, *, baseline_sha, candidate_sha, profile):
         or not _is_hex(report["worker_revision"], 8)
     ):
         raise ValueError(
-            "Expected a version 2 isolated end-to-end evidence report with a pinned Worker revision."
+            "Expected a version 2 isolated end-to-end evidence report with a pinned "
+            "Worker revision."
         )
     if report["revisions"] != {"baseline": baseline_sha, "candidate": candidate_sha}:
         raise ValueError("Evidence revisions do not match the expected builds.")

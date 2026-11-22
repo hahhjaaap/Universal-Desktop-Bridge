@@ -107,3 +107,15 @@ def test_existing_default_is_unchanged_when_profile_not_selected(monkeypatch):
         assert pool.max_rpc_workers == 10
     finally:
         pool.close()
+
+def test_windows_physical_memory_probe_smoke():
+    """Validate the OS API shape on CI Windows; no private data is logged."""
+    snapshot = cloud_worker_profile.windows_memory_bytes()
+    if cloud_worker_profile.os.name != "nt":
+        assert snapshot is None
+        return
+    assert snapshot is not None
+    total, available = snapshot
+    assert type(total) is int and type(available) is int
+    assert 0 <= available <= total
+    assert total >= GIB

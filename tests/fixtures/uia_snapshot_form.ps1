@@ -1,5 +1,5 @@
 # Isolated Windows Forms snapshot fixture; no input simulation or owner windows.
-param([ValidateSet(50,500,1000)][int]$Controls=50,[string]$DynamicSignalPath='')
+param([ValidateSet(50,500,1000)][int]$Controls=50,[string]$DynamicSignalPath='',[string]$DynamicTriggerPath='')
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 Add-Type -AssemblyName System.Windows.Forms
@@ -45,8 +45,10 @@ $form.Controls.Add($panel)
 $dynamicTimer=$null
 if($DynamicSignalPath){
     $dynamicTimer=[Windows.Forms.Timer]::new()
-    $dynamicTimer.Interval=5000
+    if(-not $DynamicTriggerPath){throw 'Dynamic UIA fixture requires an explicit trigger path'}
+    $dynamicTimer.Interval=100
     $dynamicTimer.Add_Tick({
+        if(-not (Test-Path -LiteralPath $DynamicTriggerPath)){return}
         $dynamicTimer.Stop()
         $target=$panel.Controls.Find('FixtureDynamicTarget',$true) | Select-Object -First 1
         if($null -eq $target){throw 'Dynamic UIA fixture target disappeared unexpectedly'}

@@ -259,7 +259,8 @@ def _check_dynamic_transition(before: dict, after: dict) -> None:
 
 
 def compare_dynamic_warm(size: int, samples: int = 10, *, worker_factory=None) -> dict:
-    """Verify cached/live parity after a control changes in a test-owned WinForms window."""
+    """Verify cached/live parity after a control changes in a test-owned
+    WinForms window."""
     _validate(size, samples)
     if worker_factory is None:
         from udb.uia_worker import PersistentUIA

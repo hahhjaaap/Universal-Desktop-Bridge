@@ -367,8 +367,7 @@ class ParallelLocalProxies:
         # Auto continuously limits NEW admissions if free RAM drops. Do not
         # preempt in-flight RPCs or grow beyond the startup executor ceiling.
         self.auto_worker_budget = (
-            worker_profile() == "auto"
-            and os.environ.get(_RPC_WORKER_LIMIT_ENV) is None
+            worker_profile() == "auto" and os.environ.get(_RPC_WORKER_LIMIT_ENV) is None
         )
         self.scheduler = DeviceTaskScheduler(
             max_tasks=self.max_rpc_workers,

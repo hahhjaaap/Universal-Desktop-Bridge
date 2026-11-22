@@ -397,18 +397,22 @@ try {
             $observerRequested=($r.event_observer -eq $true -and [int]$r.wait_ms -gt 0)
             $observerUsed=$false;$observerKind='';$observerHandler=$null
             $observerSignal=$null;$observerCleanup=$true
+            $observerSignals=[Collections.Concurrent.ConcurrentQueue[bool]]::new()
             $rootRuntimeId=@($root.GetRuntimeId()) -join '.'
             if($observerRequested){
                 $observerSignal=[Threading.AutoResetEvent]::new($false)
                 $signalRef=$observerSignal
+                $signalQueue=$observerSignals
                 try {
                     if($r.condition -eq 'enabled'){
-                        $observerHandler=[Windows.Automation.AutomationPropertyChangedEventHandler]{
+                        $handlerBlock={
                             param($sender,$eventArgs)
                             if($eventArgs.Property -eq [Windows.Automation.AutomationElement]::IsEnabledProperty){
+                                [void]$signalQueue.Enqueue($true)
                                 [void]$signalRef.Set()
                             }
-                        }
+                        }.GetNewClosure()
+                        $observerHandler=[Windows.Automation.AutomationPropertyChangedEventHandler]$handlerBlock
                         $observerKind='property'
                         [Windows.Automation.Automation]::AddAutomationPropertyChangedEventHandler(
                             $root,
@@ -419,10 +423,12 @@ try {
                             )
                         )
                     }else{
-                        $observerHandler=[Windows.Automation.StructureChangedEventHandler]{
+                        $handlerBlock={
                             param($sender,$eventArgs)
+                            [void]$signalQueue.Enqueue($true)
                             [void]$signalRef.Set()
-                        }
+                        }.GetNewClosure()
+                        $observerHandler=[Windows.Automation.StructureChangedEventHandler]$handlerBlock
                         $observerKind='structure'
                         [Windows.Automation.Automation]::AddStructureChangedEventHandler(
                             $root,
@@ -491,7 +497,8 @@ try {
                 if($observerSignal){$observerSignal.Dispose()}
             }
             $observerMode=if($observerUsed){'event'}else{'polling'}
-            @{ok=$true;matched=$matched;timed_out=(!$matched);elapsed_ms=$timer.ElapsedMilliseconds;element=$observed;observer_mode=$observerMode;observer_cleanup=$observerCleanup}|ConvertTo-Json -Depth 4 -Compress
+            $observerSignalCount=$observerSignals.Count
+            @{ok=$true;matched=$matched;timed_out=(!$matched);elapsed_ms=$timer.ElapsedMilliseconds;element=$observed;observer_mode=$observerMode;observer_signals=$observerSignalCount;observer_cleanup=$observerCleanup}|ConvertTo-Json -Depth 4 -Compress
             return
         }
         $matches=$root.FindAll([Windows.Automation.TreeScope]::Descendants,$condition)

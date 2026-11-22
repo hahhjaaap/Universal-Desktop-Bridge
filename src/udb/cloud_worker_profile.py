@@ -1,8 +1,9 @@
-"""Conservative, opt-in worker budget for resource-constrained Windows hosts.
+"""Conservative, locally adaptive worker budget for Windows hosts.
 
-Only uses a startup snapshot of *local* total/available physical RAM and
-logical CPU count. No telemetry, background polling, authorization or new RPC.
-Unknown system information must fail small, never expand the 10-task ceiling.
+The Cloud Agent samples only local physical RAM and logical CPU count.
+Samples run during connection startup and at most once every five seconds
+on incoming requests. No telemetry, background polling, authorization or new
+RPC. Missing system information never expands the ten-task ceiling.
 """
 
 from __future__ import annotations
@@ -82,7 +83,7 @@ def suggested_worker_budget(
 
 
 def local_worker_budget() -> int:
-    """Evaluate once per connection; no expensive monitoring on hot RPC paths."""
+    """Read local memory and CPU for bounded admission, without telemetry."""
     memory = windows_memory_bytes()
     total, available = memory if memory is not None else (None, None)
     return suggested_worker_budget(total, available, os.cpu_count())

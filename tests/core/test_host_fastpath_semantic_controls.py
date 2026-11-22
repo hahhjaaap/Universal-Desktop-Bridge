@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import subprocess
 import sys
+import threading
 import time
 from contextlib import contextmanager
 from types import SimpleNamespace
@@ -257,8 +259,15 @@ def _semantic_winforms_fixture(signal_path, *, ambiguous=False):
         shell=False,
     )
     try:
-        line = proc.stdout.readline()
-        ready = json.loads(line.decode("utf-8-sig"))
+        lines = queue.Queue(maxsize=1)
+        threading.Thread(
+            target=lambda: lines.put(proc.stdout.readline()), daemon=True
+        ).start()
+        try:
+            line = lines.get(timeout=20)
+            ready = json.loads(line.decode("utf-8-sig"))
+        except (queue.Empty, ValueError, UnicodeError) as exc:
+            raise RuntimeError("Semantic WinForms fixture did not report readiness") from exc
         if (
             ready.get("event") != "ready"
             or ready.get("pid") != proc.pid

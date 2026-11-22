@@ -9,27 +9,36 @@ CANDIDATE = "b" * 40
 
 
 def report():
+    trials = []
+    for trial in range(50):
+        order = (
+            (("baseline", 10_000), ("candidate", 6_000))
+            if trial % 2 == 0
+            else (("candidate", 6_000), ("baseline", 10_000))
+        )
+        for variant, elapsed in order:
+            trials.append(
+                {
+                    "sequence": len(trials),
+                    "variant": variant,
+                    "request_id": f"{variant}-{trial}",
+                    "elapsed_ms": elapsed,
+                    "outcome": "verified",
+                }
+            )
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "scope": "chatgpt-cloudflare-windows",
         "environment": "isolated-staging",
         "revisions": {"baseline": BASELINE, "candidate": CANDIDATE},
         "fixture_sha256": "c" * 64,
+        "worker_revision": "d" * 8,
         "safety_checks": {
             "permission_parity": True,
             "navigation_parity": True,
             "no_replay": True,
         },
-        "trials": [
-            {
-                "variant": variant,
-                "request_id": f"{variant}-{trial}",
-                "elapsed_ms": elapsed,
-                "outcome": "verified",
-            }
-            for trial in range(50)
-            for variant, elapsed in (("baseline", 10_000), ("candidate", 6_000))
-        ],
+        "trials": trials,
     }
 
 
@@ -58,7 +67,7 @@ def test_short_report_and_failed_safety_check_block_acceptance():
 
 def test_fast_failures_cannot_improve_reported_latency():
     data = report()
-    for index in (1, 3, 5):
+    for index in (1, 2, 5):
         data["trials"][index].update(outcome="timed_out", elapsed_ms=10)
     result = score(data)
     assert result["result"] == "blocked"
@@ -91,3 +100,29 @@ def test_release_does_not_require_fastpath_relative_reduction():
         trial["elapsed_ms"] = 5900
     assert score(data, "release")["result"] == "thresholds_met"
     assert score(data, "fastpath")["result"] == "blocked"
+
+
+
+def test_grouped_build_runs_are_blocked_even_with_good_latency():
+    data = report()
+    data["trials"] = sorted(data["trials"], key=lambda row: row["variant"])
+    for sequence, trial in enumerate(data["trials"]):
+        trial["sequence"] = sequence
+    result = score(data)
+    assert result["result"] == "blocked"
+    assert not result["checks"]["interleaved_order"]
+    assert not result["checks"]["both_ab_and_ba_order"]
+
+
+def test_noncontiguous_trial_sequence_is_rejected():
+    data = report()
+    data["trials"][0]["sequence"] = 99
+    with pytest.raises(ValueError, match="Invalid trial"):
+        score(data)
+
+
+def test_worker_revision_is_required_and_pinned():
+    data = report()
+    del data["worker_revision"]
+    with pytest.raises(ValueError, match="version 2"):
+        score(data)

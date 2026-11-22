@@ -1,5 +1,10 @@
 # Isolated Windows Forms snapshot fixture; no input simulation or owner windows.
-param([ValidateSet(50,500,1000)][int]$Controls=50,[string]$DynamicSignalPath='',[string]$DynamicTriggerPath='')
+param(
+    [ValidateSet(50,500,1000)][int]$Controls=50,
+    [string]$DynamicSignalPath='',
+    [string]$DynamicTriggerPath='',
+    [ValidateSet('rename','replace')][string]$DynamicMutation='rename'
+)
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 Add-Type -AssemblyName System.Windows.Forms
@@ -52,9 +57,29 @@ if($DynamicSignalPath){
         $dynamicTimer.Stop()
         $target=$panel.Controls.Find('FixtureDynamicTarget',$true) | Select-Object -First 1
         if($null -eq $target){throw 'Dynamic UIA fixture target disappeared unexpectedly'}
-        $target.AccessibleName='UDB_DYNAMIC_AFTER'
-        $target.Text='UDB_DYNAMIC_AFTER'
-        [IO.File]::WriteAllText($DynamicSignalPath,'{"event":"changed"}')
+        if($DynamicMutation -eq 'replace'){
+            $location=$target.Location
+            $size=$target.Size
+            $panel.Controls.Remove($target)
+            $target.Dispose()
+            $replacement=[Windows.Forms.Label]::new()
+            $replacement.Name='FixtureDynamicReplacement'
+            $replacement.AccessibleName='UDB_DYNAMIC_REPLACED'
+            $replacement.Text='UDB_DYNAMIC_REPLACED'
+            $replacement.Location=$location
+            $replacement.Size=$size
+            $panel.Controls.Add($replacement)
+            $panel.Controls.SetChildIndex($replacement,0)
+            $event='replaced'
+        }else{
+            $target.AccessibleName='UDB_DYNAMIC_AFTER'
+            $target.Text='UDB_DYNAMIC_AFTER'
+            $event='changed'
+        }
+        [IO.File]::WriteAllText(
+            $DynamicSignalPath,
+            (@{event=$event}|ConvertTo-Json -Compress)
+        )
     })
 }
 $form.Add_Shown({

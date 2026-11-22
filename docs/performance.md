@@ -49,6 +49,28 @@ busy/error outcomes and unchanged permissions. Source tests do not prove a
 specific 5–6 second target. Do not replace a production Cloud Agent merely
 because this staging PR passes CI.
 
+## Enrolled-owner status/catalog overlap (experimental opt-in)
+
+`UDB_OWNER_STATUS_CATALOG_OVERLAP=true` in the **Cloudflare Worker
+environment** enables concurrent relay of an authenticated enrolled-owner
+`bridge_status` and a separate read-only `tools/list` count probe. The
+primary authorized status request is still sent first. The diagnostic probe
+gets a unique RPC ID, and failure to read the catalog cannot grant tools,
+change permissions, replay a mutation or turn a failed status into success.
+
+The feature is deliberately **off by default** because it can occupy two
+device RPC worker slots for a single status request. On a customer i5-6500
+with 8 GiB RAM and two Cloud RPC workers, enabling overlap can reduce
+available capacity for independent operations, even if one status request
+completes sooner. The original sequential path remains active when the
+environment variable is absent.
+
+Synthetic enrollment tests verify both disabled and opt-in behavior, with
+the same catalog grants and live tool count. Evaluate on a real target with
+the same transport/build: 30–50 trials, 1/2/3 worker settings, caller p50/p95,
+peak RAM and busy/error rates before staging deployment. Do not claim any
+latency improvement without real comparative measurements.
+
 ## Optional Cloud Agent prewarm (experimental)
 
 On `HAHHJAAAP` (2026-11-15), an isolated MCP sidecar took **2,960 ms**
@@ -69,11 +91,19 @@ after the existing reconnect backoff, rather than sending a mutation
 through an unverified child.
 
 The flag is **off by default** to avoid idle process and RAM overhead on
-resource-constrained machines. It can improve the first call after a
-connection is established, but does **not** reduce ChatGPT model
-generation time, guarantee 5–6 second answers or remove network/UI
-latency from later calls. Measure cold and warm p50/p95 under the
-same device, request and network conditions before claiming improvement.
+resource-constrained machines. When **both** `UDB_CLOUD_PREWARM=1` and
+`UDB_SHARED_STATUS_PROXY=1` are explicitly enabled, the read-only warmup
+ping now uses the same serial worker that handles later `bridge_status`
+requests. Previously it warmed an unrelated thread-local worker, leaving
+the first status RPC cold. Other RPCs continue using the original separate
+worker lanes. No new permission, relay auth, or automatic retry is introduced.
+
+It can improve the first call after a connection is established, but does
+**not** reduce ChatGPT model generation time, guarantee 5–6 second answers
+or remove network/UI latency from later calls. Run
+`pytest -q tests/test_cloud_agent_prewarm.py tests/test_cloud_shared_status_proxy.py`
+and measure cold and warm p50/p95 under the same device, request and network
+conditions before claiming improvement.
 
 ## Current optimization sweep (2026-11-14)
 

@@ -288,27 +288,37 @@ class Features(unittest.TestCase):
             self.assertFalse(
                 next(r for r in rows if r["pid"] == os.getpid())["can_terminate"]
             )
-            child = next(r for r in rows if r["pid"] == proc.pid)
+            # Windows can enumerate a child before its image, creation
+            # time and user SID are queryable. A row without a token is
+            # deliberately non-terminable; retry the safe observation.
+            def observe_child():
+                if proc.poll() is not None:
+                    raise AssertionError("Owned process fixture exited unexpectedly")
+                observed = catalog.list(match="python", limit=200)["processes"]
+                return next(
+                    (
+                        row
+                        for row in observed
+                        if row["pid"] == proc.pid
+                        and row.get("can_terminate") is True
+                        and row.get("observation_id")
+                    ),
+                    None,
+                )
+
+            child = wait_for(observe_child, seconds=8)
             token = child["observation_id"]
             catalog.observations[token]["until"] = 0
             with self.assertRaises(ValueError):
                 catalog.terminate(token)
             self.assertIsNone(proc.poll())
-            child = next(
-                r
-                for r in catalog.list(match="python", limit=200)["processes"]
-                if r["pid"] == proc.pid
-            )
+            child = wait_for(observe_child, seconds=8)
             token = child["observation_id"]
             catalog.observations[token]["creation"] += 1
             with self.assertRaises(ValueError):
                 catalog.terminate(token)
             self.assertIsNone(proc.poll())
-            child = next(
-                r
-                for r in catalog.list(match="python", limit=200)["processes"]
-                if r["pid"] == proc.pid
-            )
+            child = wait_for(observe_child, seconds=8)
             catalog.terminate(child["observation_id"])
             proc.wait(timeout=3)
         finally:

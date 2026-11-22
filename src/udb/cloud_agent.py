@@ -72,13 +72,12 @@ def worker_profile() -> str:
 
 
 def cloud_rpc_worker_limit() -> int:
-    """Conservatively size the Cloud RPC pool on Windows, or honor an override.
+    """Conservatively size Cloud RPCs on Windows; honor manual overrides.
 
-    Admission is coupled to the executor capacity and capped at ten. This
-    does not bound separate background jobs or grant any additional tools.
+    Admission and executor capacity are bounded together, never above ten.
+    This does not affect background jobs, browser sessions or grant scopes.
     """
     profile = worker_profile()
-
     raw = os.environ.get(_RPC_WORKER_LIMIT_ENV)
     if raw is None:
         return local_worker_budget() if profile == "auto" else _MAX_PARALLEL_CALLS
@@ -364,8 +363,8 @@ class ParallelLocalProxies:
         self.status_proxy = None
         self.lock = threading.Lock()
         self.proxies = []
-        # Auto continuously limits NEW admissions if free RAM drops. Do not
-        # preempt in-flight RPCs or grow beyond the startup executor ceiling.
+        # Sample local RAM for NEW admissions only. Already-dispatched RPCs
+        # are not interrupted, even when the machine becomes memory-bound.
         self.auto_worker_budget = (
             worker_profile() == "auto" and os.environ.get(_RPC_WORKER_LIMIT_ENV) is None
         )
@@ -376,10 +375,14 @@ class ParallelLocalProxies:
         self.failed = threading.Event()
         self.closed = False
 
-    def _invoke(self, rpc: dict, queued_at_ns=None, resource_kind=None) -> dict:
+    def _invoke(
+        self, rpc: dict, queued_at_ns=None, resource_kind=None, prewarm_status=False
+    ) -> dict:
         kind = resource_kind or resource_for_rpc(rpc)
         with self.scheduler.execution(kind):
-            return self._invoke_unlocked(rpc, queued_at_ns, kind)
+            return self._invoke_unlocked(
+                rpc, queued_at_ns, kind, prewarm_status=prewarm_status
+            )
 
     def _call_and_guard(self, proxy, rpc: dict):
         try:
@@ -392,7 +395,9 @@ class ParallelLocalProxies:
                 self.failed.set()
             raise
 
-    def _invoke_unlocked(self, rpc: dict, queued_at_ns, kind) -> dict:
+    def _invoke_unlocked(
+        self, rpc: dict, queued_at_ns, kind, *, prewarm_status=False
+    ) -> dict:
         if queued_at_ns is not None:
             perf.interval("cloud.queue", "queue", queued_at_ns, rpc_id=rpc.get("id"))
         if self.failed.is_set():
@@ -405,9 +410,16 @@ class ParallelLocalProxies:
         shared_status = (
             self.shared_status_enabled
             and kind == "read"
-            and rpc.get("method") == "tools/call"
-            and isinstance(params, dict)
-            and params.get("name") == "bridge_status"
+            and (
+                (
+                    rpc.get("method") == "tools/call"
+                    and isinstance(params, dict)
+                    and params.get("name") == "bridge_status"
+                )
+                # Only the local prewarm caller may select this path for ping.
+                # Untrusted relay RPC IDs never select the shared worker.
+                or (prewarm_status and rpc.get("method") == "ping")
+            )
         )
         if shared_status:
             # A slow status call must not park the other nine admitted tasks
@@ -450,7 +462,7 @@ class ParallelLocalProxies:
             raise RuntimeError("Cloud RPC pool is unavailable")
         return self._call_and_guard(proxy, rpc)
 
-    def submit(self, rpc: dict, resource_kind=None):
+    def submit(self, rpc: dict, resource_kind=None, *, prewarm_status=False):
         with self.lock:
             # A poisoned local stdio worker may have completed a mutation with
             # an unknown outcome. Fail closed until a fresh device connection.
@@ -459,7 +471,11 @@ class ParallelLocalProxies:
             if self.failed.is_set():
                 raise RuntimeError("Cloud RPC pool is unavailable")
             return self.executor.submit(
-                self._invoke, rpc, time.perf_counter_ns(), resource_kind
+                self._invoke,
+                rpc,
+                time.perf_counter_ns(),
+                resource_kind,
+                prewarm_status,
             )
 
     def prewarm_one(self, timeout=16):
@@ -475,7 +491,12 @@ class ParallelLocalProxies:
             "id": "udb-prewarm-" + uuid.uuid4().hex,
             "method": "ping",
         }
-        reply = self.submit(rpc).result(timeout=timeout)
+        # When status sharing is enabled, warm that exact serial worker
+        # rather than a throwaway thread-local worker that cannot serve the
+        # first bridge_status call. This ping is read-only and is not a grant.
+        reply = self.submit(rpc, prewarm_status=self.shared_status_enabled).result(
+            timeout=timeout
+        )
         if (
             not isinstance(reply, dict)
             or reply.get("error") is not None

@@ -30,7 +30,10 @@ The trace is written to:
 The raw local trace contains fixed operation/phase names, timings, process
 IDs and a truncated SHA-256 correlation token. It does not contain tool
 arguments, selectors, window titles, text, URLs, file paths or credentials.
-Keep the raw trace local; share the generated report instead.
+Keep the raw trace local; share the generated report instead. The analyzer
+assumes JSON-RPC IDs are unique within one trace capture. If independent MCP
+client streams can reuse IDs, capture them separately rather than merging
+those trace files.
 
 ## Generate the report
 

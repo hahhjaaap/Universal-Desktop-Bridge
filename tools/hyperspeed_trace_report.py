@@ -122,7 +122,7 @@ def analyze_trace_events(events: list[dict], *, max_rpcs: int = 200) -> dict:
         }
 
     timelines = []
-    for trace_id, rows in rpc_groups.items():
+    for rows in rpc_groups.values():
         intervals = [
             (row["started_ns"], row["started_ns"] + row["duration_ns"])
             for row in rows

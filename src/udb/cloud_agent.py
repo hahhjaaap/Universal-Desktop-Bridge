@@ -61,16 +61,24 @@ _REMOTE_READ_TOOLS = frozenset(
 )
 
 
-def cloud_rpc_worker_limit() -> int:
-    """Staging opt-in to cap concurrent Cloud RPCs without queueing mutations.
-
-    Each admitted task must have an execution thread. We therefore lower
-    DeviceTaskScheduler admission and executor capacity together. This is a
-    concurrency bound, NOT a guarantee about retained/desktop proxy count.
-    """
+def worker_profile() -> str:
+    """Auto is the Windows default; explicit legacy is the rollback switch."""
     profile = os.environ.get(_RPC_WORKER_PROFILE_ENV)
-    if profile not in (None, "auto"):
-        raise ValueError("UDB_CLOUD_WORKER_PROFILE must be auto or unset")
+    if profile is None:
+        return "auto" if os.name == "nt" else "legacy"
+    if profile not in {"auto", "legacy"}:
+        raise ValueError("UDB_CLOUD_WORKER_PROFILE must be auto or legacy")
+    return profile
+
+
+def cloud_rpc_worker_limit() -> int:
+    """Conservatively size the Cloud RPC pool on Windows, or honor an override.
+
+    Admission is coupled to the executor capacity and capped at ten. This
+    does not bound separate background jobs or grant any additional tools.
+    """
+    profile = worker_profile()
+
     raw = os.environ.get(_RPC_WORKER_LIMIT_ENV)
     if raw is None:
         return local_worker_budget() if profile == "auto" else _MAX_PARALLEL_CALLS
@@ -356,7 +364,16 @@ class ParallelLocalProxies:
         self.status_proxy = None
         self.lock = threading.Lock()
         self.proxies = []
-        self.scheduler = DeviceTaskScheduler(max_tasks=self.max_rpc_workers)
+        # Auto continuously limits NEW admissions if free RAM drops. Do not
+        # preempt in-flight RPCs or grow beyond the startup executor ceiling.
+        self.auto_worker_budget = (
+            worker_profile() == "auto"
+            and os.environ.get(_RPC_WORKER_LIMIT_ENV) is None
+        )
+        self.scheduler = DeviceTaskScheduler(
+            max_tasks=self.max_rpc_workers,
+            adaptive_limit=local_worker_budget if self.auto_worker_budget else None,
+        )
         self.failed = threading.Event()
         self.closed = False
 

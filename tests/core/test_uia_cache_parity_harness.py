@@ -85,7 +85,6 @@ def test_dynamic_warm_validates_fixture_size_before_windows_access():
         canary.compare_dynamic_warm(49, 1)
 
 
-
 def test_dynamic_replacement_requires_old_child_and_automation_id_to_disappear():
     before = {
         "ok": True,
@@ -127,9 +126,7 @@ def test_dynamic_replacement_rejects_invalid_mutation_before_fixture_access():
 
 
 def test_dynamic_fixture_replacement_disposes_old_control_before_adding_new_one():
-    fixture = (
-        canary.FIXTURE.read_text(encoding="utf-8")
-    )
+    fixture = canary.FIXTURE.read_text(encoding="utf-8")
     assert "[ValidateSet('rename','replace')]" in fixture
     assert "$panel.Controls.Remove($target)" in fixture
     assert "$target.Dispose()" in fixture

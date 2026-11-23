@@ -163,6 +163,20 @@ def _summary(values: list[float]) -> dict:
     }
 
 
+def _payload_bytes(reply: dict) -> int:
+    """Estimate payload UTF-8 bytes without recording element text."""
+    wire = json.dumps(reply, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
+    return len(wire.encode("utf-8"))
+
+
+def _payload_summary(values: list[int]) -> dict:
+    return {
+        "p50_bytes": percentile(values, 0.5),
+        "p95_bytes": percentile(values, 0.95),
+        "max_bytes": max(values),
+    }
+
+
 def _validate(size: int, samples: int) -> None:
     if size not in SIZES or not 1 <= samples <= 30:
         raise ValueError("Allowed fixture sizes: 50, 500, 1000; samples: 1..30")
@@ -180,6 +194,7 @@ def _check_pair(uncached: dict, cached: dict) -> None:
 def compare(size: int, samples: int = 1) -> dict:
     _validate(size, samples)
     timings: dict[str, list[float]] = {"uncached": [], "cached": []}
+    payloads: dict[str, list[int]] = {"uncached": [], "cached": []}
     with _fixture(size) as form:
         for _ in range(samples):
             uncached, plain_ms = _snapshot(form["hwnd"], form["pid"], False)
@@ -187,12 +202,17 @@ def compare(size: int, samples: int = 1) -> dict:
             _check_pair(uncached, cached)
             timings["uncached"].append(plain_ms)
             timings["cached"].append(cache_ms)
+            payloads["uncached"].append(_payload_bytes(uncached))
+            payloads["cached"].append(_payload_bytes(cached))
     return {
         "controls": size,
         "samples": samples,
         "same_output": True,
         "uncached": _summary(timings["uncached"]),
         "cached": _summary(timings["cached"]),
+        "payload_bytes": {
+            mode: _payload_summary(payloads[mode]) for mode in ("uncached", "cached")
+        },
     }
 
 
@@ -206,6 +226,7 @@ def compare_warm(size: int, samples: int, *, worker_factory=None) -> dict:
 
     modes = ("uncached", "cached")
     timings: dict[str, list[float]] = {mode: [] for mode in modes}
+    payloads: dict[str, list[int]] = {mode: [] for mode in modes}
     cold = {}
     processes = {}
     truncated_samples = 0
@@ -234,6 +255,7 @@ def compare_warm(size: int, samples: int, *, worker_factory=None) -> dict:
                     if worker._process is not processes[mode]:
                         raise AssertionError("UIA worker restarted during warm samples")
                     timings[mode].append(elapsed)
+                    payloads[mode].append(_payload_bytes(replies[mode]))
             _check_pair(replies["uncached"], replies["cached"])
             if index:
                 truncated_samples += replies["uncached"].get("truncated") is True
@@ -243,6 +265,7 @@ def compare_warm(size: int, samples: int, *, worker_factory=None) -> dict:
         "same_output": True,
         "cold_ms": cold,
         "truncated_samples": truncated_samples,
+        "payload_bytes": {mode: _payload_summary(payloads[mode]) for mode in modes},
         **{mode: _summary(timings[mode]) for mode in modes},
     }
 
@@ -300,6 +323,7 @@ def compare_dynamic_warm(
 
     modes = ("uncached", "cached")
     timings: dict[str, list[float]] = {mode: [] for mode in modes}
+    payloads: dict[str, list[int]] = {mode: [] for mode in modes}
     cold = {}
     processes = {}
     truncated_samples = 0
@@ -360,6 +384,7 @@ def compare_dynamic_warm(
                         started = time.perf_counter()
                         current[mode] = worker.call(request, timeout=18)
                         timings[mode].append((time.perf_counter() - started) * 1000)
+                        payloads[mode].append(_payload_bytes(current[mode]))
                     if worker._process is not processes[mode]:
                         raise AssertionError(
                             "UIA worker restarted during dynamic warm samples"
@@ -381,6 +406,7 @@ def compare_dynamic_warm(
         "workers_reused": True,
         "cold_ms": cold,
         "truncated_samples": truncated_samples,
+        "payload_bytes": {mode: _payload_summary(payloads[mode]) for mode in modes},
         **{mode: _summary(timings[mode]) for mode in modes},
     }
 

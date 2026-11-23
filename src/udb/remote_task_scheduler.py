@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from contextlib import contextmanager
 
 MAX_TASKS = 10
@@ -95,31 +96,63 @@ class DeviceTaskScheduler:
     Calls classified as exclusive keep the pre-existing no-overlap policy.
     """
 
-    def __init__(self, max_tasks: int = MAX_TASKS):
+    def __init__(
+        self,
+        max_tasks: int = MAX_TASKS,
+        *,
+        adaptive_limit: Callable[[], int] | None = None,
+    ):
         # A connection may lower admission pressure, never exceed the
         # hard ceiling of ten. Reject bool (an int subclass) as a config.
         if type(max_tasks) is not int or not 1 <= max_tasks <= MAX_TASKS:
             raise ValueError("Cloud RPC admission must be 1..10")
         self.max_tasks = max_tasks
+        self.admission_limit = max_tasks
+        self.adaptive_limit = adaptive_limit
+        self.next_capacity_sample = 0.0
         self.condition = threading.Condition()
         self.inflight = 0
         self.exclusive = False
         self.active = set()
         self.waiting = {"desktop": [], "owned_browser": []}
+        # Reserve scarce 1–2 worker slots for different resource lanes.
+        # Same-lane requests return DeviceBusy before occupying a thread.
+        self.lane_inflight = {"desktop": 0, "owned_browser": 0}
         self.closed = False
 
     def admit(self, kind: str) -> bool:
         if kind not in {"read", "desktop", "owned_browser", "exclusive"}:
             return False
         with self.condition:
+            if self.adaptive_limit is not None:
+                now = time.monotonic()
+                if now >= self.next_capacity_sample:
+                    # Sample at most once per five seconds and only on incoming
+                    # RPCs. Existing tasks continue to completion even when
+                    # pressure requires a smaller admission limit.
+                    self.next_capacity_sample = now + 5.0
+                    try:
+                        limit = self.adaptive_limit()
+                    except (OSError, RuntimeError, ValueError):
+                        limit = 1
+                    if type(limit) is not int or limit < 1:
+                        limit = 1
+                    self.admission_limit = min(self.max_tasks, limit)
             if (
                 self.closed
-                or self.inflight >= self.max_tasks
+                or self.inflight >= self.admission_limit
+                or (
+                    self.admission_limit <= 2
+                    and kind in self.lane_inflight
+                    and self.lane_inflight[kind] > 0
+                )
                 or self.exclusive
                 or (kind == "exclusive" and self.inflight != 0)
             ):
                 return False
             self.inflight += 1
+            if kind in self.lane_inflight:
+                self.lane_inflight[kind] += 1
             if kind == "exclusive":
                 self.exclusive = True
             return True
@@ -164,7 +197,11 @@ class DeviceTaskScheduler:
         with self.condition:
             if self.inflight <= 0:
                 raise RuntimeError("Unbalanced device task release")
+            if kind in self.lane_inflight and self.lane_inflight[kind] <= 0:
+                raise RuntimeError("Unbalanced resource lane release")
             self.inflight -= 1
+            if kind in self.lane_inflight:
+                self.lane_inflight[kind] -= 1
             if kind == "exclusive":
                 self.exclusive = False
             self.condition.notify_all()

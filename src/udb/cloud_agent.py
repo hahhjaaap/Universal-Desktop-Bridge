@@ -22,6 +22,7 @@ from urllib.parse import urlsplit
 from . import hyperspeed_perf as perf
 from ._version import VERSION
 from .cloud_secrets import load_device_token, read_token_file
+from .cloud_worker_profile import local_worker_budget
 from .config import serve_options
 from .launcher import child_environment, command
 from .remote_task_scheduler import (
@@ -39,6 +40,7 @@ _MIN_RETRY_SECONDS = 5
 _MAX_RETRY_SECONDS = 120
 _MAX_PARALLEL_CALLS = 10
 _RPC_WORKER_LIMIT_ENV = "UDB_CLOUD_MAX_RPC_WORKERS"
+_RPC_WORKER_PROFILE_ENV = "UDB_CLOUD_WORKER_PROFILE"
 _STATUS_LOCK_WAIT_SECONDS = 6.0
 # Detect half-open TCP / idle WebSocket connections without replaying RPCs.
 _HEARTBEAT_IDLE_SECONDS = 30
@@ -59,16 +61,26 @@ _REMOTE_READ_TOOLS = frozenset(
 )
 
 
-def cloud_rpc_worker_limit() -> int:
-    """Staging opt-in to cap concurrent Cloud RPCs without queueing mutations.
+def worker_profile() -> str:
+    """Auto is the Windows default; explicit legacy is the rollback switch."""
+    profile = os.environ.get(_RPC_WORKER_PROFILE_ENV)
+    if profile is None:
+        return "auto" if os.name == "nt" else "legacy"
+    if profile not in {"auto", "legacy"}:
+        raise ValueError("UDB_CLOUD_WORKER_PROFILE must be auto or legacy")
+    return profile
 
-    Each admitted task must have an execution thread. We therefore lower
-    DeviceTaskScheduler admission and executor capacity together. This is a
-    concurrency bound, NOT a guarantee about retained/desktop proxy count.
+
+def cloud_rpc_worker_limit() -> int:
+    """Conservatively size Cloud RPCs on Windows; honor manual overrides.
+
+    Admission and executor capacity are bounded together, never above ten.
+    This does not affect background jobs, browser sessions or grant scopes.
     """
+    profile = worker_profile()
     raw = os.environ.get(_RPC_WORKER_LIMIT_ENV)
     if raw is None:
-        return _MAX_PARALLEL_CALLS
+        return local_worker_budget() if profile == "auto" else _MAX_PARALLEL_CALLS
     if not raw.isascii() or not raw.isdecimal() or len(raw) > 2:
         raise ValueError("UDB_CLOUD_MAX_RPC_WORKERS must be 1..10")
     count = int(raw)
@@ -351,7 +363,15 @@ class ParallelLocalProxies:
         self.status_proxy = None
         self.lock = threading.Lock()
         self.proxies = []
-        self.scheduler = DeviceTaskScheduler(max_tasks=self.max_rpc_workers)
+        # Sample local RAM for NEW admissions only. Already-dispatched RPCs
+        # are not interrupted, even when the machine becomes memory-bound.
+        self.auto_worker_budget = (
+            worker_profile() == "auto" and os.environ.get(_RPC_WORKER_LIMIT_ENV) is None
+        )
+        self.scheduler = DeviceTaskScheduler(
+            max_tasks=self.max_rpc_workers,
+            adaptive_limit=local_worker_budget if self.auto_worker_budget else None,
+        )
         self.failed = threading.Event()
         self.closed = False
 

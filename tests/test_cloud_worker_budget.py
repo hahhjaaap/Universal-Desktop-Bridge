@@ -19,7 +19,8 @@ def _read(ident):
     return {"jsonrpc": "2.0", "id": ident, "method": "tools/list"}
 
 
-def test_default_cloud_worker_budget_is_unchanged(monkeypatch):
+def test_explicit_legacy_cloud_worker_budget_still_uses_ten(monkeypatch):
+    monkeypatch.setenv("UDB_CLOUD_WORKER_PROFILE", "legacy")
     monkeypatch.delenv("UDB_CLOUD_MAX_RPC_WORKERS", raising=False)
     pool = cloud_agent.ParallelLocalProxies(SimpleNamespace())
     try:

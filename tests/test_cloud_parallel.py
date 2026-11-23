@@ -30,6 +30,8 @@ def test_other_owner_actions_remain_exclusive(name):
 
 
 def test_pool_lazily_runs_ten_read_rpcs_at_the_same_time(monkeypatch):
+    # Preserve high-throughput compatibility explicitly on Windows Auto builds.
+    monkeypatch.setenv("UDB_CLOUD_WORKER_PROFILE", "legacy")
     barrier = threading.Barrier(10)
     lock = threading.Lock()
     created = []
@@ -115,6 +117,7 @@ def test_pool_marks_uncertain_result_failed_without_replaying(monkeypatch):
 def test_cloud_agent_sends_ten_parallel_results_with_distinct_ids(
     monkeypatch, tmp_path
 ):
+    monkeypatch.setenv("UDB_CLOUD_WORKER_PROFILE", "legacy")
     barrier = threading.Barrier(10)
     lock = threading.Lock()
     active = 0

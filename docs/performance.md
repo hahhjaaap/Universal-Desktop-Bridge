@@ -2,6 +2,53 @@
 
 > **Historical evidence:** Earlier run counts/benchmarks are not current UDB 0.12.0 CI results. The UDB Aura extension is retired from source. See [version/status](current-version.md).
 
+## Automatic Windows Cloud RPC worker budget (staging candidate)
+
+On Windows, UDB now selects a conservative Cloud RPC pool size **automatically**
+when the Cloud Agent establishes its WebSocket, based on local total/available
+physical RAM and logical CPU count. No Windows user must manually configure
+worker count. The 4-core/4-thread Intel i5-6500 with 8 GiB RAM starts at
+**two** workers when memory is available. The correct measured count may vary
+with workloads; the values are guardrails, not claims of optimal p95.
+
+The initial count caps both ThreadPoolExecutor capacity and
+DeviceTaskScheduler admission. For each incoming RPC, the scheduler may sample
+local free RAM at most once every five seconds and **reduce admission for new
+requests** if pressure increases (e.g., below 2 GiB free RAM -> 1 worker).
+It never cancels, interrupts or replays an in-flight RPC. Admission can return
+up to the connection's original thread cap as RAM recovers, but cannot launch
+more worker threads than were configured at startup. When admission is at
+one or two workers, additional calls targeting an already-admitted physical
+desktop or owned-browser lane return `DeviceBusy` **before dispatch** rather
+than occupying a scarce executor thread while waiting on the same lane.
+This leaves a slot for an independent read or a different resource lane.
+One WebSocket reconnection re-evaluates startup capacity. No background
+monitor, network telemetry or extra Cloudflare request is involved.
+
+On non-Windows development platforms the original ten-worker default remains.
+Set `UDB_CLOUD_WORKER_PROFILE=legacy` to restore ten-worker Windows admission
+for controlled comparisons or rollback, or `UDB_CLOUD_WORKER_PROFILE=auto`
+to explicitly choose resource-aware sizing on any platform. A manual integer
+`UDB_CLOUD_MAX_RPC_WORKERS=1..10` takes precedence over automatic sizing and
+disables RAM resampling for reproducible staging benchmarks. Invalid settings
+fail at pool initialization. The existing grants, physical desktop lane,
+owned-browser lane, side-effect restrictions and no-replay policy are unchanged.
+
+This setting controls only Cloud RPC admission and its executor threads:
+background tasks, browsers, retained stdio subprocesses and Office processes
+have separate resource limits. A low worker budget can cause `DeviceBusy`
+responses under load. Keep `UDB_CLOUD_PREWARM` off for initial 8 GiB trials.
+If enabling status/catalog overlap from PR #289, test its two parallel reads
+with the two-worker budget; do not assume this is faster on the target.
+
+**Deployment gate:** validate on a *real* Windows i5-6500/8 GiB machine with
+fixed read-only fixtures and identical Windows/Cloudflare builds: compare
+manual budgets 1, 2 and 3 against Auto using 30–50 trials per mode. Record
+p50/p95 end-to-end, peak process RAM, minimum free RAM, desktop responsiveness,
+busy/error outcomes and unchanged permissions. Source tests do not prove a
+specific 5–6 second target. Do not replace a production Cloud Agent merely
+because this staging PR passes CI.
+
 ## Enrolled-owner status/catalog overlap (experimental opt-in)
 
 `UDB_OWNER_STATUS_CATALOG_OVERLAP=true` in the **Cloudflare Worker
